@@ -9,6 +9,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "blaseball_vcr"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "easybench",
+ "json-patch",
+ "rmp-serde",
+ "serde_json",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26,6 +37,12 @@ dependencies = [
  "time",
  "winapi",
 ]
+
+[[package]]
+name = "easybench"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "355215cf95ddc4db0459d5313c9b146bedd43453305e3f0f1c4e8fde7f8d3884"
 
 [[package]]
 name = "itoa"
@@ -106,16 +123,6 @@ dependencies = [
  "byteorder",
  "rmp",
  "serde",
-]
-
-[[package]]
-name = "rs"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "json-patch",
- "rmp-serde",
- "serde_json",
 ]
 
 [[package]]
