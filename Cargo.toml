@@ -1,0 +1,18 @@
+[package]
+name = "blaseball-vcr"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+json-patch = "0.2.6"
+serde_json = "1.0.64"
+chrono = "0.4"
+rmp-serde = "0.15.5"
+
+[[bin]]
+name = "decode"
+path = "src/decode.rs"
+
+[[bin]]
+name = "encode"
+path = "src/main.rs"
