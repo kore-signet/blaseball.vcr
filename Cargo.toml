@@ -11,9 +11,5 @@ rmp-serde = "0.15.5"
 easybench = "1.1.0"
 
 [[bin]]
-name = "decode"
-path = "src/decode.rs"
-
-[[bin]]
 name = "encode"
-path = "src/main.rs"
+path = "src/encode.rs"

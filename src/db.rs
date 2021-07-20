@@ -1,4 +1,5 @@
-use blaseball_vcr::*;
+use super::*;
+use easybench::bench;
 use json_patch::{
     patch as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
     PatchOperation, PatchOperation::*, RemoveOperation, ReplaceOperation, TestOperation,
@@ -7,8 +8,7 @@ use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{prelude::*, BufReader, SeekFrom};
-use std::time::Instant;
-use easybench::bench;
+use std::sync::Mutex;
 
 fn decode(
     header: HashMap<u32, (u64, u64)>,
@@ -169,24 +169,102 @@ impl Database {
         Ok(results)
     }
 
-    pub fn get_entity(&mut self, entity: &str) -> Result<JSONValue, VCRError> {
+    pub fn get_entity(&mut self, entity: &str, at: u32) -> Result<JSONValue, VCRError> {
         let mut entity_value = json!({});
-        for (_, patch) in self.get_entity_data(entity)? {
+        for (time, patch) in self.get_entity_data(entity)? {
+            if time > at {
+                break;
+            }
+
             patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
         }
 
         Ok(entity_value)
     }
+
+    pub fn get_entities(
+        &mut self,
+        entities: Vec<String>,
+        at: u32,
+    ) -> Result<Vec<JSONValue>, VCRError> {
+        let mut results = Vec::with_capacity(entities.len());
+        for e in entities {
+            results.push(self.get_entity(&e, at)?);
+        }
+
+        Ok(results)
+    }
+
+    pub fn get_entities_versions(
+        &mut self,
+        entities: Vec<String>,
+        before: u32,
+        after: u32,
+    ) -> Result<Vec<(u32, JSONValue)>, VCRError> {
+        let mut results = Vec::with_capacity(entities.len());
+        for e in entities {
+            results.append(&mut self.get_entity_versions(&e, before, after)?);
+        }
+
+        Ok(results)
+    }
 }
 
-fn main() {
-    let mut db = Database::from_files("resources/entities.bin", "resources/out.bin").unwrap();
-    println!("get final ver of JT: {}",bench(move || {
-        db.get_entity("083d09d4-7ed3-4100-b021-8fbe30dd43e8").unwrap()
-    }));
-    
-    let mut db = Database::from_files("resources/entities.bin", "resources/out.bin").unwrap();
-    println!("get all vers of JT: {}",bench(move || {
-        db.get_entity_versions("083d09d4-7ed3-4100-b021-8fbe30dd43e8",u32::MAX,0).unwrap()
-    }));
+pub struct MultiDatabase {
+    dbs: HashMap<String, Mutex<Database>>, // entity_type:db
+}
+
+impl MultiDatabase {
+    pub fn from_files(files: Vec<(String,String,String)>) -> Result<MultiDatabase,VCRError> {
+        let mut dbs: HashMap<String, Mutex<Database>> = HashMap::new();
+        for (e_type, lookup_file, main_file) in files {
+            dbs.insert(e_type, Mutex::new(Database::from_files(&lookup_file, &main_file)?));
+        }
+
+        Ok(MultiDatabase {
+            dbs: dbs
+        })
+    }
+
+    pub fn get_entity(
+        &mut self,
+        e_type: &str,
+        entity: &str,
+        at: u32,
+    ) -> Result<JSONValue, VCRError> {
+        let mut db = self.dbs[e_type].lock().unwrap();
+        Ok(db.get_entity(entity, at)?)
+    }
+
+    pub fn get_entity_versions(
+        &mut self,
+        e_type: &str,
+        entity: &str,
+        before: u32,
+        after: u32,
+    ) -> Result<Vec<(u32,JSONValue)>, VCRError> {
+        let mut db = self.dbs[e_type].lock().unwrap();
+        Ok(db.get_entity_versions(entity, before, after)?)
+    }
+
+    pub fn get_entities(
+        &mut self,
+        e_type: &str,
+        entities: Vec<String>,
+        at: u32,
+    ) -> Result<Vec<JSONValue>, VCRError> {
+        let mut db = self.dbs[e_type].lock().unwrap();
+        Ok(db.get_entities(entities, at)?)
+    }
+
+    pub fn get_entities_versions(
+        &mut self,
+        e_type: &str,
+        entities: Vec<String>,
+        before: u32,
+        after: u32,
+    ) -> Result<Vec<(u32, JSONValue)>, VCRError> {
+        let mut db = self.dbs[e_type].lock().unwrap();
+        Ok(db.get_entities_versions(entities, before, after)?)
+    }
 }

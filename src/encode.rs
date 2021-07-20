@@ -2,6 +2,7 @@ use chrono::DateTime;
 use json_patch::{diff, PatchOperation::*};
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -97,8 +98,11 @@ fn encode(entity: Vec<(u32, JSONValue)>) -> (Vec<EntityPatch>, HashMap<u8, Strin
 }
 
 fn main() {
-    let mut file = File::open("all_players.json").unwrap();
-    let mut out = File::create("out.bin").unwrap();
+    // arguments: input out lookup_out
+    let args: Vec<String> = env::args().collect();
+
+    let mut file = File::open(&args[0]).unwrap();
+    let mut out = File::create(&args[1]).unwrap();
 
     let mut entity_table: HashMap<String, (u64, u64)> = HashMap::new();
 
@@ -148,7 +152,7 @@ fn main() {
         entity_table.insert(k.to_string(), (start_pos, end_pos - start_pos));
     }
 
-    let mut entity_table_f = File::create("entities.bin").unwrap();
+    let mut entity_table_f = File::create(&args[3]).unwrap();
     entity_table_f
         .write_all(&rmp_serde::to_vec_named(&entity_table).unwrap())
         .unwrap();
