@@ -36,9 +36,9 @@ impl From<json_patch::PatchError> for VCRError {
 impl fmt::Display for VCRError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IOError(err) => write!(f, "{}", err),
-            MsgPackError(err) => write!(f, "{}", err),
-            JSONPatchError(err) => write!(f, "{}", err),
+            IOError(err) => write!(f, "IO/ERR {}", err),
+            MsgPackError(err) => write!(f, "MSGPACKERR {}", err),
+            JSONPatchError(err) => write!(f, "JSONPATCHERR {}", err),
             EntityNotFound => write!(f, "entity not found"),
             PathResolutionError => write!(f, "could not resolve patch path"),
             InvalidOpCode => write!(f, "invalid patch opcode"),

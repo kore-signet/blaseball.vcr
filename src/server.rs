@@ -9,7 +9,7 @@ struct EntityReq {
     entity_type: String,
     #[field(name = "id")]
     ids: Option<String>,
-    at: String,
+    at: Option<String>,
     count: Option<u32>,
 }
 
@@ -22,7 +22,7 @@ fn entities(req: EntityReq, db: &State<MultiDatabase>) -> Result<JSONValue, VCRE
                 db.get_entities(
                     &req.entity_type.to_lowercase(),
                     ids.split(",").map(|x| x.to_owned()).collect::<Vec<String>>(),
-                    DateTime::parse_from_rfc3339(&req.at).unwrap().timestamp() as u32
+                    req.at.map_or(u32::MAX,|when|DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32)
                 )?
             )
         }))
@@ -32,7 +32,7 @@ fn entities(req: EntityReq, db: &State<MultiDatabase>) -> Result<JSONValue, VCRE
             "items": json!(
                 db.all_entities(
                     &req.entity_type.to_lowercase(),
-                    DateTime::parse_from_rfc3339(&req.at).unwrap().timestamp() as u32
+                    req.at.map_or(u32::MAX,|when|DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32)
                 )?
             )
         }))
@@ -42,8 +42,8 @@ fn entities(req: EntityReq, db: &State<MultiDatabase>) -> Result<JSONValue, VCRE
 #[launch]
 fn rocket() -> _ {
     let dbs = MultiDatabase::from_files(vec![
-        ("team", "teams_lookup.bin", "teams_db.bin"),
-        ("player", "players_lookup.bin", "players_db.bin"),
+        ("team", "datasets/teams_lookup.bin", "datasets/teams_db.bin"),
+        ("player", "datasets/players_lookup.bin", "datasets/players_db.bin")
     ])
     .unwrap();
     rocket::build().manage(dbs).mount("/v2/", routes![entities])

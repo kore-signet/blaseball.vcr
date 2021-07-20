@@ -1,16 +1,14 @@
+use blaseball_vcr::*;
 use chrono::DateTime;
 use json_patch::{diff, PatchOperation::*};
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::Read;
-use std::io::Seek;
-use std::io::Write;
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
 
 type EntityPatch = (u32, Vec<Vec<u8>>);
+
 struct Op {
     paths: Vec<String>,
     op_code: u8,
@@ -102,17 +100,19 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     let mut entities_file = File::open(&args[1]).unwrap();
-    let mut out = File::create(&args[2]).unwrap();
+    let mut out_file = File::create(&args[2]).unwrap();
 
-    let mut entity_table: HashMap<String, (u64, u64)> = HashMap::new();
+    let mut out = BufWriter::new(out_file);
+
+    let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
 
     let mut entities_reader = BufReader::new(entities_file);
-
     let mut all_entities: JSONValue = serde_json::from_reader(entities_reader).unwrap();
 
     for (k, entity) in all_entities.as_object().unwrap().into_iter() {
-        let mut entities: Vec<(u32, JSONValue)> = Vec::new();
-        let start_pos = out.stream_position().unwrap();
+        let mut entries: Vec<(u32, JSONValue)> = Vec::new();
+
+        let entity_start_pos = out.stream_position().unwrap();
         println!("processing entity {}", &k);
 
         for (i, value) in entity.as_array().unwrap().into_iter().enumerate() {
@@ -120,39 +120,39 @@ fn main() {
             let time = DateTime::parse_from_rfc3339(value["validFrom"].as_str().unwrap())
                 .unwrap()
                 .timestamp() as u32;
-            entities.push((time, value["data"].clone()));
+            entries.push((time, value["data"].clone()));
         }
 
-        let (patches, path_map) = encode(entities);
+        let (patches, path_map) = encode(entries);
         let mut bytes: Vec<u8> = Vec::new();
 
-        let mut offset = 0_u64;
-        let mut offset_table: HashMap<u32, (u64, u64)> = HashMap::new(); // timestamp:(offset,length)
+        let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
 
-        for (time, patch) in &patches {
-            offset_table.insert(*time, (offset, patch.concat().len() as u64));
-            offset += patch.concat().len() as u64;
-        }
+        for (time, patch) in patches {
+            let start_pos = out.stream_position().unwrap();
 
-        let header = rmp_serde::to_vec_named(&(&offset_table, path_map)).unwrap();
-        out.write_all(&header).unwrap();
-        out.write_all(&vec![
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ])
-        .unwrap();
-        for (_, patch) in patches {
             for op in patch {
                 out.write_all(&op).unwrap();
             }
+
+            let end_pos = out.stream_position().unwrap();
+            offsets.push((time, start_pos, end_pos));
         }
 
-        let end_pos = out.stream_position().unwrap();
-
-        entity_table.insert(k.to_string(), (start_pos, end_pos - start_pos));
+        entity_lookup_table.insert(
+            k.to_owned(),
+            EntityData {
+                data_offset: entity_start_pos,
+                patches: offsets,
+                path_map: path_map,
+            },
+        );
     }
+
+    out.flush().unwrap();
 
     let mut entity_table_f = File::create(&args[3]).unwrap();
     entity_table_f
-        .write_all(&rmp_serde::to_vec_named(&entity_table).unwrap())
+        .write_all(&rmp_serde::to_vec(&entity_lookup_table).unwrap())
         .unwrap();
 }

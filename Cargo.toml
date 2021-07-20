@@ -9,6 +9,10 @@ serde_json = "1.0.64"
 chrono = "0.4"
 rmp-serde = "0.15.5"
 
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
 [dependencies.rocket]
 version = "0.5.0-rc.1"
 features = ["json"]

@@ -10,86 +10,9 @@ use std::fs::File;
 use std::io::{prelude::*, BufReader, SeekFrom};
 use std::sync::Mutex;
 
-fn decode(
-    header: HashMap<u32, (u64, u64)>,
-    path_map: HashMap<u8, String>,
-    bytes: Vec<u8>,
-) -> VCRResult<Vec<(u32, JSONPatch)>> {
-    let mut patches: Vec<(u32, JSONPatch)> = Vec::new();
-
-    for (time, (offset, len)) in header {
-        let mut e_bytes: Vec<u8> = (&bytes[offset as usize..offset as usize + len as usize])
-            .into_iter()
-            .copied()
-            .collect();
-
-        let mut operations: Vec<PatchOperation> = Vec::new();
-
-        while e_bytes.len() > 1 {
-            let op_code = e_bytes.remove(0);
-
-            let paths = if op_code == 3 || op_code == 4 {
-                vec![
-                    path_map
-                        .get(&u8::from_be_bytes([e_bytes.remove(0)]))
-                        .ok_or(VCRError::PathResolutionError)?,
-                    path_map
-                        .get(&u8::from_be_bytes([e_bytes.remove(0)]))
-                        .ok_or(VCRError::PathResolutionError)?,
-                ]
-            } else {
-                vec![path_map
-                    .get(&u8::from_be_bytes([e_bytes.remove(0)]))
-                    .ok_or(VCRError::PathResolutionError)?]
-            };
-
-            let value_length = u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]);
-
-            let value: Option<JSONValue> = if value_length > 0 {
-                let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
-                Some(rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?)
-            } else {
-                None
-            };
-
-            operations.push(match op_code {
-                0 => Add(AddOperation {
-                    path: paths[0].to_string(),
-                    value: value.unwrap(),
-                }),
-                1 => Remove(RemoveOperation {
-                    path: paths[0].to_string(),
-                }),
-                2 => Replace(ReplaceOperation {
-                    path: paths[0].to_string(),
-                    value: value.unwrap(),
-                }),
-                3 => Move(MoveOperation {
-                    path: paths[0].to_string(),
-                    from: paths[1].to_string(),
-                }),
-                4 => Copy(CopyOperation {
-                    path: paths[0].to_string(),
-                    from: paths[1].to_string(),
-                }),
-                5 => Test(TestOperation {
-                    path: paths[0].to_string(),
-                    value: value.unwrap(),
-                }),
-                _ => return Err(VCRError::InvalidOpCode),
-            });
-        }
-
-        patches.push((time, JSONPatch(operations)));
-    }
-
-    patches.sort_by_key(|x| x.0);
-    Ok(patches)
-}
-
 pub struct Database {
     reader: BufReader<File>,
-    entities: HashMap<String, (u64, u64)>,
+    entities: HashMap<String, EntityData>,
 }
 
 impl Database {
@@ -103,44 +26,87 @@ impl Database {
         })
     }
 
-    pub fn get_entity_data(&mut self, entity: &str) -> VCRResult<Vec<(u32, JSONPatch)>> {
-        let (offset_start, entity_len) = self.entities.get(entity).unwrap();
+    pub fn get_entity_data(&mut self, entity: &str, until: u32) -> VCRResult<Vec<(u32, JSONPatch)>> {
+        let metadata = &self.entities[entity];
+        let mut patches: Vec<(u32, JSONPatch)> = Vec::new();
 
         self.reader
-            .seek(SeekFrom::Start(*offset_start))
+            .seek(SeekFrom::Start(metadata.data_offset))
             .map_err(VCRError::IOError)?;
 
-        let mut buffer: Vec<u8> = Vec::new();
-
-        loop {
-            self.reader
-                .read_until(0, &mut buffer)
-                .map_err(VCRError::IOError)?;
-            let mut end = [0; 23];
-            self.reader
-                .read_exact(&mut end)
-                .map_err(VCRError::IOError)?;
-            if end.iter().all(|&x| x == 0) {
-                buffer.remove(buffer.len() - 1);
+        for (time, patch_start, patch_end) in &metadata.patches {
+            if time > &until {
                 break;
-            } else {
-                buffer.extend(end);
             }
+
+            let mut e_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
+            self.reader.read_exact(&mut e_bytes);
+
+            let mut operations: Vec<PatchOperation> = Vec::new();
+
+            while e_bytes.len() > 1 {
+                let op_code = e_bytes.remove(0);
+
+                let paths = if op_code == 3 || op_code == 4 {
+                    vec![
+                        metadata
+                            .path_map
+                            .get(&u8::from_be_bytes([e_bytes.remove(0)]))
+                            .ok_or(VCRError::PathResolutionError)?,
+                        metadata
+                            .path_map
+                            .get(&u8::from_be_bytes([e_bytes.remove(0)]))
+                            .ok_or(VCRError::PathResolutionError)?,
+                    ]
+                } else {
+                    vec![metadata
+                        .path_map
+                        .get(&u8::from_be_bytes([e_bytes.remove(0)]))
+                        .ok_or(VCRError::PathResolutionError)?]
+                };
+
+                let value_length = u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]);
+
+                let value: Option<JSONValue> = if value_length > 0 {
+                    let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
+                    Some(rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?)
+                } else {
+                    None
+                };
+
+                operations.push(match op_code {
+                    0 => Add(AddOperation {
+                        path: paths[0].to_string(),
+                        value: value.unwrap(),
+                    }),
+                    1 => Remove(RemoveOperation {
+                        path: paths[0].to_string(),
+                    }),
+                    2 => Replace(ReplaceOperation {
+                        path: paths[0].to_string(),
+                        value: value.unwrap(),
+                    }),
+                    3 => Move(MoveOperation {
+                        path: paths[0].to_string(),
+                        from: paths[1].to_string(),
+                    }),
+                    4 => Copy(CopyOperation {
+                        path: paths[0].to_string(),
+                        from: paths[1].to_string(),
+                    }),
+                    5 => Test(TestOperation {
+                        path: paths[0].to_string(),
+                        value: value.unwrap(),
+                    }),
+                    _ => return Err(VCRError::InvalidOpCode),
+                });
+            }
+
+            patches.push((*time, JSONPatch(operations)));
         }
 
-        let header: (HashMap<u32, (u64, u64)>, HashMap<u8, String>) =
-            rmp_serde::from_read_ref(&buffer).map_err(VCRError::MsgPackError)?;
-        let mut patch_bytes = vec![
-            0;
-            (offset_start + entity_len) as usize
-                - self.reader.stream_position().map_err(VCRError::IOError)?
-                    as usize
-        ];
-
-        self.reader
-            .read_exact(&mut patch_bytes)
-            .map_err(VCRError::IOError)?;
-        decode(header.0, header.1, patch_bytes)
+        patches.sort_by_key(|x| x.0);
+        Ok(patches)
     }
 
     pub fn get_entity_versions(
@@ -150,20 +116,15 @@ impl Database {
         after: u32,
     ) -> VCRResult<Vec<(u32, JSONValue)>> {
         let mut entity_value = json!({});
-        let patches = self.get_entity_data(entity)?;
+        let patches = self.get_entity_data(entity, before)?;
         let mut results: Vec<(u32, JSONValue)> = Vec::with_capacity(patches.len());
 
         for (time, patch) in patches {
-            if time >= before {
-                break;
-            }
-
-            if time <= after {
-                continue;
-            }
-
             patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
-            results.push((time, entity_value.clone()));
+
+            if time > after {
+                results.push((time, entity_value.clone()));
+            }
         }
 
         Ok(results)
@@ -173,11 +134,7 @@ impl Database {
         let mut entity_value = json!({});
         let mut last_time = 0;
 
-        for (time, patch) in self.get_entity_data(entity)? {
-            if time > at {
-                break;
-            }
-
+        for (time, patch) in self.get_entity_data(entity, at)? {
             patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
             last_time = time;
         }

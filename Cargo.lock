@@ -86,6 +86,7 @@ dependencies = [
  "json-patch",
  "rmp-serde",
  "rocket",
+ "serde",
  "serde_json",
 ]
 
