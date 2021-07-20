@@ -45,3 +45,19 @@ impl fmt::Display for VCRError {
         }
     }
 }
+
+use rocket::{
+    http::Status,
+    response::{self, Responder},
+    Request, Response,
+};
+use std::io::Cursor;
+impl<'r> Responder<'r, 'static> for VCRError {
+    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
+        let res = format!("{}", self);
+        Response::build()
+            .status(Status::InternalServerError)
+            .sized_body(res.len(), Cursor::new(res))
+            .ok()
+    }
+}

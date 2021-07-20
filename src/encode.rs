@@ -101,22 +101,21 @@ fn main() {
     // arguments: input out lookup_out
     let args: Vec<String> = env::args().collect();
 
-    let mut file = File::open(&args[0]).unwrap();
-    let mut out = File::create(&args[1]).unwrap();
+    let mut entities_file = File::open(&args[1]).unwrap();
+    let mut out = File::create(&args[2]).unwrap();
 
     let mut entity_table: HashMap<String, (u64, u64)> = HashMap::new();
 
-    let mut contents = String::new();
-    file.read_to_string(&mut contents);
+    let mut entities_reader = BufReader::new(entities_file);
 
-    let mut players = serde_json::from_str::<JSONValue>(&contents).unwrap();
+    let mut all_entities: JSONValue = serde_json::from_reader(entities_reader).unwrap();
 
-    for (k, player) in players.as_object().unwrap().into_iter() {
+    for (k, entity) in all_entities.as_object().unwrap().into_iter() {
         let mut entities: Vec<(u32, JSONValue)> = Vec::new();
         let start_pos = out.stream_position().unwrap();
         println!("processing entity {}", &k);
 
-        for (i, value) in player.as_array().unwrap().into_iter().enumerate() {
+        for (i, value) in entity.as_array().unwrap().into_iter().enumerate() {
             println!("#{}", i);
             let time = DateTime::parse_from_rfc3339(value["validFrom"].as_str().unwrap())
                 .unwrap()
