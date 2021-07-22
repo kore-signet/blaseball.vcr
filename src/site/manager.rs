@@ -2,8 +2,9 @@ use super::chron::*;
 use super::delta::*;
 use crate::*;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::fs::{read_dir, File};
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 pub struct ResourceManager {
@@ -13,6 +14,61 @@ pub struct ResourceManager {
 
 impl ResourceManager {
     // type, header, main file
+    pub fn from_folder<P: AsRef<Path>>(folder: P) -> VCRResult<ResourceManager> {
+        let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)
+            .map_err(VCRError::IOError)?
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<PathBuf>, io::Error>>()
+            .map_err(VCRError::IOError)?
+            .into_iter()
+            .filter(|path| path.is_file())
+            .partition(|path| {
+                if let Some(name) = path.file_name() {
+                    name.to_str().unwrap().contains(".header.bin")
+                } else {
+                    false
+                }
+            });
+        header_paths.sort();
+        db_paths.sort();
+        let entries: Vec<(String, PathBuf, PathBuf)> = header_paths
+            .into_iter()
+            .zip(db_paths.into_iter())
+            .map(|(header, main)| {
+                let e_type = main
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .split_once(".")
+                    .unwrap()
+                    .0
+                    .to_owned();
+                (e_type, header, main)
+            })
+            .collect();
+
+        let mut headers: HashMap<String, EncodedResource> = HashMap::new();
+        let mut resources: HashMap<String, Mutex<BufReader<File>>> = HashMap::new();
+
+        for (r_type, r_header, r_file) in entries {
+            let header_f = File::open(r_header).map_err(VCRError::IOError)?;
+            let header: EncodedResource =
+                rmp_serde::from_read(header_f).map_err(VCRError::MsgPackError)?;
+
+            let main_f = File::open(r_file).map_err(VCRError::IOError)?;
+            let reader = BufReader::new(main_f);
+
+            resources.insert(r_type.to_owned(), Mutex::new(reader));
+            headers.insert(r_type.to_owned(), header);
+        }
+
+        Ok(ResourceManager {
+            headers: headers,
+            resources: resources,
+        })
+    }
+
     pub fn from_files(files: Vec<(&str, &str, &str)>) -> VCRResult<ResourceManager> {
         let mut headers: HashMap<String, EncodedResource> = HashMap::new();
         let mut resources: HashMap<String, Mutex<BufReader<File>>> = HashMap::new();
@@ -23,7 +79,7 @@ impl ResourceManager {
                 rmp_serde::from_read(header_f).map_err(VCRError::MsgPackError)?;
 
             let main_f = File::open(r_file).map_err(VCRError::IOError)?;
-            let mut reader = BufReader::new(main_f);
+            let reader = BufReader::new(main_f);
 
             resources.insert(r_type.to_owned(), Mutex::new(reader));
             headers.insert(r_type.to_owned(), header);

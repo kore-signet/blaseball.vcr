@@ -1,5 +1,4 @@
-use super::*;
-use json_patch::{diff, PatchOperation::*};
+use json_patch::{diff, PatchOperation, PatchOperation::*};
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
 
@@ -11,15 +10,16 @@ struct Op {
     value: Option<JSONValue>,
 }
 
-pub fn encode(entity: Vec<(u32, JSONValue)>) -> (Vec<EntityPatch>, HashMap<u8, String>) {
+pub fn encode(entity: Vec<(u32, JSONValue)>) -> (Vec<EntityPatch>, HashMap<u16, String>) {
     let mut last = json!({});
-    let mut paths: HashMap<String, u8> = HashMap::new();
+    let mut paths: HashMap<String, u16> = HashMap::new();
     (
         entity
             .into_iter()
             .map(|(time, obj)| {
-                let diff: Vec<Vec<u8>> = diff(&last, &obj)
-                    .0
+                let mut diff_ops: Vec<PatchOperation> = diff(&last, &obj).0;
+                diff_ops.dedup();
+                let diff: Vec<Vec<u8>> = diff_ops
                     .into_iter()
                     .map(|r_op| {
                         let op = match r_op {
@@ -61,10 +61,10 @@ pub fn encode(entity: Vec<(u32, JSONValue)>) -> (Vec<EntityPatch>, HashMap<u8, S
 
                         for path in &op.paths {
                             if !paths.contains_key(path) {
-                                paths.insert(path.to_string(), paths.len() as u8);
+                                paths.insert(path.to_string(), paths.len() as u16);
                             }
 
-                            bytes.push(paths[path].to_be());
+                            bytes.extend(paths[path].to_be_bytes());
                         }
 
                         if let Some(value) = op.value {
@@ -87,6 +87,6 @@ pub fn encode(entity: Vec<(u32, JSONValue)>) -> (Vec<EntityPatch>, HashMap<u8, S
         paths
             .into_iter()
             .map(|(k, v)| (v, k))
-            .collect::<HashMap<u8, String>>(),
+            .collect::<HashMap<u16, String>>(),
     )
 }

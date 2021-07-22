@@ -1,7 +1,7 @@
 #!/bin/bash
-./target/release/download_site_data tapes/site_data/
+# ./target/release/download_site_data tapes/site_data/
 ./target/release/build_entities idols risingstars
-./target/release/build_entities tributes
+# ./target/release/build_entities tributes
 ./target/release/build_entities communitychestprogress
 ./target/release/build_entities giftprogress
 ./target/release/build_entities renovationprogress

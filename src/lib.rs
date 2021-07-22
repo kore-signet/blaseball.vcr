@@ -1,4 +1,5 @@
 mod err;
+pub mod feed;
 mod json_sequences;
 pub mod site;
 pub use err::*;

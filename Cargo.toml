@@ -10,6 +10,7 @@ rmp-serde = "0.15.5"
 xdelta3 = "0.1.5"
 progress_bar = "0.1.3"
 xz2 = "0.1"
+bincode = "1.3.3"
 
 [dependencies.tokio]
 version = "1"

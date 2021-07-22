@@ -1,9 +1,8 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
-use chrono::{DateTime, Utc};
 use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::env;
@@ -108,7 +107,7 @@ pub async fn main() -> VCRResult<()> {
             Style::Bold,
         );
 
-        let mut out_file =
+        let out_file =
             File::create(&format!("./tapes/{}.bin", etype)).map_err(VCRError::IOError)?;
         let mut out = BufWriter::new(out_file);
 
@@ -117,7 +116,14 @@ pub async fn main() -> VCRResult<()> {
 
             let entity_start_pos = out.stream_position().map_err(VCRError::IOError)?;
 
-            let entity_versions: Vec<(u32, JSONValue)> = paged_get(
+            progress_bar.print_info(
+                "downloading",
+                &format!("entity {} of type {}", id, etype),
+                Color::Green,
+                Style::Italic,
+            );
+
+            let mut entity_versions: Vec<(u32, JSONValue)> = paged_get(
                 &client,
                 &mut progress_bar,
                 true,
@@ -134,6 +140,8 @@ pub async fn main() -> VCRResult<()> {
             .into_iter()
             .map(|e| (e.valid_from.timestamp() as u32, e.data))
             .collect();
+
+            entity_versions.sort_by_key(|v| v.0);
 
             let (patches, path_map) = encode(entity_versions);
 
@@ -166,7 +174,7 @@ pub async fn main() -> VCRResult<()> {
 
         progress_bar.finalize();
 
-        let mut entity_table_f =
+        let entity_table_f =
             File::create(&format!("./tapes/{}.header.bin.xz", etype)).map_err(VCRError::IOError)?;
         let mut compressor = XzEncoder::new(entity_table_f, 9);
         rmp_serde::encode::write(&mut compressor, &entity_lookup_table)

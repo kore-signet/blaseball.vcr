@@ -5,7 +5,7 @@ use blaseball_vcr::{
 use reqwest::blocking;
 use std::env;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::Path;
 
 fn main() -> VCRResult<()> {

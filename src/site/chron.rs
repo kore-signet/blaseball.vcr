@@ -68,7 +68,7 @@ pub fn updates_to_steps(updates: Vec<SiteUpdate>) -> HashMap<String, Vec<FileSte
             }
 
             let mut unique_assets: Vec<FileStep> =
-                unique_assets.into_iter().map(|(k, v)| v).collect();
+                unique_assets.into_iter().map(|(_, v)| v).collect();
             unique_assets.sort_by_key(|v| v.paths[0].0);
             (file_name, unique_assets)
         })

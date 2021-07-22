@@ -11,5 +11,5 @@ use std::collections::HashMap;
 pub struct EntityData {
     pub data_offset: u64,
     pub patches: Vec<(u32, u64, u64)>, // timestamp, offset, end of patch
-    pub path_map: HashMap<u8, String>, // timestamp:offset
+    pub path_map: HashMap<u16, String>, // path_id:path
 }

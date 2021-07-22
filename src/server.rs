@@ -38,6 +38,13 @@ fn get_asset(
         manager.get_resource(r_type, r_idx)?,
     ))
 }
+#[get("/v2/versions?type=Stream")]
+fn fake_versions() -> JSONValue {
+    json!({
+        "nextPage": "",
+        "items": json!([])
+    })
+}
 
 #[get("/v2/entities?<req..>")]
 fn entities(req: EntityReq, db: &State<MultiDatabase>) -> VCRResult<JSONValue> {
@@ -67,42 +74,12 @@ fn entities(req: EntityReq, db: &State<MultiDatabase>) -> VCRResult<JSONValue> {
 
 #[launch]
 fn rocket() -> _ {
-    let dbs = MultiDatabase::from_files(vec![
-        ("team", "tapes/team.header.bin.xz", "tapes/team.bin"),
-        // (
-        //     "player",
-        //     "datasets/players_lookup.bin",
-        //     "datasets/players_db.bin",
-        // ),
-    ])
-    .unwrap();
+    let dbs = MultiDatabase::from_folder("./tapes/").unwrap();
 
-    let manager = ResourceManager::from_files(vec![
-        (
-            "2js",
-            "datasets/site_data/2js.header.bin",
-            "datasets/site_data/2js.bin",
-        ),
-        (
-            "mainjs",
-            "datasets/site_data/mainjs.header.bin",
-            "datasets/site_data/mainjs.bin",
-        ),
-        (
-            "index",
-            "datasets/site_data/index.header.bin",
-            "datasets/site_data/index.bin",
-        ),
-        (
-            "maincss",
-            "datasets/site_data/maincss.header.bin",
-            "datasets/site_data/maincss.bin",
-        ),
-    ])
-    .unwrap();
+    let manager = ResourceManager::from_folder("./tapes/site_data/").unwrap();
 
-    rocket::build()
-        .manage(dbs)
-        .manage(manager)
-        .mount("/", routes![entities, get_asset, site_updates])
+    rocket::build().manage(dbs).manage(manager).mount(
+        "/",
+        routes![entities, get_asset, site_updates, fake_versions],
+    )
 }
