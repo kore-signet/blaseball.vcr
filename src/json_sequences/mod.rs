@@ -1,4 +1,7 @@
 mod db;
+
+pub mod encoder;
+
 pub use db::*;
 
 use serde::{Deserialize, Serialize};

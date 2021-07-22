@@ -68,12 +68,12 @@ fn entities(req: EntityReq, db: &State<MultiDatabase>) -> VCRResult<JSONValue> {
 #[launch]
 fn rocket() -> _ {
     let dbs = MultiDatabase::from_files(vec![
-        ("team", "datasets/teams_lookup.bin", "datasets/teams_db.bin"),
-        (
-            "player",
-            "datasets/players_lookup.bin",
-            "datasets/players_db.bin",
-        ),
+        ("team", "tapes/team.header.bin.xz", "tapes/team.bin"),
+        // (
+        //     "player",
+        //     "datasets/players_lookup.bin",
+        //     "datasets/players_db.bin",
+        // ),
     ])
     .unwrap();
 

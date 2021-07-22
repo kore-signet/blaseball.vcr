@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{prelude::*, BufReader, SeekFrom};
 use std::sync::Mutex;
+use xz2::read::XzDecoder;
 
 pub struct Database {
     reader: BufReader<File>,
@@ -18,11 +19,12 @@ pub struct Database {
 impl Database {
     pub fn from_files(entities_lookup_path: &str, db_path: &str) -> VCRResult<Database> {
         let entities_lookup_f = File::open(entities_lookup_path).map_err(VCRError::IOError)?;
+        let decompressor = XzDecoder::new(entities_lookup_f);
         let db_f = File::open(db_path).map_err(VCRError::IOError)?;
 
         Ok(Database {
             reader: BufReader::new(db_f),
-            entities: rmp_serde::from_read(entities_lookup_f).map_err(VCRError::MsgPackError)?,
+            entities: rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?,
         })
     }
 
@@ -189,6 +191,29 @@ pub struct MultiDatabase {
 }
 
 impl MultiDatabase {
+    // pub fn from_folder(folder: &str) -> VCRResult<Database> {
+    //     let mut (headers, dbs) = fs::read_dir(folder).map_err(VCRError::IOError)?
+    //                                           .map(|res| res.map(|e| e.path()))
+    //                                           .collect::<Result<Vec<PathBuf>,io::Error>>()
+    //                                           .map_err(VCRError::IOError)?
+    //                                           .into_iter()
+    //                                           .filter(|&path| path.is_file())
+    //                                           .partition(|&path| {
+    //                                               if let Some(name) = path.file_name() {
+    //                                                   name.contains(".header.bin.")
+    //                                               } else {
+    //                                                   false
+    //                                               }
+    //                                           });
+    //     headers.sort();
+    //     dbs.sort();
+    //     let entries: Vec<&st,> = headers.into_iter().zip(dbs.into_iter()).map(|(header,main)| {
+    //         let (e_type, _) = main.file_name().unwrap().split_once(".").unwrap();
+    //         (e_type, header, main)
+    //     }).collect();
+    //
+    // }
+
     pub fn from_files(files: Vec<(&str, &str, &str)>) -> VCRResult<MultiDatabase> {
         let mut dbs: HashMap<String, Mutex<Database>> = HashMap::new();
         for (e_type, lookup_file, main_file) in files {

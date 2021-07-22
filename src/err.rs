@@ -7,8 +7,10 @@ pub enum VCRError {
     PathResolutionError,
     InvalidOpCode,
     MsgPackError(rmp_serde::decode::Error),
+    MsgPackEncError(rmp_serde::encode::Error),
     IOError(io::Error),
     JSONPatchError(json_patch::PatchError),
+    ReqwestError(reqwest::Error),
 }
 
 use VCRError::*;
@@ -27,9 +29,21 @@ impl From<rmp_serde::decode::Error> for VCRError {
     }
 }
 
+impl From<rmp_serde::encode::Error> for VCRError {
+    fn from(err: rmp_serde::encode::Error) -> VCRError {
+        VCRError::MsgPackEncError(err)
+    }
+}
+
 impl From<json_patch::PatchError> for VCRError {
     fn from(err: json_patch::PatchError) -> VCRError {
         VCRError::JSONPatchError(err)
+    }
+}
+
+impl From<reqwest::Error> for VCRError {
+    fn from(err: reqwest::Error) -> VCRError {
+        VCRError::ReqwestError(err)
     }
 }
 
@@ -38,7 +52,9 @@ impl fmt::Display for VCRError {
         match self {
             IOError(err) => write!(f, "IO/ERR {}", err),
             MsgPackError(err) => write!(f, "MSGPACKERR {}", err),
+            MsgPackEncError(err) => write!(f, "MSGPACKENCERR {}", err),
             JSONPatchError(err) => write!(f, "JSONPATCHERR {}", err),
+            ReqwestError(err) => write!(f, "REQWESTERR {}", err),
             EntityNotFound => write!(f, "entity not found"),
             PathResolutionError => write!(f, "could not resolve patch path"),
             InvalidOpCode => write!(f, "invalid patch opcode"),
