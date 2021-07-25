@@ -24,7 +24,7 @@ impl ResourceManager {
             .filter(|path| path.is_file())
             .partition(|path| {
                 if let Some(name) = path.file_name() {
-                    name.to_str().unwrap().contains(".header.bin")
+                    name.to_str().unwrap().contains(".header.riv")
                 } else {
                     false
                 }

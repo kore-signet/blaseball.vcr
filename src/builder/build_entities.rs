@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Seek, Write};
+use std::path::PathBuf;
 use xz2::write::XzEncoder;
 
 #[derive(Debug, Serialize)]
@@ -73,8 +74,8 @@ async fn paged_get(
 #[tokio::main]
 pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new();
-    let entity_types: Vec<String> = env::args().skip(1).collect();
-    // let entity_types = vec!["team"];
+    let mut entity_types: Vec<String> = env::args().skip(1).collect();
+    let out_path: PathBuf = PathBuf::from(entity_types.remove(0));
 
     for etype in entity_types {
         let mut progress_bar = ProgressBar::new(0);
@@ -108,7 +109,7 @@ pub async fn main() -> VCRResult<()> {
         );
 
         let out_file =
-            File::create(&format!("./tapes/{}.bin", etype)).map_err(VCRError::IOError)?;
+            File::create(out_path.join(&format!("{}.riv", etype))).map_err(VCRError::IOError)?;
         let mut out = BufWriter::new(out_file);
 
         for id in entity_ids {
@@ -174,8 +175,8 @@ pub async fn main() -> VCRResult<()> {
 
         progress_bar.finalize();
 
-        let entity_table_f =
-            File::create(&format!("./tapes/{}.header.bin.xz", etype)).map_err(VCRError::IOError)?;
+        let entity_table_f = File::create(out_path.join(&format!("{}.header.riv.xz", etype)))
+            .map_err(VCRError::IOError)?;
         let mut compressor = XzEncoder::new(entity_table_f, 9);
         rmp_serde::encode::write(&mut compressor, &entity_lookup_table)
             .map_err(VCRError::MsgPackEncError)?;
