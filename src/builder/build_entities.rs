@@ -108,7 +108,7 @@ pub async fn main() -> VCRResult<()> {
         );
 
         let out_file =
-            File::create(&format!("./tapes/{}.bin", etype)).map_err(VCRError::IOError)?;
+            File::create(&format!("./tapes/{}.riv", etype)).map_err(VCRError::IOError)?;
         let mut out = BufWriter::new(out_file);
 
         for id in entity_ids {
@@ -175,7 +175,7 @@ pub async fn main() -> VCRResult<()> {
         progress_bar.finalize();
 
         let entity_table_f =
-            File::create(&format!("./tapes/{}.header.bin.xz", etype)).map_err(VCRError::IOError)?;
+            File::create(&format!("./tapes/{}.header.riv.xz", etype)).map_err(VCRError::IOError)?;
         let mut compressor = XzEncoder::new(entity_table_f, 9);
         rmp_serde::encode::write(&mut compressor, &entity_lookup_table)
             .map_err(VCRError::MsgPackEncError)?;
