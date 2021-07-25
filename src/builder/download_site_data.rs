@@ -19,8 +19,8 @@ fn main() -> VCRResult<()> {
 
     for (name, steps) in all_steps {
         println!("Recording asset {}", name);
-        let main_path = Path::new(&args[1]).join(&format!("{}.riv", name));
-        let header_path = Path::new(&args[1]).join(&format!("{}.header.riv", name));
+        let main_path = Path::new(&args[1]).join(&format!("{}.bin", name));
+        let header_path = Path::new(&args[1]).join(&format!("{}.header.bin", name));
 
         let main_f = File::create(main_path).map_err(VCRError::IOError)?;
         let mut main_out = BufWriter::new(main_f);

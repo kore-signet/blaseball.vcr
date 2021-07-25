@@ -12,12 +12,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use xz2::read::XzDecoder;
 
-macro_rules! collect_json {
-    ($x:expr) => {
-        $x?.into_iter().map(|e| e["data"].clone()).collect::<Vec<JSONValue>>() // clone smh
-    }
-}
-
 pub struct Database {
     reader: BufReader<File>,
     entities: HashMap<String, EntityData>,
@@ -48,7 +42,7 @@ impl Database {
             .map_err(VCRError::IOError)?;
 
         for (time, patch_start, patch_end) in &metadata.patches {
-            if time >z &until {
+            if time > &until {
                 break;
             }
 
@@ -144,7 +138,7 @@ impl Database {
         Ok(results)
     }
 
-    pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
+    pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<JSONValue> {
         let mut entity_value = json!({});
         let mut last_time = 0;
 
@@ -153,16 +147,14 @@ impl Database {
             last_time = time;
         }
 
-        Ok(ChroniclerEntity {
-            data: entity_value,
-            entity_id: entity,
-            valid_from: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(last_time as i64, 0), Utc),
-            valid_to: None,
-            hash: String::new()
+        Ok(json!({
+            "data": entity_value,
+            "entityId": entity,
+            "validFrom": DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(last_time as i64, 0), Utc).to_rfc3339()
         }))
     }
 
-    pub fn get_entities(&mut self, entities: Vec<String>, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+    pub fn get_entities(&mut self, entities: Vec<String>, at: u32) -> VCRResult<Vec<JSONValue>> {
         let mut results = Vec::with_capacity(entities.len());
         for e in entities {
             results.push(self.get_entity(&e, at)?);
@@ -185,21 +177,11 @@ impl Database {
         Ok(results)
     }
 
-    pub fn all_entities(&mut self, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+    pub fn all_entities(&mut self, at: u32) -> VCRResult<Vec<JSONValue>> {
         let mut results = Vec::with_capacity(self.entities.len());
         let keys: Vec<String> = self.entities.keys().cloned().collect();
         for entity in keys {
             results.push(self.get_entity(&entity, at)?);
-        }
-
-        Ok(results)
-    }
-
-    pub fn all_versions(&mut self, before: u32, after: u32) -> VCRResult<Vec<JSONValue>> {
-        let mut results = Vec::with_capacity(self.entities.len());
-        let keys: Vec<String> = self.entities.keys().cloned().collect();
-        for entity in keys {
-            results.append(&mut self.get_entity_versions(&entity, before, after)?);
         }
 
         Ok(results)
@@ -221,7 +203,7 @@ impl MultiDatabase {
             .filter(|path| path.is_file())
             .partition(|path| {
                 if let Some(name) = path.file_name() {
-                    name.to_str().unwrap().contains(".header.riv.")
+                    name.to_str().unwrap().contains(".header.bin.")
                 } else {
                     false
                 }
@@ -269,7 +251,7 @@ impl MultiDatabase {
         Ok(MultiDatabase { dbs: dbs })
     }
 
-    pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
+    pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<JSONValue> {
         let mut db = self.dbs[e_type].lock().unwrap();
         Ok(db.get_entity(entity, at)?)
     }
@@ -306,43 +288,8 @@ impl MultiDatabase {
         Ok(db.get_entities_versions(entities, before, after)?)
     }
 
-    pub fn all_entities(&self, e_type: &str, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+    pub fn all_entities(&self, e_type: &str, at: u32) -> VCRResult<Vec<JSONValue>> {
         let mut db = self.dbs[e_type].lock().unwrap();
         Ok(db.all_entities(at)?)
-    }
-    //
-    pub fn all_versions(&self, e_type: &str, before: u32, after: u32) -> VCRResult<Vec<JSONValue>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
-        Ok(db.all_versions(before, after)?)
-    }
-    //
- // this is bad and a wip
-    pub fn get_stream_data(&self, at: u32) -> VCRResult<JSONValue> {
-
-        Ok(json!({
-            "entityId": "00000000-0000-0000-0000-000000000000",
-            "validFrom": "2021-07-22T22:29:58.732652Z",
-            "value": {
-                "games": {
-                    "sim": self.get_entity("sim", "00000000-0000-0000-0000-000000000000", at)?["data"],
-                    "season": collect_json!(self.all_entities("season", at)).into_iter().next().unwrap(),
-                    "standings": collect_json!(self.all_entities("standings", at)),
-                },
-                "fights": {},
-                "leagues": {
-                    "stats": {
-                        "sunsun": self.get_entity("sunsun", "00000000-0000-0000-0000-000000000000", at)?["data"],
-                        "communityChest": self.get_entity("communitychestprogress","00000000-0000-0000-0000-000000000000", at)?["data"]
-                    },
-                    "stadiums": collect_json!(self.all_entities("stadium", at)),
-                    "tiebreakers": collect_json!(self.all_entities("tiebreakers", at)),
-                    "teams": collect_json!(self.all_entities("team", at)),
-                    "subleagues": collect_json!(self.all_entities("subleague", at)),
-                    "divisions": collect_json!(self.all_entities("division", at)),
-                    "leagues": collect_json!(self.all_entities("league", at)),
-                },
-                "temporal": collect_json!(self.all_entities("temporal", at)).into_iter().next().unwrap()
-            }
-        }))
     }
 }
