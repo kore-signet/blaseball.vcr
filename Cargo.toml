@@ -21,7 +21,7 @@ features = ["serde"]
 
 [dependencies.reqwest]
 version = "0.11.4"
-features = ["blocking","json"]
+features = ["blocking","json","gzip","deflate"]
 
 [dependencies.serde]
 version = "1.0"
@@ -42,3 +42,7 @@ path = "src/builder/build_entities.rs"
 [[bin]]
 name = "download_site_data"
 path = "src/builder/download_site_data.rs"
+
+[[bin]]
+name = "build_games"
+path = "src/builder/build_game.rs"

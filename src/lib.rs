@@ -6,26 +6,26 @@ pub use err::*;
 pub use json_sequences::*;
 
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 
 pub type VCRResult<T> = Result<T, VCRError>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChroniclerResponse<T> {
     pub next_page: Option<String>,
     pub items: Vec<T>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChroniclerV1Response<T> {
     pub next_page: Option<String>,
     pub data: Vec<T>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChroniclerEntity {
     pub entity_id: String,
