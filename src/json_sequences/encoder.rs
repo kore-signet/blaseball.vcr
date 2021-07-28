@@ -1,7 +1,6 @@
 use json_patch::{diff, PatchOperation, PatchOperation::*};
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
-use zstd::stream as zstd_s;
 
 type EntityPatch = (u32, Vec<Vec<u8>>);
 

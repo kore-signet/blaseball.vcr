@@ -29,8 +29,8 @@ macro_rules! end_measure {
 }
 
 pub struct Database {
-    reader: BufReader<File>,
-    entities: HashMap<String, EntityData>,
+    pub reader: BufReader<File>,
+    pub entities: HashMap<String, EntityData>,
 }
 
 impl Database {
@@ -423,6 +423,90 @@ impl MultiDatabase {
         Ok(results)
     }
 
+    fn playoffs(&self, id: &str, round: Option<i64>, at: u32) -> VCRResult<JSONValue> {
+        let playoffs = self.get_entity("playoffs", id, at)?.data;
+        let round_number = round.unwrap_or_else(|| playoffs["round"].as_i64().unwrap());
+
+        let round_ids: Vec<String> = playoffs["rounds"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .into_iter()
+            .map(|x| x.as_str().unwrap().to_owned())
+            .collect();
+        let all_rounds: Vec<JSONValue> = self
+            .get_entities("playoffround", round_ids, at)?
+            .into_iter()
+            .map(|t| t.data)
+            .filter(|t| t != &json!({}))
+            .collect();
+        let tomorrow_round: JSONValue = all_rounds
+            .iter()
+            .find(|r| r["roundNumber"] == playoffs["tomorrowRound"])
+            .cloned()
+            .unwrap();
+        let round: JSONValue = all_rounds
+            .iter()
+            .find(|r| r["roundNumber"].as_i64().unwrap() == round_number)
+            .cloned()
+            .unwrap();
+
+        let main_matchup_ids: Vec<String> = round["matchups"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .into_iter()
+            .map(|x| x.as_str().unwrap().to_owned())
+            .collect();
+        let main_matchups: Vec<JSONValue> = self
+            .get_entities("playoffmatchup", main_matchup_ids, at)?
+            .into_iter()
+            .map(|t| t.data)
+            .filter(|t| t != &json!({}))
+            .collect();
+
+        let tomorrow_matchup_ids: Vec<String> = tomorrow_round["matchups"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .into_iter()
+            .map(|x| x.as_str().unwrap().to_owned())
+            .collect();
+        let tomorrow_matchups: Vec<JSONValue> = self
+            .get_entities("playoffmatchup", tomorrow_matchup_ids, at)?
+            .into_iter()
+            .map(|t| t.data)
+            .filter(|t| t != &json!({}))
+            .collect();
+
+        let all_matchups_ids: Vec<String> = all_rounds
+            .iter()
+            .map(|x| {
+                x["matchups"]
+                    .as_array()
+                    .unwrap_or(&Vec::new())
+                    .into_iter()
+                    .map(|x| x.as_str().unwrap().to_owned())
+                    .collect::<Vec<String>>()
+            })
+            .flatten()
+            .collect();
+
+        let all_matchups: Vec<JSONValue> = self
+            .get_entities("playoffmatchup", all_matchups_ids, at)?
+            .into_iter()
+            .map(|t| t.data)
+            .filter(|t| t != &json!({}))
+            .collect();
+
+        Ok(json!({
+            "round": round,
+            "matchups": main_matchups,
+            "playoffs": playoffs,
+            "allRounds": all_rounds,
+            "allMatchups": all_matchups,
+            "tomorrowRound": tomorrow_round,
+            "tomorrowMatchups": tomorrow_matchups
+        }))
+    }
+
     pub fn stream_data(&self, at: u32) -> VCRResult<JSONValue> {
         //start_measure!(sim_time);
         start_measure!(total_time);
@@ -576,6 +660,45 @@ impl MultiDatabase {
             at,
         )?;
 
+        let tournament = if let Some(tourn_idx) = date.tournament {
+            if tourn_idx > -1 {
+                self.all_entities("tournament", at)?
+                    .into_iter()
+                    .last()
+                    .map_or(json!({}), |x| x.data)
+            } else {
+                json!({})
+            }
+        } else {
+            json!({})
+        };
+
+        let (playoff_key, playoffs): (&str, JSONValue) = if tournament != json!({}) {
+            (
+                "postseason",
+                self.playoffs(
+                    tournament["playoffs"].as_str().unwrap(),
+                    sim.data.get("tournamentRound").map(|i| i.as_i64().unwrap()),
+                    at,
+                )?,
+            )
+        } else {
+            if let Some(playoff_ids) = sim.data["playoffs"].as_array() {
+                let mut playoffs: Vec<JSONValue> = Vec::new();
+                for id in playoff_ids {
+                    playoffs.push(self.playoffs(id.as_str().unwrap(), None, at)?);
+                }
+                ("postseasons", json!(playoffs))
+            } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
+                (
+                    "postseason",
+                    self.playoffs(playoff_id, sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()), at)?,
+                )
+            } else {
+                ("postseason", json!({}))
+            }
+        };
+
         end_measure!(total_time);
 
         Ok(json!({
@@ -586,7 +709,8 @@ impl MultiDatabase {
                     "standings": standings.data,
                     "schedule": schedule,
                     "tomorrowSchedule": tomorrow_schedule,
-                    "postseason": {}
+                    "tournament": tournament,
+                    playoff_key: playoffs
                 },
                 "leagues": {
                     "stats": {

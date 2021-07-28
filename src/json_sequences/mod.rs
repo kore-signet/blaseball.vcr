@@ -14,7 +14,7 @@ fn default_checkpoint() -> u32 {
     u32::MAX
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct EntityData {
     pub data_offset: u64,
     pub patches: Vec<(u32, u64, u64)>, // timestamp, offset, end of patch
