@@ -165,7 +165,7 @@ pub async fn main() -> VCRResult<()> {
 
         entity_versions.sort_by_key(|v| v.0);
 
-        let (patches, path_map) = encode(entity_versions,u32::MAX);
+        let (patches, path_map) = encode(entity_versions, u32::MAX);
 
         let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
 
@@ -186,7 +186,7 @@ pub async fn main() -> VCRResult<()> {
                 data_offset: entity_start_pos,
                 patches: offsets,
                 path_map: path_map,
-                checkpoint_every: u32::MAX
+                checkpoint_every: u32::MAX,
             },
         );
 

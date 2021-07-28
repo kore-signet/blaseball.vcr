@@ -11,14 +11,17 @@ struct Op {
     value: Option<JSONValue>,
 }
 
-pub fn encode(entity: Vec<(u32, JSONValue)>, checkpoint_every: u32) -> (Vec<EntityPatch>, HashMap<u16, String>) {
+pub fn encode(
+    entity: Vec<(u32, JSONValue)>,
+    checkpoint_every: u32,
+) -> (Vec<EntityPatch>, HashMap<u16, String>) {
     let mut last = json!({});
     let mut paths: HashMap<String, u16> = HashMap::new();
     (
         entity
             .into_iter()
             .enumerate()
-            .map(|(iter,(time, obj))| {
+            .map(|(iter, (time, obj))| {
                 let mut diff_ops: Vec<PatchOperation> = if iter as u32 % checkpoint_every == 0 {
                     diff(&json!({}), &obj).0
                 } else {

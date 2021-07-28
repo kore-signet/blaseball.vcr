@@ -1,8 +1,9 @@
 use blaseball_vcr::site::{chron::SiteUpdate, manager::ResourceManager};
 use blaseball_vcr::*;
-use chrono::{DateTime,Utc, TimeZone};
+use chrono::{DateTime, TimeZone, Utc};
 use rocket::serde::json::Json as RocketJson;
 use rocket::{get, http::ContentType, launch, routes, FromForm, State};
+use serde_json::json;
 
 #[derive(FromForm)]
 struct EntityReq {
@@ -57,32 +58,28 @@ fn fake_versions(
     db: &State<MultiDatabase>,
 ) -> VCRResult<RocketJson<ChroniclerResponse<ChroniclerEntity>>> {
     let start_time = after.as_ref().map_or(
-        before.as_ref().map_or(
-            Utc::now().timestamp() as u32,
-            |x| DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-        ) - (count.unwrap_or(1) * 5),
-        |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
+        before.as_ref().map_or(Utc::now().timestamp() as u32, |x| {
+            DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+        }) - (count.unwrap_or(1) * 5),
+        |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
     );
 
     let end_time = before.map_or(
-        after.map_or(
-            Utc::now().timestamp() as u32,
-            |x| DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32,
-        ) + (count.unwrap_or(1) * 5),
+        after.map_or(Utc::now().timestamp() as u32, |x| {
+            DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+        }) + (count.unwrap_or(1) * 5),
         |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
     );
 
     let mut results: Vec<ChroniclerEntity> = Vec::new();
     for at in (start_time..end_time).into_iter().step_by(5) {
-        results.push(
-            ChroniclerEntity {
-                entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
-                valid_from: Utc.timestamp(at as i64,0),
-                valid_to: Some(Utc.timestamp((at+5) as i64,0).to_rfc3339()),
-                hash: String::new(),
-                data: db.stream_data(at)?
-            }
-        );
+        results.push(ChroniclerEntity {
+            entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+            valid_from: Utc.timestamp(at as i64, 0),
+            valid_to: Some(Utc.timestamp((at + 5) as i64, 0).to_rfc3339()),
+            hash: String::new(),
+            data: db.stream_data(at)?,
+        });
     }
 
     if let Some(ord) = order {
@@ -96,7 +93,7 @@ fn fake_versions(
 
     Ok(RocketJson(ChroniclerResponse {
         next_page: None,
-        items: results
+        items: results,
     }))
 }
 
@@ -108,25 +105,33 @@ fn entities(
     if let Some(ids) = req.ids {
         Ok(RocketJson(ChroniclerResponse {
             next_page: None,
-            items: db.get_entities(
-                &req.entity_type.to_lowercase(),
-                ids.split(",")
-                    .map(|x| x.to_owned())
-                    .collect::<Vec<String>>(),
-                req.at.map_or(u32::MAX, |when| {
-                    DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32
-                }),
-            )?,
+            items: db
+                .get_entities(
+                    &req.entity_type.to_lowercase(),
+                    ids.split(",")
+                        .map(|x| x.to_owned())
+                        .collect::<Vec<String>>(),
+                    req.at.map_or(u32::MAX, |when| {
+                        DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32
+                    }),
+                )?
+                .into_iter()
+                .filter(|x| x.data != json!({}))
+                .collect(),
         }))
     } else {
         Ok(RocketJson(ChroniclerResponse {
             next_page: None,
-            items: db.all_entities(
-                &req.entity_type.to_lowercase(),
-                req.at.map_or(u32::MAX, |when| {
-                    DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32
-                }),
-            )?,
+            items: db
+                .all_entities(
+                    &req.entity_type.to_lowercase(),
+                    req.at.map_or(u32::MAX, |when| {
+                        DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32
+                    }),
+                )?
+                .into_iter()
+                .filter(|x| x.data != json!({}))
+                .collect(),
         }))
     }
 }

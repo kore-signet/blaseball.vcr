@@ -20,7 +20,7 @@ pub struct EntityData {
     pub patches: Vec<(u32, u64, u64)>, // timestamp, offset, end of patch
     pub path_map: HashMap<u16, String>, // path_id:path
     #[serde(default = "default_checkpoint")]
-    pub checkpoint_every: u32
+    pub checkpoint_every: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
