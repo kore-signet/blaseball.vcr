@@ -3,19 +3,18 @@ use crate::*;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, File};
-use std::io::{self, prelude::*, BufReader, SeekFrom};
+use std::io::{self, prelude::*, BufReader, Cursor, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Instant;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde_json::{json, Value as JSONValue};
-use xz2::read::XzDecoder;
 
 use json_patch::{
     patch as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
     PatchOperation, PatchOperation::*, RemoveOperation, ReplaceOperation, TestOperation,
 };
-
 
 pub struct Database {
     reader: BufReader<File>,
@@ -23,9 +22,13 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn from_files<P: AsRef<Path>>(entities_lookup_path: P, db_path: P) -> VCRResult<Database> {
+    pub fn from_files<P: AsRef<Path> + std::fmt::Debug>(
+        entities_lookup_path: P,
+        db_path: P,
+    ) -> VCRResult<Database> {
         let entities_lookup_f = File::open(entities_lookup_path).map_err(VCRError::IOError)?;
-        let decompressor = XzDecoder::new(entities_lookup_f);
+        let decompressor =
+            zstd::stream::Decoder::new(entities_lookup_f).map_err(VCRError::IOError)?;
         let db_f = File::open(db_path).map_err(VCRError::IOError)?;
 
         Ok(Database {
@@ -38,23 +41,36 @@ impl Database {
         &mut self,
         entity: &str,
         until: u32,
+        skip_to_checkpoint: bool
     ) -> VCRResult<Vec<(u32, JSONPatch)>> {
         let metadata = &self.entities[entity];
+
+
         let mut patches: Vec<(u32, JSONPatch)> = Vec::new();
 
-        self.reader
-            .seek(SeekFrom::Start(metadata.data_offset))
-            .map_err(VCRError::IOError)?;
+        let patch_list: Vec<(u32, u64, u64)> = if skip_to_checkpoint {
+            let patches_until: Vec<(u32, u64, u64)> = metadata.patches.iter().copied().take_while(|x| x.0 < until).collect();
+            let latest_check_idx = match patches_until.binary_search_by_key(&until, |x| x.0) {
+                Ok(i) => i,
+                Err(i) => i
+            };
 
-        for (time, patch_start, patch_end) in &metadata.patches {
-            if time > &until {
-                break;
-            }
+            let closest_checkpoint = latest_check_idx - (latest_check_idx % metadata.checkpoint_every as usize);
+            patches_until[closest_checkpoint..].to_vec()
+        } else {
+            metadata.patches.iter().copied().take_while(|x| x.0 < until).collect()
+        };
+
+        for (time, patch_start, patch_end) in patch_list {
+            self.reader
+                .seek(SeekFrom::Start(patch_start))
+                .map_err(VCRError::IOError)?;
 
             let mut e_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
             self.reader
                 .read_exact(&mut e_bytes)
                 .map_err(VCRError::IOError)?;
+            e_bytes = zstd::decode_all(Cursor::new(e_bytes)).map_err(VCRError::IOError)?;
 
             let mut operations: Vec<PatchOperation> = Vec::new();
 
@@ -115,7 +131,7 @@ impl Database {
                     _ => return Err(VCRError::InvalidOpCode),
                 });
             }
-            patches.push((*time, JSONPatch(operations)));
+            patches.push((time, JSONPatch(operations)));
         }
 
         patches.sort_by_key(|x| x.0);
@@ -129,7 +145,7 @@ impl Database {
         after: u32,
     ) -> VCRResult<Vec<(u32, JSONValue)>> {
         let mut entity_value = json!({});
-        let patches = self.get_entity_data(entity, before)?;
+        let patches = self.get_entity_data(entity, before, true)?;
         let mut results: Vec<(u32, JSONValue)> = Vec::with_capacity(patches.len());
 
         for (time, patch) in patches {
@@ -147,7 +163,7 @@ impl Database {
         let mut entity_value = json!({});
         let mut last_time = 0;
 
-        for (time, patch) in self.get_entity_data(entity, at)? {
+        for (time, patch) in self.get_entity_data(entity, at, true)? {
             patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
             last_time = time;
         }
@@ -167,7 +183,7 @@ impl Database {
     pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity> {
         let mut entity_value = json!({});
 
-        let patches = self.get_entity_data(entity, u32::MAX)?;
+        let patches = self.get_entity_data(entity, u32::MAX, true)?;
         let (time, patch) = &patches[0];
 
         patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
@@ -224,7 +240,7 @@ impl Database {
 
 pub struct MultiDatabase {
     pub dbs: HashMap<String, Mutex<Database>>, // entity_type:db
-    pub game_index: HashMap<GameDate, Vec<(String,Option<DateTime<Utc>>, Option<DateTime<Utc>>)>>,
+    pub game_index: HashMap<GameDate, Vec<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>>,
 }
 
 impl MultiDatabase {
@@ -244,17 +260,20 @@ impl MultiDatabase {
                 }
             });
 
-        let game_index: HashMap<GameDate, Vec<(String,Option<DateTime<Utc>>, Option<DateTime<Utc>>)>> = if let Some(dates_pos) =
-            db_paths.iter().position(|x| {
-                x.file_name()
-                    .unwrap_or(OsStr::new(""))
-                    .to_str()
-                    .unwrap()
-                    .contains(".dates.riv.")
-            }) {
+        let game_index: HashMap<
+            GameDate,
+            Vec<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>,
+        > = if let Some(dates_pos) = db_paths.iter().position(|x| {
+            x.file_name()
+                .unwrap_or(OsStr::new(""))
+                .to_str()
+                .unwrap()
+                .contains(".dates.riv.")
+        }) {
             let game_index_path = db_paths.remove(dates_pos);
             let game_index_f = File::open(game_index_path).map_err(VCRError::IOError)?;
-            let decompressor = XzDecoder::new(game_index_f);
+            let decompressor =
+                zstd::stream::Decoder::new(game_index_f).map_err(VCRError::IOError)?;
 
             rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?
         } else {
@@ -351,19 +370,126 @@ impl MultiDatabase {
         let mut db = self.dbs[e_type].lock().unwrap();
         Ok(db.all_entities(at)?)
     }
-    //
+
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {
         let mut db = self.dbs["game_updates"].lock().unwrap();
         let mut results = Vec::new();
-        for (game, start_time, end_time) in &self.game_index[date] {
+        for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
             results.push(ChronV1Game {
                 game_id: game.to_owned(),
                 start_time: *start_time,
                 end_time: *end_time,
-                data: db.get_first_entity(&game)?.data
+                data: db.get_first_entity(&game)?.data,
             });
         }
 
         Ok(results)
+    }
+
+    pub fn games_by_date_and_time(&self, date: &GameDate, at: u32) -> VCRResult<Vec<ChronV1Game>> {
+        let mut db = self.dbs["game_updates"].lock().unwrap();
+        let mut results = Vec::new();
+        for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
+            results.push(ChronV1Game {
+                game_id: game.to_owned(),
+                start_time: *start_time,
+                end_time: *end_time,
+                data: db.get_entity(&game,at)?.data,
+            });
+        }
+
+        Ok(results)
+    }
+
+    pub fn stream_data(&self, at: u32) -> VCRResult<JSONValue> {
+        let start = Instant::now();
+        let sim = self.get_entity("sim", "00000000-0000-0000-0000-000000000000", at)?;
+        let mut date = GameDate {
+            season: sim.data.get("season").unwrap().as_i64().unwrap() as i32,
+            day: sim.data.get("day").unwrap().as_i64().unwrap() as i32,
+            tournament: sim
+                .data
+                .get("tournament")
+                .map(|x| x.as_i64().unwrap() as i32),
+        };
+        let schedule: JSONValue = self
+            .games_by_date_and_time(&date,at)?
+            .into_iter()
+            .map(|g| g.data)
+            .collect();
+        date.day += 1;
+        let tomorrow_schedule: Vec<JSONValue> = self
+            .games_by_date(&date)?
+            .into_iter()
+            .map(|g| g.data)
+            .collect();
+        let season = self
+            .all_entities("season", at)?
+            .into_iter()
+            .find(|s| s.data["seasonNumber"] == sim.data["season"])
+            .unwrap();
+        let standings =
+            self.get_entity("standings", season.data["standings"].as_str().unwrap(), at)?;
+        let leagues = self.all_entities("league", at)?;
+        let subleagues: Vec<JSONValue> = self
+            .all_entities("subleague", at)?
+            .into_iter()
+            .map(|s| s.data)
+            .collect();
+        let divisions: Vec<JSONValue> = self
+            .all_entities("division", at)?
+            .into_iter()
+            .map(|d| d.data)
+            .collect();
+        let teams_start = Instant::now();
+        let teams: Vec<JSONValue> = self
+            .all_entities("team", at)?
+            .into_iter()
+            .map(|t| t.data)
+            .collect();
+        println!("teams{:?}ms",teams_start.elapsed().as_millis());
+        let fights: Vec<JSONValue> = self
+            .all_entities("bossfight", at)?
+            .into_iter()
+            .map(|b| b.data)
+            .collect();
+        let stadiums_start = Instant::now();
+        let stadiums: Vec<JSONValue> = self
+            .all_entities("stadium", at)?
+            .into_iter()
+            .map(|b| b.data)
+            .collect();
+        println!("stadiums{:?}ms",stadiums_start.elapsed().as_millis());
+        let tiebreakers: Vec<JSONValue> = self
+            .all_entities("tiebreakers", at)?
+            .into_iter()
+            .map(|b| b.data)
+            .collect();
+        let temporal = self.get_entity("temporal", "00000000-0000-0000-0000-000000000000", at)?;
+        println!("{:?}ms",start.elapsed().as_millis());
+        Ok(json!({
+            "value": {
+                "games": {
+                    "sim": sim.data,
+                    "season": season.data,
+                    "standings": standings.data,
+                    "schedule": schedule,
+                    "tomorrowSchedule": tomorrow_schedule,
+                    "postseason": {}
+                },
+                "leagues": {
+                    "teams": teams,
+                    "subleagues": subleagues,
+                    "divisios": divisions,
+                    "leagues": leagues,
+                    "tiebreakers": tiebreakers,
+                    "stadiums": stadiums
+                },
+                "fights": {
+                    "bossFights": fights
+                },
+                "temporal": temporal
+            }
+        }))
     }
 }

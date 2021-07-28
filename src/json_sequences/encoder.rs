@@ -1,6 +1,7 @@
 use json_patch::{diff, PatchOperation, PatchOperation::*};
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
+use zstd::stream as zstd_s;
 
 type EntityPatch = (u32, Vec<Vec<u8>>);
 
@@ -10,14 +11,20 @@ struct Op {
     value: Option<JSONValue>,
 }
 
-pub fn encode(entity: Vec<(u32, JSONValue)>) -> (Vec<EntityPatch>, HashMap<u16, String>) {
+pub fn encode(entity: Vec<(u32, JSONValue)>, checkpoint_every: u32) -> (Vec<EntityPatch>, HashMap<u16, String>) {
     let mut last = json!({});
     let mut paths: HashMap<String, u16> = HashMap::new();
     (
         entity
             .into_iter()
-            .map(|(time, obj)| {
-                let mut diff_ops: Vec<PatchOperation> = diff(&last, &obj).0;
+            .enumerate()
+            .map(|(iter,(time, obj))| {
+                let mut diff_ops: Vec<PatchOperation> = if iter as u32 % checkpoint_every == 0 {
+                    diff(&json!({}), &obj).0
+                } else {
+                    diff(&last, &obj).0
+                };
+
                 diff_ops.dedup();
                 let diff: Vec<Vec<u8>> = diff_ops
                     .into_iter()
@@ -68,7 +75,7 @@ pub fn encode(entity: Vec<(u32, JSONValue)>) -> (Vec<EntityPatch>, HashMap<u16, 
                         }
 
                         if let Some(value) = op.value {
-                            let mut val_bytes = rmp_serde::to_vec_named(&value).unwrap();
+                            let mut val_bytes = rmp_serde::to_vec(&value).unwrap();
                             bytes.extend((val_bytes.len() as u16).to_be_bytes());
                             bytes.append(&mut val_bytes);
                         } else {

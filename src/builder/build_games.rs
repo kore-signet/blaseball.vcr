@@ -10,8 +10,7 @@ use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
-use std::io::{BufWriter, Seek, Write};
-use xz2::write::XzEncoder;
+use std::io::{BufWriter, Read, Seek, Write};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,6 +127,8 @@ pub async fn main() -> VCRResult<()> {
     let out_file = File::create(&format!("./tapes/game_updates.riv")).map_err(VCRError::IOError)?;
     let mut out = BufWriter::new(out_file);
 
+    let mut patch_compressor = zstd::block::Compressor::new();
+
     for game in games {
         let game_date = game.data;
         let id = game.game_id;
@@ -164,16 +165,16 @@ pub async fn main() -> VCRResult<()> {
 
         entity_versions.sort_by_key(|v| v.0);
 
-        let (patches, path_map) = encode(entity_versions);
+        let (patches, path_map) = encode(entity_versions,u32::MAX);
 
         let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
 
         for (time, patch) in patches {
             let start_pos = out.stream_position().map_err(VCRError::IOError)?;
 
-            for op in patch {
-                out.write_all(&op).unwrap();
-            }
+            let patch_bytes = patch.concat();
+            out.write_all(&patch_compressor.compress(&patch_bytes, 22).unwrap())
+                .unwrap();
 
             let end_pos = out.stream_position().map_err(VCRError::IOError)?;
             offsets.push((time, start_pos, end_pos));
@@ -185,6 +186,7 @@ pub async fn main() -> VCRResult<()> {
                 data_offset: entity_start_pos,
                 patches: offsets,
                 path_map: path_map,
+                checkpoint_every: u32::MAX
             },
         );
 
@@ -195,21 +197,32 @@ pub async fn main() -> VCRResult<()> {
 
     progress_bar.finalize();
 
-    let entity_table_f =
-        File::create(&format!("./tapes/game_updates.header.riv.xz")).map_err(VCRError::IOError)?;
-    let mut compressor = XzEncoder::new(entity_table_f, 9);
-    rmp_serde::encode::write(&mut compressor, &entity_lookup_table)
-        .map_err(VCRError::MsgPackEncError)?;
-    compressor.try_finish().map_err(VCRError::IOError)?;
+    let mut entity_table_f = File::create(&format!("./tapes/game_updates.header.riv.zstd"))
+        .map_err(VCRError::IOError)?;
+    entity_table_f
+        .write_all(
+            &patch_compressor
+                .compress(
+                    &rmp_serde::to_vec(&entity_lookup_table).map_err(VCRError::MsgPackEncError)?,
+                    22,
+                )
+                .map_err(VCRError::IOError)?,
+        )
+        .map_err(VCRError::IOError)?;
 
-    let date_table_f =
-        File::create(&format!("./tapes/game_updates.dates.riv.xz")).map_err(VCRError::IOError)?;
-    let mut date_compressor = XzEncoder::new(date_table_f, 9);
-    rmp_serde::encode::write(&mut date_compressor, &game_date_lookup_table)
-        .map_err(VCRError::MsgPackEncError)?;
-
-    compressor.try_finish().map_err(VCRError::IOError)?;
-    out.get_mut().sync_all().map_err(VCRError::IOError)?;
+    let mut date_table_f =
+        File::create(&format!("./tapes/game_updates.dates.riv.zstd")).map_err(VCRError::IOError)?;
+    date_table_f
+        .write_all(
+            &patch_compressor
+                .compress(
+                    &rmp_serde::to_vec(&game_date_lookup_table)
+                        .map_err(VCRError::MsgPackEncError)?,
+                    22,
+                )
+                .map_err(VCRError::IOError)?,
+        )
+        .map_err(VCRError::IOError)?;
 
     Ok(())
 }
