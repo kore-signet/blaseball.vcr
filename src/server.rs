@@ -132,7 +132,7 @@ fn entities(
 #[launch]
 fn rocket() -> _ {
     let rocket = rocket::build();
-    
+
     #[derive(serde::Deserialize)]
     struct VCRConfig {
         tapes: String,

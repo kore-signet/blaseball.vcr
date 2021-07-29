@@ -647,12 +647,13 @@ impl MultiDatabase {
         //end_measure!(teams_time);
 
         //start_measure!(fights_time);
+
         let fights: Vec<JSONValue> = self
             .all_entities("bossfight", at)?
             .into_iter()
             .map(|b| b.data)
             .filter(|b| {
-                b != &json!({}) && b["day"] == sim.data["day"] && b["season"] == sim.data["season"]
+                b != &json!({}) && b["homeHp"] != json!("0") && b["awayHp"] != json!("0")
             })
             .collect();
         //end_measure!(fights_time);
