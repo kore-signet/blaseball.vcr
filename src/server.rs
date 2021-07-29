@@ -4,6 +4,8 @@ use chrono::{DateTime, TimeZone, Utc};
 use rocket::serde::json::Json as RocketJson;
 use rocket::{get, http::ContentType, launch, routes, FromForm, State};
 use serde_json::json;
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(FromForm)]
 struct EntityReq {
@@ -13,15 +15,6 @@ struct EntityReq {
     ids: Option<String>,
     at: Option<String>,
     count: Option<u32>,
-}
-
-#[derive(FromForm)]
-struct VersionReq {
-    #[field(name = "type")]
-    entity_type: String,
-    count: Option<u32>,
-    before: Option<String>,
-    after: Option<String>,
 }
 
 #[get("/v1/site/updates")]
@@ -138,11 +131,48 @@ fn entities(
 
 #[launch]
 fn rocket() -> _ {
-    let dbs = MultiDatabase::from_folder("./tapes/").unwrap();
+    let rocket = rocket::build();
+    
+    #[derive(serde::Deserialize)]
+    struct VCRConfig {
+        tapes: String,
+        site_assets: String,
+        zstd_dictionaries: Option<String>,
+    }
 
-    let manager = ResourceManager::from_folder("./tapes/site_data/").unwrap();
+    let figment = rocket.figment();
+    let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
 
-    rocket::build().manage(dbs).manage(manager).mount(
+    let dicts = if let Some(dicts_folder) = config.zstd_dictionaries {
+        std::fs::read_dir(dicts_folder)
+            .unwrap()
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<PathBuf>, std::io::Error>>()
+            .unwrap()
+            .into_iter()
+            .filter_map(|path| {
+                if let Some(ext) = path.extension() {
+                    if ext == "dict" {
+                        Some((
+                            path.file_stem().unwrap().to_string_lossy().to_string(),
+                            path,
+                        ))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<HashMap<String, PathBuf>>()
+    } else {
+        HashMap::new()
+    };
+
+    let dbs = MultiDatabase::from_folder(PathBuf::from(config.tapes), dicts).unwrap();
+    let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
+
+    rocket.manage(dbs).manage(manager).mount(
         "/",
         routes![entities, get_asset, site_updates, fake_versions],
     )

@@ -175,7 +175,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "xdelta3",
- "xz2",
  "zstd",
 ]
 
@@ -840,17 +839,6 @@ dependencies = [
  "scoped-tls",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "lzma-sys"
-version = "0.1.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdb4b7c3eddad11d3af9e86c487607d2d2442d185d848575365c4856ba96d619"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
 ]
 
 [[package]]
@@ -2298,15 +2286,6 @@ dependencies = [
  "cc",
  "libc",
  "rand 0.6.5",
-]
-
-[[package]]
-name = "xz2"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c179869f34fc7c01830d3ce7ea2086bc3a07e0d35289b667d0a8bf910258926c"
-dependencies = [
- "lzma-sys",
 ]
 
 [[package]]

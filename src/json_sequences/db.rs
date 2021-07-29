@@ -29,23 +29,35 @@ macro_rules! end_measure {
 }
 
 pub struct Database {
-    pub reader: BufReader<File>,
-    pub entities: HashMap<String, EntityData>,
+    reader: BufReader<File>,
+    entities: HashMap<String, EntityData>,
+    dictionary: Option<Vec<u8>>,
 }
 
 impl Database {
     pub fn from_files<P: AsRef<Path> + std::fmt::Debug>(
         entities_lookup_path: P,
         db_path: P,
+        dict_path: Option<P>,
     ) -> VCRResult<Database> {
         let entities_lookup_f = File::open(entities_lookup_path).map_err(VCRError::IOError)?;
         let decompressor =
             zstd::stream::Decoder::new(entities_lookup_f).map_err(VCRError::IOError)?;
         let db_f = File::open(db_path).map_err(VCRError::IOError)?;
 
+        let compression_dict = if let Some(dict_f_path) = dict_path {
+            let mut dict_f = File::open(dict_f_path).map_err(VCRError::IOError)?;
+            let mut dict = Vec::new();
+            dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
+            Some(dict)
+        } else {
+            None
+        };
+
         Ok(Database {
             reader: BufReader::new(db_f),
             entities: rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?,
+            dictionary: compression_dict,
         })
     }
 
@@ -88,11 +100,27 @@ impl Database {
                 .seek(SeekFrom::Start(patch_start))
                 .map_err(VCRError::IOError)?;
 
-            let mut e_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
+            let mut compressed_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
             self.reader
-                .read_exact(&mut e_bytes)
+                .read_exact(&mut compressed_bytes)
                 .map_err(VCRError::IOError)?;
-            e_bytes = zstd::decode_all(Cursor::new(e_bytes)).map_err(VCRError::IOError)?;
+
+            let mut e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
+                let mut decoder = zstd::stream::Decoder::with_dictionary(
+                    Cursor::new(compressed_bytes),
+                    compress_dict,
+                )
+                .map_err(VCRError::IOError)?;
+                let mut res = Vec::new();
+                decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
+                res
+            } else {
+                let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))
+                    .map_err(VCRError::IOError)?;
+                let mut res = Vec::new();
+                decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
+                res
+            };
 
             let mut operations: Vec<PatchOperation> = Vec::new();
 
@@ -266,7 +294,11 @@ pub struct MultiDatabase {
 }
 
 impl MultiDatabase {
-    pub fn from_folder<P: AsRef<Path>>(folder: P) -> VCRResult<MultiDatabase> {
+    // dicts is the path to a zstd dictionary file. for no dictionaries, just send an empty hashmap.
+    pub fn from_folder<P: AsRef<Path>>(
+        folder: P,
+        dicts: HashMap<String, P>,
+    ) -> VCRResult<MultiDatabase> {
         let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)
             .map_err(VCRError::IOError)?
             .map(|res| res.map(|e| e.path()))
@@ -325,29 +357,20 @@ impl MultiDatabase {
 
         for (e_type, lookup_file, main_file) in entries {
             dbs.insert(
-                e_type,
-                Mutex::new(Database::from_files(lookup_file, main_file)?),
+                e_type.clone(),
+                Mutex::new(Database::from_files(
+                    lookup_file,
+                    main_file,
+                    dicts
+                        .get(&e_type)
+                        .map(|p| PathBuf::from(p.as_ref().as_os_str())),
+                )?),
             );
         }
 
         Ok(MultiDatabase {
             dbs: dbs,
             game_index: game_index,
-        })
-    }
-
-    pub fn from_files(files: Vec<(&str, &str, &str)>) -> VCRResult<MultiDatabase> {
-        let mut dbs: HashMap<String, Mutex<Database>> = HashMap::new();
-        for (e_type, lookup_file, main_file) in files {
-            dbs.insert(
-                e_type.to_owned(),
-                Mutex::new(Database::from_files(lookup_file, main_file)?),
-            );
-        }
-
-        Ok(MultiDatabase {
-            dbs: dbs,
-            game_index: HashMap::new(),
         })
     }
 
@@ -660,6 +683,8 @@ impl MultiDatabase {
             at,
         )?;
 
+        //start_measure!(tournaments_and_playoffs);
+
         let tournament = if let Some(tourn_idx) = date.tournament {
             if tourn_idx > -1 {
                 self.all_entities("tournament", at)?
@@ -692,12 +717,17 @@ impl MultiDatabase {
             } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
                 (
                     "postseason",
-                    self.playoffs(playoff_id, sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()), at)?,
+                    self.playoffs(
+                        playoff_id,
+                        sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()),
+                        at,
+                    )?,
                 )
             } else {
                 ("postseason", json!({}))
             }
         };
+        //end_measure!(tournaments_and_playoffs);
 
         end_measure!(total_time);
 

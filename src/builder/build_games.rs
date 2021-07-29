@@ -91,6 +91,39 @@ async fn paged_get<T: DeserializeOwned>(
 #[tokio::main]
 pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new(); // let entity_types = vec!["team"];
+    let mut args: Vec<String> = env::args().skip(1).collect();
+    let dict_path = if args.len() > 0 {
+        args.remove(0)
+    } else {
+        "nodict".to_string()
+    };
+    let compress_level = (if args.len() > 0 {
+        args.remove(0)
+    } else {
+        "22".to_string()
+    })
+    .parse::<i32>()
+    .unwrap();
+
+    println!(
+        "Set zstd dictionary to {} and compression level to {}",
+        dict_path, compress_level
+    );
+
+    let (mut table_compressor, mut patch_compressor) = if dict_path == "nodict" {
+        (
+            zstd::block::Compressor::new(),
+            zstd::block::Compressor::new(),
+        )
+    } else {
+        let mut dict_f = File::open(dict_path).map_err(VCRError::IOError)?;
+        let mut dict: Vec<u8> = Vec::new();
+        dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
+        (
+            zstd::block::Compressor::new(),
+            zstd::block::Compressor::with_dict(dict),
+        )
+    };
 
     let mut progress_bar = ProgressBar::new(0);
 
@@ -126,8 +159,6 @@ pub async fn main() -> VCRResult<()> {
 
     let out_file = File::create(&format!("./tapes/game_updates.riv")).map_err(VCRError::IOError)?;
     let mut out = BufWriter::new(out_file);
-
-    let mut patch_compressor = zstd::block::Compressor::new();
 
     for game in games {
         let game_date = game.data;
@@ -173,8 +204,12 @@ pub async fn main() -> VCRResult<()> {
             let start_pos = out.stream_position().map_err(VCRError::IOError)?;
 
             let patch_bytes = patch.concat();
-            out.write_all(&patch_compressor.compress(&patch_bytes, 22).unwrap())
-                .unwrap();
+            out.write_all(
+                &patch_compressor
+                    .compress(&patch_bytes, compress_level)
+                    .unwrap(),
+            )
+            .unwrap();
 
             let end_pos = out.stream_position().map_err(VCRError::IOError)?;
             offsets.push((time, start_pos, end_pos));
@@ -201,7 +236,7 @@ pub async fn main() -> VCRResult<()> {
         .map_err(VCRError::IOError)?;
     entity_table_f
         .write_all(
-            &patch_compressor
+            &table_compressor
                 .compress(
                     &rmp_serde::to_vec(&entity_lookup_table).map_err(VCRError::MsgPackEncError)?,
                     22,
@@ -214,7 +249,7 @@ pub async fn main() -> VCRResult<()> {
         File::create(&format!("./tapes/game_updates.dates.riv.zstd")).map_err(VCRError::IOError)?;
     date_table_f
         .write_all(
-            &patch_compressor
+            &table_compressor
                 .compress(
                     &rmp_serde::to_vec(&game_date_lookup_table)
                         .map_err(VCRError::MsgPackEncError)?,

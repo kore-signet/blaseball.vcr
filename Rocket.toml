@@ -1,0 +1,4 @@
+[default.vcr]
+tapes = "./tapes/"
+site_assets = "./tapes/site_data/"
+zstd_dictionaries = "./zstd-dictionaries/"

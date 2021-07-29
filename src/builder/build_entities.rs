@@ -7,7 +7,7 @@ use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
-use std::io::{BufWriter, Seek, Write};
+use std::io::{BufWriter, Read, Seek, Write};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,6 +74,22 @@ pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new();
     let mut entity_types: Vec<String> = env::args().skip(1).collect();
     let checkpoint_every = entity_types.remove(0).parse::<u32>().unwrap_or(u32::MAX);
+    let dict_path = entity_types.remove(0);
+
+    let (mut table_compressor, mut patch_compressor) = if dict_path == "nodict" {
+        (
+            zstd::block::Compressor::new(),
+            zstd::block::Compressor::new(),
+        )
+    } else {
+        let mut dict_f = File::open(&dict_path).map_err(VCRError::IOError)?;
+        let mut dict: Vec<u8> = Vec::new();
+        dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
+        (
+            zstd::block::Compressor::new(),
+            zstd::block::Compressor::with_dict(dict),
+        )
+    };
 
     for etype in entity_types {
         let mut progress_bar = ProgressBar::new(0);
@@ -109,8 +125,6 @@ pub async fn main() -> VCRResult<()> {
         let out_file =
             File::create(&format!("./tapes/{}.riv", etype)).map_err(VCRError::IOError)?;
         let mut out = BufWriter::new(out_file);
-
-        let mut patch_compressor = zstd::block::Compressor::new();
 
         for id in entity_ids {
             progress_bar.set_action(&id, Color::Green, Style::Bold);
@@ -180,7 +194,7 @@ pub async fn main() -> VCRResult<()> {
             .map_err(VCRError::IOError)?;
         entity_table_f
             .write_all(
-                &patch_compressor
+                &table_compressor
                     .compress(
                         &rmp_serde::to_vec(&entity_lookup_table)
                             .map_err(VCRError::MsgPackEncError)?,
