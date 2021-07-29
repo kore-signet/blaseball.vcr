@@ -652,9 +652,7 @@ impl MultiDatabase {
             .all_entities("bossfight", at)?
             .into_iter()
             .map(|b| b.data)
-            .filter(|b| {
-                b != &json!({}) && b["homeHp"] != json!("0") && b["awayHp"] != json!("0")
-            })
+            .filter(|b| b != &json!({}) && b["homeHp"] != json!("0") && b["awayHp"] != json!("0"))
             .collect();
         //end_measure!(fights_time);
 

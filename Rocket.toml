@@ -1,4 +1,4 @@
 [default.vcr]
 tapes = "./tapes/"
 site_assets = "./tapes/site_data/"
-zstd_dictionaries = "./zstd-dictionaries/"
+zstd_dictionaries = "./zstd-dictionaries/" # this is optional; you can exclude it if your dataset doesn't require dicts.
