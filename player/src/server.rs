@@ -2,7 +2,7 @@ use blaseball_vcr::site::{chron::SiteUpdate, manager::ResourceManager};
 use blaseball_vcr::{feed::*, *};
 use chrono::{DateTime, TimeZone, Utc};
 use rocket::serde::json::Json as RocketJson;
-use rocket::{get, http::ContentType, launch, routes, FromForm, State};
+use rocket::{get, http::ContentType, http::Status, launch, routes, FromForm, State};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -168,6 +168,11 @@ fn entities(
     }
 }
 
+#[get("/database/coffee")]
+fn coffee() -> (Status, (ContentType, &'static str)) {
+    (Status::ImATeapot, (ContentType::Plain, "Coffee?"))
+}
+
 #[launch]
 fn rocket() -> _ {
     let rocket = rocket::build();
@@ -232,7 +237,8 @@ fn rocket() -> _ {
             feed,
             get_asset,
             site_updates,
-            fake_versions
+            fake_versions,
+            coffee
         ],
     )
 }
