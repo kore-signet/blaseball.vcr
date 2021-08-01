@@ -1,0 +1,26 @@
+[package]
+name = "player"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+serde_json = "1.0.64"
+
+[dependencies.blaseball_vcr]
+path = "../vcr_lib"
+
+[dependencies.rocket]
+version = "0.5.0-rc.1"
+features = ["json"]
+
+[dependencies.chrono]
+version = "0.4"
+features = ["serde"]
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[[bin]]
+name = "player"
+path = "src/server.rs"

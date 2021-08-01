@@ -2,3 +2,7 @@
 tapes = "./tapes/"
 site_assets = "./tapes/site_data/"
 zstd_dictionaries = "./zstd-dictionaries/" # this is optional; you can exclude it if your dataset doesn't require dicts.
+feed_index = "./tapes/feed/feed.fp"
+feed_path = "./tapes/feed/feed.riv"
+feed_dict = "./zstd-dictionaries/feed.dict"
+feed_id_table = "./tapes/feed/id_lookup.bin"

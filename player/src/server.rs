@@ -1,11 +1,12 @@
 use blaseball_vcr::site::{chron::SiteUpdate, manager::ResourceManager};
-use blaseball_vcr::*;
+use blaseball_vcr::{feed::*, *};
 use chrono::{DateTime, TimeZone, Utc};
 use rocket::serde::json::Json as RocketJson;
 use rocket::{get, http::ContentType, launch, routes, FromForm, State};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 #[derive(FromForm)]
 struct EntityReq {
@@ -40,6 +41,44 @@ fn get_asset(
         },
         manager.get_resource(r_type, r_idx)?,
     ))
+}
+
+#[get("/v1/games?<after>")]
+fn all_games(
+    after: Option<String>,
+    db: &State<MultiDatabase>,
+) -> VCRResult<RocketJson<ChroniclerV1Response<ChronV1Game>>> {
+    Ok(RocketJson(ChroniclerV1Response {
+        next_page: None,
+        data: db.games_with_date(after.map_or(Utc.timestamp(0, 0), |d| {
+            DateTime::parse_from_rfc3339(&d)
+                .unwrap()
+                .with_timezone(&Utc)
+        }))?,
+    }))
+}
+
+#[get("/feed/global?<time>&<limit>&<phase>&<season>")]
+fn feed(
+    time: Option<i64>,
+    limit: Option<usize>,
+    phase: Option<u8>,
+    season: Option<i8>,
+    db: &State<Mutex<FeedDatabase>>,
+) -> VCRResult<RocketJson<Vec<FeedEvent>>> {
+    let mut feed = db.lock().unwrap();
+    if phase.is_some() && season.is_some() {
+        Ok(RocketJson(feed.events_by_phase(
+            season.unwrap(),
+            phase.unwrap(),
+            limit.unwrap_or(1000),
+        )?))
+    } else {
+        Ok(RocketJson(feed.events_before(
+            time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+            limit.unwrap_or(100),
+        )?))
+    }
 }
 
 #[get("/v2/versions?type=Stream&<before>&<after>&<count>&<order>")]
@@ -138,6 +177,10 @@ fn rocket() -> _ {
         tapes: String,
         site_assets: String,
         zstd_dictionaries: Option<String>,
+        feed_index: String,
+        feed_path: String,
+        feed_dict: String,
+        feed_id_table: String,
     }
 
     let figment = rocket.figment();
@@ -171,9 +214,25 @@ fn rocket() -> _ {
 
     let dbs = MultiDatabase::from_folder(PathBuf::from(config.tapes), dicts).unwrap();
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
+    let feed_db = Mutex::new(
+        FeedDatabase::from_files(
+            config.feed_index,
+            config.feed_path,
+            config.feed_dict,
+            config.feed_id_table,
+        )
+        .unwrap(),
+    );
 
-    rocket.manage(dbs).manage(manager).mount(
+    rocket.manage(dbs).manage(manager).manage(feed_db).mount(
         "/",
-        routes![entities, get_asset, site_updates, fake_versions],
+        routes![
+            all_games,
+            entities,
+            feed,
+            get_asset,
+            site_updates,
+            fake_versions
+        ],
     )
 }

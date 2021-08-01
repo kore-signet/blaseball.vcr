@@ -1,18 +1,19 @@
-use super::chron::*;
-use crate::{VCRError, VCRResult};
+use blaseball_vcr::{
+    site::{chron, chron::*, *},
+    ChroniclerV1Response, VCRError, VCRResult,
+};
+
+use reqwest::blocking;
+use std::env;
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::Path;
+
 use chrono::{DateTime, Utc};
 use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
 use reqwest;
-use serde::{Deserialize, Serialize};
 use std::io::{Seek, Write};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EncodedResource {
-    pub paths: Vec<(DateTime<Utc>, String, u16)>, // date:path:deltaidx
-    pub basis: Vec<u8>,
-    pub deltas: Vec<(u64, u64, String)>, // delta offset, length in resource file, hash
-}
 
 pub fn encode_resource<W: Write + Seek>(
     steps: Vec<FileStep>,
@@ -85,4 +86,30 @@ pub fn encode_resource<W: Write + Seek>(
         deltas: deltas,
         basis: basis,
     })
+}
+
+fn main() -> VCRResult<()> {
+    let chron_res: ChroniclerV1Response<chron::SiteUpdate> =
+        blocking::get("https://api.sibr.dev/chronicler/v1/site/updates")
+            .map_err(VCRError::ReqwestError)?
+            .json()
+            .map_err(VCRError::ReqwestError)?;
+    let all_steps = chron::updates_to_steps(chron_res.data);
+    let args: Vec<String> = env::args().collect();
+
+    for (name, steps) in all_steps {
+        println!("Recording asset {}", name);
+        let main_path = Path::new(&args[1]).join(&format!("{}.riv", name));
+        let header_path = Path::new(&args[1]).join(&format!("{}.header.riv", name));
+
+        let main_f = File::create(main_path).map_err(VCRError::IOError)?;
+        let mut main_out = BufWriter::new(main_f);
+
+        let header = encode_resource(steps, &mut main_out)?;
+
+        let mut header_f = File::create(header_path).map_err(VCRError::IOError)?;
+        rmp_serde::encode::write(&mut header_f, &header).map_err(VCRError::MsgPackEncError)?;
+    }
+
+    Ok(())
 }

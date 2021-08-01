@@ -1,49 +1,7 @@
-[package]
-name = "blaseball_vcr"
-version = "0.1.0"
-edition = "2018"
+[workspace]
 
-[dependencies]
-json-patch = "0.2.6"
-serde_json = "1.0.64"
-rmp-serde = "0.15.5"
-xdelta3 = "0.1.5"
-progress_bar = "0.1.3"
-bincode = "1.3.3"
-zstd = "0.9"
-
-[dependencies.tokio]
-version = "1"
-features = ["macros"]
-
-[dependencies.chrono]
-version = "0.4"
-features = ["serde"]
-
-[dependencies.reqwest]
-version = "0.11.4"
-features = ["blocking","json","gzip","deflate"]
-
-[dependencies.serde]
-version = "1.0"
-features = ["derive"]
-
-[dependencies.rocket]
-version = "0.5.0-rc.1"
-features = ["json"]
-
-[[bin]]
-name = "server"
-path = "src/server.rs"
-
-[[bin]]
-name = "build_entities"
-path = "src/builder/build_entities.rs"
-
-[[bin]]
-name = "download_site_data"
-path = "src/builder/download_site_data.rs"
-
-[[bin]]
-name = "build_games"
-path = "src/builder/build_games.rs"
+members = [
+  "encoder",
+  "vcr_lib",
+  "player"
+]

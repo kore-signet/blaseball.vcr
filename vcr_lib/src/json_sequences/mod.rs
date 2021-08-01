@@ -23,7 +23,7 @@ pub struct EntityData {
     pub checkpoint_every: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDate {
     pub day: i32,

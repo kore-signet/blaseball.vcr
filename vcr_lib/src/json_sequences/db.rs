@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde_json::{json, Value as JSONValue};
 
 use json_patch::{
@@ -446,6 +446,24 @@ impl MultiDatabase {
         Ok(results)
     }
 
+    pub fn games_with_date(&self, after: DateTime<Utc>) -> VCRResult<Vec<ChronV1Game>> {
+        let mut results = Vec::with_capacity(self.game_index.len());
+        for (date, games) in self.game_index.iter() {
+            for (game, start_time, end_time) in games {
+                if start_time.unwrap_or(Utc.timestamp(0, 0)) > after {
+                    results.push(ChronV1Game {
+                        game_id: game.to_owned(),
+                        start_time: *start_time,
+                        end_time: *end_time,
+                        data: json!(date),
+                    });
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
     fn playoffs(&self, id: &str, round: Option<i64>, at: u32) -> VCRResult<JSONValue> {
         let playoffs = self.get_entity("playoffs", id, at)?.data;
         let round_number = round.unwrap_or_else(|| playoffs["round"].as_i64().unwrap());
@@ -532,7 +550,7 @@ impl MultiDatabase {
 
     pub fn stream_data(&self, at: u32) -> VCRResult<JSONValue> {
         //start_measure!(sim_time);
-        start_measure!(total_time);
+        // start_measure!(total_time);
         let sim = self.get_entity("sim", "00000000-0000-0000-0000-000000000000", at)?;
         //end_measure!(sim_time);
 
@@ -728,7 +746,7 @@ impl MultiDatabase {
         };
         //end_measure!(tournaments_and_playoffs);
 
-        end_measure!(total_time);
+        // end_measure!(total_time);
 
         Ok(json!({
             "value": {
