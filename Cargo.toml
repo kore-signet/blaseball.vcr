@@ -5,3 +5,7 @@ members = [
   "vcr_lib",
   "player"
 ]
+
+# [profile.release]
+# opt-level = 'z'
+# lto = true

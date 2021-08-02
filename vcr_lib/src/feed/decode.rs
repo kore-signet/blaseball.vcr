@@ -288,7 +288,7 @@ impl FeedDatabase {
         timestamp: DateTime<Utc>,
         count: usize,
     ) -> VCRResult<Vec<FeedEvent>> {
-        let prefix = [
+        let mut prefix = [
             (timestamp.year() as u16).to_be_bytes().to_vec(),
             vec![
                 timestamp.month() as u8,
@@ -298,33 +298,40 @@ impl FeedDatabase {
         ]
         .concat();
 
-        let ids = self
-            .times
-            .iter_prefix(&prefix)
-            .filter_map(|(k, v)| {
-                if Utc
-                    .ymd(
-                        u16::from_be_bytes([k[0], k[1]]) as i32,
-                        u8::from_be_bytes([k[2]]) as u32,
-                        u8::from_be_bytes([k[3]]) as u32,
-                    )
-                    .and_hms(
-                        u8::from_be_bytes([k[4]]) as u32,
-                        u8::from_be_bytes([k[5]]) as u32,
-                        u8::from_be_bytes([k[6]]) as u32,
-                    )
-                    >= timestamp
-                {
-                    Some(v.into_iter().copied().collect())
-                } else {
-                    None
-                }
-            })
-            .take(count)
-            .collect::<Vec<Vec<u8>>>();
+        let mut ids = Vec::new();
+
+        while ids.len() < 1 {
+            ids = self
+                .times
+                .iter_prefix(&prefix)
+                .filter_map(|(k, v)| {
+                    let date = Utc
+                        .ymd(
+                            u16::from_be_bytes([k[0], k[1]]) as i32,
+                            u8::from_be_bytes([k[2]]) as u32,
+                            u8::from_be_bytes([k[3]]) as u32,
+                        )
+                        .and_hms(
+                            u8::from_be_bytes([k[4]]) as u32,
+                            u8::from_be_bytes([k[5]]) as u32,
+                            u8::from_be_bytes([k[6]]) as u32,
+                        );
+                    if date >= timestamp
+                    {
+                        Some((date,v.into_iter().copied().collect()))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<(DateTime<Utc>,Vec<u8>)>>();
+
+            prefix.pop();
+        }
+
+        ids.sort_by_key(|(t,_)|t.clone());
 
         ids.iter()
-            .map(|snowflake| self.read_event(snowflake))
+            .map(|(_,snowflake)| self.read_event(snowflake))
             .collect::<VCRResult<Vec<FeedEvent>>>()
     }
 
@@ -333,7 +340,7 @@ impl FeedDatabase {
         timestamp: DateTime<Utc>,
         count: usize,
     ) -> VCRResult<Vec<FeedEvent>> {
-        let prefix = [
+        let mut prefix = [
             (timestamp.year() as u16).to_be_bytes().to_vec(),
             vec![
                 timestamp.month() as u8,
@@ -343,29 +350,34 @@ impl FeedDatabase {
         ]
         .concat();
 
-        let mut ids = self
-            .times
-            .iter_prefix(&prefix)
-            .filter_map(|(k, v)| {
-                let date = Utc
-                    .ymd(
-                        u16::from_be_bytes([k[0], k[1]]) as i32,
-                        u8::from_be_bytes([k[2]]) as u32,
-                        u8::from_be_bytes([k[3]]) as u32,
-                    )
-                    .and_hms(
-                        u8::from_be_bytes([k[4]]) as u32,
-                        u8::from_be_bytes([k[5]]) as u32,
-                        u8::from_be_bytes([k[6]]) as u32,
-                    );
-                if date < timestamp
-                {
-                    Some((date,v.into_iter().copied().collect()))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<(DateTime<Utc>,Vec<u8>)>>();
+        let mut ids = Vec::new();
+        while ids.len() < 1 {
+            ids = self
+                .times
+                .iter_prefix(&prefix)
+                .filter_map(|(k, v)| {
+                    let date = Utc
+                        .ymd(
+                            u16::from_be_bytes([k[0], k[1]]) as i32,
+                            u8::from_be_bytes([k[2]]) as u32,
+                            u8::from_be_bytes([k[3]]) as u32,
+                        )
+                        .and_hms(
+                            u8::from_be_bytes([k[4]]) as u32,
+                            u8::from_be_bytes([k[5]]) as u32,
+                            u8::from_be_bytes([k[6]]) as u32,
+                        );
+                    if date <= timestamp
+                    {
+                        Some((date,v.into_iter().copied().collect()))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<(DateTime<Utc>,Vec<u8>)>>();
+
+            prefix.pop();
+        }
 
         ids.sort_by_key(|(t,_)|t.clone());
         ids.reverse();

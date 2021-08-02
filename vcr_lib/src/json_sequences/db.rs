@@ -24,7 +24,7 @@ macro_rules! start_measure {
 
 macro_rules! end_measure {
     ($t:tt) => {
-        println!("{}: {}ms", stringify!($t), $t.elapsed().as_millis());
+        println!("\x1b[1;31m{}:\x1b[0m {}ms", stringify!($t), $t.elapsed().as_millis());
     };
 }
 
@@ -550,7 +550,7 @@ impl MultiDatabase {
 
     pub fn stream_data(&self, at: u32) -> VCRResult<JSONValue> {
         //start_measure!(sim_time);
-        // start_measure!(total_time);
+        //start_measure!(total_time);
         let sim = self.get_entity("sim", "00000000-0000-0000-0000-000000000000", at)?;
         //end_measure!(sim_time);
 
@@ -746,7 +746,9 @@ impl MultiDatabase {
         };
         //end_measure!(tournaments_and_playoffs);
 
-        // end_measure!(total_time);
+        //end_measure!(total_time);
+
+        // println!("---------------\n");
 
         Ok(json!({
             "value": {

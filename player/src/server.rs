@@ -2,11 +2,38 @@ use blaseball_vcr::site::{chron::SiteUpdate, manager::ResourceManager};
 use blaseball_vcr::{feed::*, *};
 use chrono::{DateTime, TimeZone, Utc};
 use rocket::serde::json::Json as RocketJson;
-use rocket::{get, http::ContentType, http::Status, launch, routes, FromForm, State};
+use rocket::{get, http::{ContentType, Status}, launch, routes, FromForm, State};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Instant;
+
+pub struct RequestTimer;
+
+#[derive(Copy, Clone)]
+struct TimerStart(Option<Instant>);
+
+#[rocket::async_trait]
+impl rocket::fairing::Fairing for RequestTimer {
+    fn info(&self) -> rocket::fairing::Info {
+        rocket::fairing::Info {
+            name: "Request Timer",
+            kind: rocket::fairing::Kind::Request | rocket::fairing::Kind::Response
+        }
+    }
+
+    async fn on_request(&self, request: &mut rocket::Request<'_>, _: &mut rocket::Data<'_>) {
+        request.local_cache(|| TimerStart(Some(Instant::now())));
+    }
+
+    async fn on_response<'r>(&self, req: &'r rocket::Request<'_>, res: &mut rocket::Response<'r>) {
+        let start_time = req.local_cache(|| TimerStart(None));
+        if let Some(duration) = start_time.0.map(|st| st.elapsed()) {
+            println!("\x1b[1m{}\x1b[m took {:?}",req.uri(),duration);
+        }
+    }
+}
 
 #[derive(FromForm)]
 struct EntityReq {
