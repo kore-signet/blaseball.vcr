@@ -193,16 +193,25 @@ impl Database {
         entity: &str,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<(u32, JSONValue)>> {
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut entity_value = json!({});
-        let patches = self.get_entity_data(entity, before, true)?;
-        let mut results: Vec<(u32, JSONValue)> = Vec::with_capacity(patches.len());
+        let patches = self.get_entity_data(entity, before, false)?;
+        let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
 
         for (time, patch) in patches {
             patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
 
             if time > after {
-                results.push((time, entity_value.clone()));
+                results.push(ChroniclerEntity {
+                    data: entity_value.clone(),
+                    entity_id: entity.to_owned(),
+                    valid_from: DateTime::<Utc>::from_utc(
+                        NaiveDateTime::from_timestamp(time as i64, 0),
+                        Utc,
+                    ),
+                    valid_to: None,
+                    hash: String::new()
+                });
             }
         }
 
@@ -268,7 +277,7 @@ impl Database {
         entities: Vec<String>,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<(u32, JSONValue)>> {
+    )  -> VCRResult<Vec<ChroniclerEntity>> {
         let mut results = Vec::with_capacity(entities.len());
         for e in entities {
             results.append(&mut self.get_entity_versions(&e, before, after)?);
@@ -282,6 +291,16 @@ impl Database {
         let keys: Vec<String> = self.entities.keys().cloned().collect();
         for entity in keys {
             results.push(self.get_entity(&entity, at)?);
+        }
+
+        Ok(results)
+    }
+
+    pub fn all_entities_versions(&mut self, before: u32, after: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+        let mut results = Vec::with_capacity(self.entities.len());
+        let keys: Vec<String> = self.entities.keys().cloned().collect();
+        for e in keys {
+            results.append(&mut self.get_entity_versions(&e, before, after)?);
         }
 
         Ok(results)
@@ -385,7 +404,7 @@ impl MultiDatabase {
         entity: &str,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<(u32, JSONValue)>> {
+    )  -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
         Ok(db.get_entity_versions(entity, before, after)?)
     }
@@ -406,7 +425,7 @@ impl MultiDatabase {
         entities: Vec<String>,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<(u32, JSONValue)>> {
+    )  -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
         Ok(db.get_entities_versions(entities, before, after)?)
     }
@@ -414,6 +433,11 @@ impl MultiDatabase {
     pub fn all_entities(&self, e_type: &str, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
         Ok(db.all_entities(at)?)
+    }
+
+    pub fn all_entities_versions(&self, e_type: &str, before: u32, after: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+        let mut db = self.dbs[e_type].lock().unwrap();
+        Ok(db.all_entities_versions(before,after)?)
     }
 
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {

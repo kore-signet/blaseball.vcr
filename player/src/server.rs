@@ -45,6 +45,18 @@ struct EntityReq {
     count: Option<u32>,
 }
 
+#[derive(FromForm)]
+struct VersionsReq {
+    #[field(name = "type")]
+    entity_type: String,
+    #[field(name = "id")]
+    ids: Option<String>,
+    before: Option<String>,
+    after: Option<String>,
+    count: Option<u32>,
+    order: Option<String>
+}
+
 #[get("/v1/site/updates")]
 fn site_updates(manager: &State<ResourceManager>) -> RocketJson<ChroniclerV1Response<SiteUpdate>> {
     RocketJson(ChroniclerV1Response {
@@ -108,51 +120,69 @@ fn feed(
     }
 }
 
-#[get("/v2/versions?type=Stream&<before>&<after>&<count>&<order>")]
-fn fake_versions(
-    before: Option<String>,
-    after: Option<String>,
-    count: Option<u32>,
-    order: Option<String>,
+#[get("/v2/versions?<req..>")]
+fn versions(
+    req: VersionsReq,
     db: &State<MultiDatabase>,
 ) -> VCRResult<RocketJson<ChroniclerResponse<ChroniclerEntity>>> {
-    let start_time = after.as_ref().map_or(
-        before.as_ref().map_or(Utc::now().timestamp() as u32, |x| {
-            DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-        }) - (count.unwrap_or(1) * 5),
-        |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
-    );
+    let mut res: Vec<ChroniclerEntity> = if req.entity_type.to_lowercase() == "stream" {
+        let start_time = req.after.as_ref().map_or(
+            req.before.as_ref().map_or(u32::MAX, |x| {
+                DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+            }) - (req.count.unwrap_or(1) * 5),
+            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+        );
 
-    let end_time = before.map_or(
-        after.map_or(Utc::now().timestamp() as u32, |x| {
-            DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-        }) + (count.unwrap_or(1) * 5),
-        |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
-    );
+        let end_time = req.before.map_or(
+            req.after.map_or(u32::MIN, |x| {
+                DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+            }) + (req.count.unwrap_or(1) * 5),
+            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+        );
 
-    let mut results: Vec<ChroniclerEntity> = Vec::new();
-    for at in (start_time..end_time).into_iter().step_by(5) {
-        results.push(ChroniclerEntity {
-            entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
-            valid_from: Utc.timestamp(at as i64, 0),
-            valid_to: Some(Utc.timestamp((at + 5) as i64, 0).to_rfc3339()),
-            hash: String::new(),
-            data: db.stream_data(at)?,
-        });
-    }
 
-    if let Some(ord) = order {
+        let mut results: Vec<ChroniclerEntity> = Vec::new();
+        for at in (start_time..end_time).into_iter().step_by(5) {
+            results.push(ChroniclerEntity {
+                entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+                valid_from: Utc.timestamp(at as i64, 0),
+                valid_to: Some(Utc.timestamp((at + 5) as i64, 0).to_rfc3339()),
+                hash: String::new(),
+                data: db.stream_data(at)?,
+            });
+        }
+
+        results
+    } else {
+        let start_time = req.after.as_ref().map_or(
+            u32::MIN,
+            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+        );
+
+        let end_time = req.before.map_or(
+            u32::MAX,
+            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+        );
+
+        if let Some(ids) = req.ids.map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>()) {
+            db.get_entities_versions(&req.entity_type, ids, end_time, start_time)?
+        } else {
+            db.all_entities_versions(&req.entity_type, end_time, start_time)?
+        }
+    };
+
+    if let Some(ord) = req.order {
         if ord.to_lowercase() == "asc" {
-            results.sort_by_key(|x| x.valid_from);
+            res.sort_by_key(|x| x.valid_from);
         } else if ord.to_lowercase() == "desc" {
-            results.sort_by_key(|x| x.valid_from);
-            results.reverse();
+            res.sort_by_key(|x| x.valid_from);
+            res.reverse();
         }
     }
 
     Ok(RocketJson(ChroniclerResponse {
         next_page: None,
-        items: results,
+        items: res,
     }))
 }
 
@@ -264,7 +294,7 @@ fn rocket() -> _ {
             feed,
             get_asset,
             site_updates,
-            fake_versions,
+            versions,
             coffee
         ],
     )
