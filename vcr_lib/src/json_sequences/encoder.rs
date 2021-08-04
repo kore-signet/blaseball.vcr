@@ -27,7 +27,6 @@ pub fn encode(
                     diff(&last, &obj).0
                 };
 
-                diff_ops.dedup();
                 let diff: Vec<Vec<u8>> = diff_ops
                     .into_iter()
                     .map(|r_op| {

@@ -127,7 +127,7 @@ pub async fn main() -> VCRResult<()> {
 
     let mut progress_bar = ProgressBar::new(0);
 
-    let games: Vec<Game> = paged_get(
+    let games: Vec<Game> = paged_get::<Game>(
         &client,
         &mut progress_bar,
         false,
