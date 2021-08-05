@@ -1,9 +1,15 @@
 use blaseball_vcr::site::{chron::SiteUpdate, manager::ResourceManager};
 use blaseball_vcr::{feed::*, *};
 use chrono::{DateTime, TimeZone, Utc};
-use rocket::serde::json::Json as RocketJson;
-use rocket::{get, http::{ContentType, Status}, launch, routes, FromForm, State};
-use serde_json::json;
+use lru::LruCache;
+use rand::Rng;
+use rocket::{
+    get,
+    http::{ContentType, Status},
+    launch, routes,
+    serde::json::Json as RocketJson,
+    FromForm, State,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -19,7 +25,7 @@ impl rocket::fairing::Fairing for RequestTimer {
     fn info(&self) -> rocket::fairing::Info {
         rocket::fairing::Info {
             name: "Request Timer",
-            kind: rocket::fairing::Kind::Request | rocket::fairing::Kind::Response
+            kind: rocket::fairing::Kind::Request | rocket::fairing::Kind::Response,
         }
     }
 
@@ -27,10 +33,10 @@ impl rocket::fairing::Fairing for RequestTimer {
         request.local_cache(|| TimerStart(Some(Instant::now())));
     }
 
-    async fn on_response<'r>(&self, req: &'r rocket::Request<'_>, res: &mut rocket::Response<'r>) {
+    async fn on_response<'r>(&self, req: &'r rocket::Request<'_>, _: &mut rocket::Response<'r>) {
         let start_time = req.local_cache(|| TimerStart(None));
         if let Some(duration) = start_time.0.map(|st| st.elapsed()) {
-            println!("\x1b[1m{}\x1b[m took {:?}",req.uri(),duration);
+            println!("\x1b[1m{}\x1b[m took {:?}", req.uri(), duration);
         }
     }
 }
@@ -42,7 +48,9 @@ struct EntityReq {
     #[field(name = "id")]
     ids: Option<String>,
     at: Option<String>,
-    count: Option<u32>,
+    count: Option<usize>,
+    page: Option<String>,
+    order: Option<String>,
 }
 
 #[derive(FromForm)]
@@ -53,8 +61,9 @@ struct VersionsReq {
     ids: Option<String>,
     before: Option<String>,
     after: Option<String>,
-    count: Option<u32>,
-    order: Option<String>
+    count: Option<usize>,
+    order: Option<String>,
+    page: Option<String>,
 }
 
 #[get("/v1/site/updates")]
@@ -124,22 +133,24 @@ fn feed(
 fn versions(
     req: VersionsReq,
     db: &State<MultiDatabase>,
+    page_map: &State<Mutex<LruCache<String, InternalPaging>>>,
 ) -> VCRResult<RocketJson<ChroniclerResponse<ChroniclerEntity>>> {
-    let mut res: Vec<ChroniclerEntity> = if req.entity_type.to_lowercase() == "stream" {
+    let mut res: ChroniclerResponse<ChroniclerEntity> = if req.entity_type.to_lowercase()
+        == "stream"
+    {
         let start_time = req.after.as_ref().map_or(
             req.before.as_ref().map_or(u32::MAX, |x| {
                 DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-            }) - (req.count.unwrap_or(1) * 5),
+            }) - ((req.count.unwrap_or(1) as u32) * 5),
             |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
         );
 
         let end_time = req.before.map_or(
             req.after.map_or(u32::MIN, |x| {
                 DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-            }) + (req.count.unwrap_or(1) * 5),
+            }) + ((req.count.unwrap_or(1) as u32) * 5),
             |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
         );
-
 
         let mut results: Vec<ChroniclerEntity> = Vec::new();
         for at in (start_time..end_time).into_iter().step_by(5) {
@@ -152,77 +163,206 @@ fn versions(
             });
         }
 
-        results
+        ChroniclerResponse {
+            next_page: None,
+            items: results,
+        }
     } else {
-        let start_time = req.after.as_ref().map_or(
-            u32::MIN,
-            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
-        );
-
-        let end_time = req.before.map_or(
-            u32::MAX,
-            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
-        );
-
-        if let Some(ids) = req.ids.map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>()) {
-            db.get_entities_versions(&req.entity_type, ids, end_time, start_time)?
+        if let Some(page_token) = req.page {
+            let mut page_cache = page_map.lock().unwrap();
+            if let Some(ref mut p) = page_cache.get_mut(&page_token) {
+                let results =
+                    db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?;
+                if results.len() < req.count.unwrap_or(100) {
+                    ChroniclerResponse {
+                        next_page: None,
+                        items: results,
+                    }
+                } else {
+                    ChroniclerResponse {
+                        next_page: Some(page_token),
+                        items: results,
+                    }
+                }
+            } else {
+                panic!() // TODO|:| RESULT
+            }
         } else {
-            db.all_entities_versions(&req.entity_type, end_time, start_time)?
+            let start_time = req.after.as_ref().map_or(u32::MIN, |y| {
+                DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
+            });
+
+            let end_time = req.before.map_or(u32::MAX, |y| {
+                DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
+            });
+
+            let mut page = if let Some(ids) = req
+                .ids
+                .map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>())
+            {
+                InternalPaging {
+                    remaining_data: vec![],
+                    remaining_ids: ids,
+                    kind: ChronV2EndpointKind::Versions(end_time, start_time),
+                }
+            } else {
+                InternalPaging {
+                    remaining_data: vec![],
+                    remaining_ids: db.all_ids(&req.entity_type),
+                    kind: ChronV2EndpointKind::Versions(end_time, start_time),
+                }
+            };
+
+            let res = db.fetch_page(
+                &req.entity_type.to_lowercase(),
+                &mut page,
+                req.count.unwrap_or(100),
+            )?;
+            if !(res.len() < req.count.unwrap_or(100)) {
+                let mut page_cache = page_map.lock().unwrap();
+                let key = {
+                    let mut k = String::new();
+                    let mut rng = rand::thread_rng();
+
+                    loop {
+                        let chars: String = std::iter::repeat(())
+                            .map(|()| rng.sample(rand::distributions::Alphanumeric))
+                            .map(char::from)
+                            .take(16)
+                            .collect();
+                        if !page_cache.contains(&chars) {
+                            k = chars;
+                            break;
+                        }
+                    }
+
+                    k
+                };
+
+                page_cache.put(key.clone(), page);
+
+                ChroniclerResponse {
+                    next_page: Some(key),
+                    items: res,
+                }
+            } else {
+                ChroniclerResponse {
+                    next_page: None,
+                    items: res,
+                }
+            }
         }
     };
 
     if let Some(ord) = req.order {
         if ord.to_lowercase() == "asc" {
-            res.sort_by_key(|x| x.valid_from);
+            res.items.sort_by_key(|x| x.valid_from);
         } else if ord.to_lowercase() == "desc" {
-            res.sort_by_key(|x| x.valid_from);
-            res.reverse();
+            res.items.sort_by_key(|x| x.valid_from);
+            res.items.reverse();
         }
     }
 
-    Ok(RocketJson(ChroniclerResponse {
-        next_page: None,
-        items: res,
-    }))
+    Ok(RocketJson(res))
 }
 
 #[get("/v2/entities?<req..>")]
 fn entities(
     req: EntityReq,
     db: &State<MultiDatabase>,
+    page_map: &State<Mutex<LruCache<String, InternalPaging>>>,
 ) -> VCRResult<RocketJson<ChroniclerResponse<ChroniclerEntity>>> {
-    if let Some(ids) = req.ids {
-        Ok(RocketJson(ChroniclerResponse {
-            next_page: None,
-            items: db
-                .get_entities(
-                    &req.entity_type.to_lowercase(),
-                    ids.split(",")
-                        .map(|x| x.to_owned())
-                        .collect::<Vec<String>>(),
-                    req.at.map_or(u32::MAX, |when| {
-                        DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32
-                    }),
-                )?
-                .into_iter()
-                .filter(|x| x.data != json!({}))
-                .collect(),
-        }))
+    let mut res = if let Some(page_token) = req.page {
+        let mut page_cache = page_map.lock().unwrap();
+        if let Some(ref mut p) = page_cache.get_mut(&page_token) {
+            let results =
+                db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?;
+            if results.len() < req.count.unwrap_or(100) {
+                ChroniclerResponse {
+                    next_page: None,
+                    items: results,
+                }
+            } else {
+                ChroniclerResponse {
+                    next_page: Some(page_token),
+                    items: results,
+                }
+            }
+        } else {
+            panic!() // TODO|:| RESULT
+        }
     } else {
-        Ok(RocketJson(ChroniclerResponse {
-            next_page: None,
-            items: db
-                .all_entities(
-                    &req.entity_type.to_lowercase(),
-                    req.at.map_or(u32::MAX, |when| {
-                        DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32
-                    }),
-                )?
-                .into_iter()
-                .filter(|x| x.data != json!({}))
-                .collect(),
-        }))
+        let at = req.at.map_or(u32::MAX, |when| {
+            DateTime::parse_from_rfc3339(&when).unwrap().timestamp() as u32
+        });
+
+        let mut page = if let Some(ids) = req
+            .ids
+            .map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>())
+        {
+            InternalPaging {
+                remaining_data: vec![],
+                remaining_ids: ids,
+                kind: ChronV2EndpointKind::Entities(at),
+            }
+        } else {
+            InternalPaging {
+                remaining_data: vec![],
+                remaining_ids: db.all_ids(&req.entity_type),
+                kind: ChronV2EndpointKind::Entities(at),
+            }
+        };
+
+        let res = db.fetch_page(
+            &req.entity_type.to_lowercase(),
+            &mut page,
+            req.count.unwrap_or(100),
+        )?;
+        if !(res.len() < req.count.unwrap_or(100)) {
+            let mut page_cache = page_map.lock().unwrap();
+            let key = {
+                let mut k = String::new();
+                let mut rng = rand::thread_rng();
+
+                loop {
+                    let chars: String = std::iter::repeat(())
+                        .map(|()| rng.sample(rand::distributions::Alphanumeric))
+                        .map(char::from)
+                        .take(16)
+                        .collect();
+                    if !page_cache.contains(&chars) {
+                        k = chars;
+                        break;
+                    }
+                }
+
+                k
+            };
+
+            page_cache.put(key.clone(), page);
+
+            ChroniclerResponse {
+                next_page: Some(key),
+                items: res,
+            }
+        } else {
+            ChroniclerResponse {
+                next_page: None,
+                items: res,
+            }
+        }
+    };
+
+    if let Some(ord) = req.order {
+        if ord.to_lowercase() == "asc" {
+            res.items.sort_by_key(|x| x.valid_from);
+        } else if ord.to_lowercase() == "desc" {
+            res.items.sort_by_key(|x| x.valid_from);
+            res.items.reverse();
+        }
     }
+
+    Ok(RocketJson(res))
 }
 
 #[get("/database/coffee")]
@@ -243,6 +383,7 @@ fn rocket() -> _ {
         feed_path: String,
         feed_dict: String,
         feed_id_table: String,
+        cached_page_capacity: Option<usize>,
     }
 
     let figment = rocket.figment();
@@ -286,16 +427,24 @@ fn rocket() -> _ {
         .unwrap(),
     );
 
-    rocket.manage(dbs).manage(manager).manage(feed_db).mount(
-        "/",
-        routes![
-            all_games,
-            entities,
-            feed,
-            get_asset,
-            site_updates,
-            versions,
-            coffee
-        ],
-    )
+    let cache: LruCache<String, InternalPaging> =
+        LruCache::new(config.cached_page_capacity.unwrap_or(20));
+
+    rocket
+        .manage(dbs)
+        .manage(manager)
+        .manage(feed_db)
+        .manage(Mutex::new(cache))
+        .mount(
+            "/",
+            routes![
+                all_games,
+                entities,
+                feed,
+                get_asset,
+                site_updates,
+                versions,
+                coffee
+            ],
+        )
 }

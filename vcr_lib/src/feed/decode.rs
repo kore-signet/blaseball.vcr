@@ -316,22 +316,21 @@ impl FeedDatabase {
                             u8::from_be_bytes([k[5]]) as u32,
                             u8::from_be_bytes([k[6]]) as u32,
                         );
-                    if date >= timestamp
-                    {
-                        Some((date,v.into_iter().copied().collect()))
+                    if date >= timestamp {
+                        Some((date, v.into_iter().copied().collect()))
                     } else {
                         None
                     }
                 })
-                .collect::<Vec<(DateTime<Utc>,Vec<u8>)>>();
+                .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>();
 
             prefix.pop();
         }
 
-        ids.sort_by_key(|(t,_)|t.clone());
+        ids.sort_by_key(|(t, _)| t.clone());
 
         ids.iter()
-            .map(|(_,snowflake)| self.read_event(snowflake))
+            .map(|(_, snowflake)| self.read_event(snowflake))
             .collect::<VCRResult<Vec<FeedEvent>>>()
     }
 
@@ -367,24 +366,23 @@ impl FeedDatabase {
                             u8::from_be_bytes([k[5]]) as u32,
                             u8::from_be_bytes([k[6]]) as u32,
                         );
-                    if date <= timestamp
-                    {
-                        Some((date,v.into_iter().copied().collect()))
+                    if date <= timestamp {
+                        Some((date, v.into_iter().copied().collect()))
                     } else {
                         None
                     }
                 })
-                .collect::<Vec<(DateTime<Utc>,Vec<u8>)>>();
+                .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>();
 
             prefix.pop();
         }
 
-        ids.sort_by_key(|(t,_)|t.clone());
+        ids.sort_by_key(|(t, _)| t.clone());
         ids.reverse();
 
         ids.iter()
             .take(count)
-            .map(|(_,snowflake)| self.read_event(snowflake))
+            .map(|(_, snowflake)| self.read_event(snowflake))
             .collect::<VCRResult<Vec<FeedEvent>>>()
     }
 
@@ -397,9 +395,7 @@ impl FeedDatabase {
         let ids = self
             .snowflakes
             .iter_prefix(&[season.to_be_bytes(), phase.to_be_bytes()].concat())
-            .map(|(k, _)| {
-                k.into_iter().copied().collect()
-            })
+            .map(|(k, _)| k.into_iter().copied().collect())
             .take(count)
             .collect::<Vec<Vec<u8>>>();
 

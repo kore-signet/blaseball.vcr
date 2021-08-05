@@ -34,3 +34,14 @@ pub struct ChroniclerEntity {
     pub valid_to: Option<String>,
     pub data: JSONValue,
 }
+
+pub struct InternalPaging {
+    pub remaining_ids: Vec<String>,
+    pub remaining_data: Vec<ChroniclerEntity>,
+    pub kind: ChronV2EndpointKind,
+}
+
+pub enum ChronV2EndpointKind {
+    Versions(u32, u32),
+    Entities(u32),
+}

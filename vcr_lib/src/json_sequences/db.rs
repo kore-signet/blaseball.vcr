@@ -24,7 +24,11 @@ macro_rules! start_measure {
 
 macro_rules! end_measure {
     ($t:tt) => {
-        println!("\x1b[1;31m{}:\x1b[0m {}ms", stringify!($t), $t.elapsed().as_millis());
+        println!(
+            "\x1b[1;31m{}:\x1b[0m {}ms",
+            stringify!($t),
+            $t.elapsed().as_millis()
+        );
     };
 }
 
@@ -210,7 +214,7 @@ impl Database {
                         Utc,
                     ),
                     valid_to: None,
-                    hash: String::new()
+                    hash: String::new(),
                 });
             }
         }
@@ -277,7 +281,7 @@ impl Database {
         entities: Vec<String>,
         before: u32,
         after: u32,
-    )  -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut results = Vec::with_capacity(entities.len());
         for e in entities {
             results.append(&mut self.get_entity_versions(&e, before, after)?);
@@ -296,7 +300,11 @@ impl Database {
         Ok(results)
     }
 
-    pub fn all_entities_versions(&mut self, before: u32, after: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+    pub fn all_entities_versions(
+        &mut self,
+        before: u32,
+        after: u32,
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut results = Vec::with_capacity(self.entities.len());
         let keys: Vec<String> = self.entities.keys().cloned().collect();
         for e in keys {
@@ -304,6 +312,32 @@ impl Database {
         }
 
         Ok(results)
+    }
+
+    pub fn fetch_page(
+        &mut self,
+        page: &mut InternalPaging,
+        count: usize,
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
+        while page.remaining_data.len() < count {
+            if page.remaining_ids.len() > 0 {
+                page.remaining_data.append(&mut match page.kind {
+                    ChronV2EndpointKind::Versions(before, after) => {
+                        self.get_entity_versions(&page.remaining_ids.pop().unwrap(), before, after)?
+                    }
+                    ChronV2EndpointKind::Entities(at) => {
+                        vec![self.get_entity(&page.remaining_ids.pop().unwrap(), at)?]
+                    }
+                });
+            } else {
+                break;
+            }
+        }
+
+        Ok(page
+            .remaining_data
+            .drain(..std::cmp::min(count, page.remaining_data.len()))
+            .collect())
     }
 }
 
@@ -395,7 +429,7 @@ impl MultiDatabase {
 
     pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
         let mut db = self.dbs[e_type].lock().unwrap();
-        Ok(db.get_entity(entity, at)?)
+        db.get_entity(entity, at)
     }
 
     pub fn get_entity_versions(
@@ -404,9 +438,9 @@ impl MultiDatabase {
         entity: &str,
         before: u32,
         after: u32,
-    )  -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
-        Ok(db.get_entity_versions(entity, before, after)?)
+        db.get_entity_versions(entity, before, after)
     }
 
     pub fn get_entities(
@@ -416,7 +450,7 @@ impl MultiDatabase {
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
-        Ok(db.get_entities(entities, at)?)
+        db.get_entities(entities, at)
     }
 
     pub fn get_entities_versions(
@@ -425,19 +459,39 @@ impl MultiDatabase {
         entities: Vec<String>,
         before: u32,
         after: u32,
-    )  -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
-        Ok(db.get_entities_versions(entities, before, after)?)
+        db.get_entities_versions(entities, before, after)
     }
 
     pub fn all_entities(&self, e_type: &str, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
-        Ok(db.all_entities(at)?)
+        db.all_entities(at)
     }
 
-    pub fn all_entities_versions(&self, e_type: &str, before: u32, after: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+    pub fn all_entities_versions(
+        &self,
+        e_type: &str,
+        before: u32,
+        after: u32,
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
-        Ok(db.all_entities_versions(before,after)?)
+        db.all_entities_versions(before, after)
+    }
+
+    pub fn all_ids(&self, e_type: &str) -> Vec<String> {
+        let db = self.dbs[e_type].lock().unwrap();
+        db.entities.keys().map(|x| x.to_owned()).collect()
+    }
+
+    pub fn fetch_page(
+        &self,
+        e_type: &str,
+        page: &mut InternalPaging,
+        count: usize,
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
+        let mut db = self.dbs[e_type].lock().unwrap();
+        db.fetch_page(page, count)
     }
 
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {
