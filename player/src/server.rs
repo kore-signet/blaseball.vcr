@@ -10,6 +10,7 @@ use rocket::{
     serde::json::Json as RocketJson,
     FromForm, State,
 };
+use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -171,7 +172,7 @@ fn versions(
         if let Some(page_token) = req.page {
             let mut page_cache = page_map.lock().unwrap();
             if let Some(ref mut p) = page_cache.get_mut(&page_token) {
-                let results =
+                let results: Vec<ChroniclerEntity> =
                     db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?;
                 if results.len() < req.count.unwrap_or(100) {
                     ChroniclerResponse {
@@ -208,7 +209,7 @@ fn versions(
             } else {
                 InternalPaging {
                     remaining_data: vec![],
-                    remaining_ids: db.all_ids(&req.entity_type),
+                    remaining_ids: db.all_ids(&req.entity_type.to_lowercase()),
                     kind: ChronV2EndpointKind::Versions(end_time, start_time),
                 }
             };
@@ -275,8 +276,11 @@ fn entities(
     let mut res = if let Some(page_token) = req.page {
         let mut page_cache = page_map.lock().unwrap();
         if let Some(ref mut p) = page_cache.get_mut(&page_token) {
-            let results =
-                db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?;
+            let results: Vec<ChroniclerEntity> = db
+                .fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?
+                .into_iter()
+                .filter(|x| x.data != json!({}))
+                .collect();
             if results.len() < req.count.unwrap_or(100) {
                 ChroniclerResponse {
                     next_page: None,
@@ -308,16 +312,20 @@ fn entities(
         } else {
             InternalPaging {
                 remaining_data: vec![],
-                remaining_ids: db.all_ids(&req.entity_type),
+                remaining_ids: db.all_ids(&req.entity_type.to_lowercase()),
                 kind: ChronV2EndpointKind::Entities(at),
             }
         };
 
-        let res = db.fetch_page(
-            &req.entity_type.to_lowercase(),
-            &mut page,
-            req.count.unwrap_or(100),
-        )?;
+        let res: Vec<ChroniclerEntity> = db
+            .fetch_page(
+                &req.entity_type.to_lowercase(),
+                &mut page,
+                req.count.unwrap_or(100),
+            )?
+            .into_iter()
+            .filter(|x| x.data != json!({}))
+            .collect();
         if !(res.len() < req.count.unwrap_or(100)) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {

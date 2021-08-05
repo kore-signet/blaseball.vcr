@@ -21,7 +21,7 @@ pub fn encode(
             .into_iter()
             .enumerate()
             .map(|(iter, (time, obj))| {
-                let mut diff_ops: Vec<PatchOperation> = if iter as u32 % checkpoint_every == 0 {
+                let diff_ops: Vec<PatchOperation> = if iter as u32 % checkpoint_every == 0 {
                     diff(&json!({}), &obj).0
                 } else {
                     diff(&last, &obj).0
