@@ -276,11 +276,8 @@ fn entities(
     let mut res = if let Some(page_token) = req.page {
         let mut page_cache = page_map.lock().unwrap();
         if let Some(ref mut p) = page_cache.get_mut(&page_token) {
-            let results: Vec<ChroniclerEntity> = db
-                .fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?
-                .into_iter()
-                .filter(|x| x.data != json!({}))
-                .collect();
+            let results: Vec<ChroniclerEntity> =
+                db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?.into_iter().filter(|x| x.data != json!({})).collect();
             if results.len() < req.count.unwrap_or(100) {
                 ChroniclerResponse {
                     next_page: None,
@@ -317,15 +314,11 @@ fn entities(
             }
         };
 
-        let res: Vec<ChroniclerEntity> = db
-            .fetch_page(
-                &req.entity_type.to_lowercase(),
-                &mut page,
-                req.count.unwrap_or(100),
-            )?
-            .into_iter()
-            .filter(|x| x.data != json!({}))
-            .collect();
+        let res: Vec<ChroniclerEntity> = db.fetch_page(
+            &req.entity_type.to_lowercase(),
+            &mut page,
+            req.count.unwrap_or(100),
+        )?.into_iter().filter(|x| x.data != json!({})).collect();
         if !(res.len() < req.count.unwrap_or(100)) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
@@ -380,18 +373,23 @@ fn coffee() -> (Status, (ContentType, &'static str)) {
 
 #[launch]
 fn rocket() -> _ {
-    let rocket = rocket::build();
+    let mut rocket = rocket::build();
 
     #[derive(serde::Deserialize)]
     struct VCRConfig {
         tapes: String,
         site_assets: String,
         zstd_dictionaries: Option<String>,
-        feed_index: String,
-        feed_path: String,
-        feed_dict: String,
-        feed_id_table: String,
+        feed: Option<FeedConfig>,
         cached_page_capacity: Option<usize>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct FeedConfig {
+        index: String,
+        path: String,
+        dict: String,
+        id_table: String
     }
 
     let figment = rocket.figment();
@@ -425,15 +423,19 @@ fn rocket() -> _ {
 
     let dbs = MultiDatabase::from_folder(PathBuf::from(config.tapes), dicts).unwrap();
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
-    let feed_db = Mutex::new(
-        FeedDatabase::from_files(
-            config.feed_index,
-            config.feed_path,
-            config.feed_dict,
-            config.feed_id_table,
-        )
-        .unwrap(),
-    );
+
+    if let Some(feed_config) = config.feed {
+        let feed_db = Mutex::new(
+            FeedDatabase::from_files(
+                feed_config.index,
+                feed_config.path,
+                feed_config.dict,
+                feed_config.id_table,
+            )
+            .unwrap(),
+        );
+        rocket = rocket.manage(feed_db).mount("/",routes![feed]);
+    }
 
     let cache: LruCache<String, InternalPaging> =
         LruCache::new(config.cached_page_capacity.unwrap_or(20));
@@ -441,14 +443,12 @@ fn rocket() -> _ {
     rocket
         .manage(dbs)
         .manage(manager)
-        .manage(feed_db)
         .manage(Mutex::new(cache))
         .mount(
             "/",
             routes![
                 all_games,
                 entities,
-                feed,
                 get_asset,
                 site_updates,
                 versions,

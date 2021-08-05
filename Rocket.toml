@@ -2,7 +2,10 @@
 tapes = "./tapes/"
 site_assets = "./tapes/site_data/"
 zstd_dictionaries = "./zstd-dictionaries/" # this is optional; you can exclude it if your dataset doesn't require dicts.
-feed_index = "./tapes/feed/feed.fp"
-feed_path = "./tapes/feed/feed.riv"
-feed_dict = "./zstd-dictionaries/feed.dict"
-feed_id_table = "./tapes/feed/id_lookup.bin"
+
+# if you don't want to include feed support, just comment this bit out!
+[default.vcr.feed]
+index = "./tapes/feed/feed.fp"
+path = "./tapes/feed/feed.riv"
+dict = "./zstd-dictionaries/feed.dict"
+id_table = "./tapes/feed/id_lookup.bin"
