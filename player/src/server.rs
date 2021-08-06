@@ -136,39 +136,7 @@ fn versions(
     db: &State<MultiDatabase>,
     page_map: &State<Mutex<LruCache<String, InternalPaging>>>,
 ) -> VCRResult<RocketJson<ChroniclerResponse<ChroniclerEntity>>> {
-    let mut res: ChroniclerResponse<ChroniclerEntity> = if req.entity_type.to_lowercase()
-        == "stream"
-    {
-        let start_time = req.after.as_ref().map_or(
-            req.before.as_ref().map_or(u32::MAX, |x| {
-                DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-            }) - ((req.count.unwrap_or(1) as u32) * 5),
-            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
-        );
-
-        let end_time = req.before.map_or(
-            req.after.map_or(u32::MIN, |x| {
-                DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-            }) + ((req.count.unwrap_or(1) as u32) * 5),
-            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
-        );
-
-        let mut results: Vec<ChroniclerEntity> = Vec::new();
-        for at in (start_time..end_time).into_iter().step_by(5) {
-            results.push(ChroniclerEntity {
-                entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
-                valid_from: Utc.timestamp(at as i64, 0),
-                valid_to: Some(Utc.timestamp((at + 5) as i64, 0).to_rfc3339()),
-                hash: String::new(),
-                data: db.stream_data(at)?,
-            });
-        }
-
-        ChroniclerResponse {
-            next_page: None,
-            items: results,
-        }
-    } else {
+    let mut res: ChroniclerResponse<ChroniclerEntity> = {
         if let Some(page_token) = req.page {
             let mut page_cache = page_map.lock().unwrap();
             if let Some(ref mut p) = page_cache.get_mut(&page_token) {
@@ -189,28 +157,50 @@ fn versions(
                 panic!() // TODO|:| RESULT
             }
         } else {
-            let start_time = req.after.as_ref().map_or(u32::MIN, |y| {
-                DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
-            });
+            let mut page = if req.entity_type.to_lowercase() == "stream" {
+                let start_time = req.after.as_ref().map_or(
+                    req.before.as_ref().map_or(u32::MAX, |x| {
+                        DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+                    }) - ((req.count.unwrap_or(1) as u32) * 5),
+                    |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+                );
 
-            let end_time = req.before.map_or(u32::MAX, |y| {
-                DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
-            });
+                let end_time = req.before.map_or(
+                    req.after.map_or(u32::MIN, |x| {
+                        DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+                    }) + ((req.count.unwrap_or(1) as u32) * 5),
+                    |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+                );
 
-            let mut page = if let Some(ids) = req
-                .ids
-                .map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>())
-            {
                 InternalPaging {
-                    remaining_data: vec![],
-                    remaining_ids: ids,
+                    remaining_data: db.stream_data_versions(end_time, start_time)?,
+                    remaining_ids: vec![],
                     kind: ChronV2EndpointKind::Versions(end_time, start_time),
                 }
             } else {
-                InternalPaging {
-                    remaining_data: vec![],
-                    remaining_ids: db.all_ids(&req.entity_type.to_lowercase()),
-                    kind: ChronV2EndpointKind::Versions(end_time, start_time),
+                let start_time = req.after.as_ref().map_or(u32::MIN, |y| {
+                    DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
+                });
+
+                let end_time = req.before.map_or(u32::MAX, |y| {
+                    DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
+                });
+
+                if let Some(ids) = req
+                    .ids
+                    .map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>())
+                {
+                    InternalPaging {
+                        remaining_data: vec![],
+                        remaining_ids: ids,
+                        kind: ChronV2EndpointKind::Versions(end_time, start_time),
+                    }
+                } else {
+                    InternalPaging {
+                        remaining_data: vec![],
+                        remaining_ids: db.all_ids(&req.entity_type.to_lowercase()),
+                        kind: ChronV2EndpointKind::Versions(end_time, start_time),
+                    }
                 }
             };
 
@@ -276,8 +266,11 @@ fn entities(
     let mut res = if let Some(page_token) = req.page {
         let mut page_cache = page_map.lock().unwrap();
         if let Some(ref mut p) = page_cache.get_mut(&page_token) {
-            let results: Vec<ChroniclerEntity> =
-                db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?.into_iter().filter(|x| x.data != json!({})).collect();
+            let results: Vec<ChroniclerEntity> = db
+                .fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?
+                .into_iter()
+                .filter(|x| x.data != json!({}))
+                .collect();
             if results.len() < req.count.unwrap_or(100) {
                 ChroniclerResponse {
                     next_page: None,
@@ -314,11 +307,15 @@ fn entities(
             }
         };
 
-        let res: Vec<ChroniclerEntity> = db.fetch_page(
-            &req.entity_type.to_lowercase(),
-            &mut page,
-            req.count.unwrap_or(100),
-        )?.into_iter().filter(|x| x.data != json!({})).collect();
+        let res: Vec<ChroniclerEntity> = db
+            .fetch_page(
+                &req.entity_type.to_lowercase(),
+                &mut page,
+                req.count.unwrap_or(100),
+            )?
+            .into_iter()
+            .filter(|x| x.data != json!({}))
+            .collect();
         if !(res.len() < req.count.unwrap_or(100)) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
@@ -389,7 +386,7 @@ fn rocket() -> _ {
         index: String,
         path: String,
         dict: String,
-        id_table: String
+        id_table: String,
     }
 
     let figment = rocket.figment();
@@ -434,7 +431,7 @@ fn rocket() -> _ {
             )
             .unwrap(),
         );
-        rocket = rocket.manage(feed_db).mount("/",routes![feed]);
+        rocket = rocket.manage(feed_db).mount("/", routes![feed]);
     }
 
     let cache: LruCache<String, InternalPaging> =
@@ -444,6 +441,7 @@ fn rocket() -> _ {
         .manage(dbs)
         .manage(manager)
         .manage(Mutex::new(cache))
+        .attach(RequestTimer)
         .mount(
             "/",
             routes![

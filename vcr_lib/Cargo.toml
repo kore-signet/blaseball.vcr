@@ -10,6 +10,7 @@ rmp-serde = "0.15.5"
 xdelta3 = "0.1.5"
 zstd = "0.9"
 crossbeam = "0.8.1"
+itertools = "0.10.1"
 
 [dependencies.reqwest]
 version = "0.11.4"

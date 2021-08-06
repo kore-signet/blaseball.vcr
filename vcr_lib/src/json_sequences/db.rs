@@ -1,5 +1,6 @@
 use crate::*;
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, File};
@@ -187,7 +188,6 @@ impl Database {
             }
             patches.push((time, JSONPatch(operations)));
         }
-
         patches.sort_by_key(|x| x.0);
         Ok(patches)
     }
@@ -197,13 +197,16 @@ impl Database {
         entity: &str,
         before: u32,
         after: u32,
+        at_least_one: bool,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut entity_value = json!({});
         let patches = self.get_entity_data(entity, before, false)?;
         let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
+        let mut last_time = 0;
 
         for (time, patch) in patches {
             patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
+            last_time = time;
 
             if time > after {
                 results.push(ChroniclerEntity {
@@ -217,6 +220,19 @@ impl Database {
                     hash: String::new(),
                 });
             }
+        }
+
+        if results.len() < 1 && at_least_one {
+            results.push(ChroniclerEntity {
+                valid_from: DateTime::<Utc>::from_utc(
+                    NaiveDateTime::from_timestamp(last_time as i64, 0),
+                    Utc,
+                ),
+                data: entity_value,
+                valid_to: None,
+                entity_id: entity.to_owned(),
+                hash: String::new(),
+            });
         }
 
         Ok(results)
@@ -284,7 +300,7 @@ impl Database {
     ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut results = Vec::with_capacity(entities.len());
         for e in entities {
-            results.append(&mut self.get_entity_versions(&e, before, after)?);
+            results.append(&mut self.get_entity_versions(&e, before, after, false)?);
         }
 
         Ok(results)
@@ -308,36 +324,10 @@ impl Database {
         let mut results = Vec::with_capacity(self.entities.len());
         let keys: Vec<String> = self.entities.keys().cloned().collect();
         for e in keys {
-            results.append(&mut self.get_entity_versions(&e, before, after)?);
+            results.append(&mut self.get_entity_versions(&e, before, after, false)?);
         }
 
         Ok(results)
-    }
-
-    pub fn fetch_page(
-        &mut self,
-        page: &mut InternalPaging,
-        count: usize,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
-        while page.remaining_data.len() < count {
-            if page.remaining_ids.len() > 0 {
-                page.remaining_data.append(&mut match page.kind {
-                    ChronV2EndpointKind::Versions(before, after) => {
-                        self.get_entity_versions(&page.remaining_ids.pop().unwrap(), before, after)?
-                    }
-                    ChronV2EndpointKind::Entities(at) => {
-                        vec![self.get_entity(&page.remaining_ids.pop().unwrap(), at)?]
-                    }
-                });
-            } else {
-                break;
-            }
-        }
-
-        Ok(page
-            .remaining_data
-            .drain(..std::cmp::min(count, page.remaining_data.len()))
-            .collect())
     }
 }
 
@@ -438,9 +428,10 @@ impl MultiDatabase {
         entity: &str,
         before: u32,
         after: u32,
+        at_least_one: bool,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
         let mut db = self.dbs[e_type].lock().unwrap();
-        db.get_entity_versions(entity, before, after)
+        db.get_entity_versions(entity, before, after, at_least_one)
     }
 
     pub fn get_entities(
@@ -490,8 +481,31 @@ impl MultiDatabase {
         page: &mut InternalPaging,
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
-        db.fetch_page(page, count)
+        if e_type != "stream" && page.remaining_data.len() < count {
+            let mut db = self.dbs[e_type].lock().unwrap();
+            while page.remaining_data.len() < count {
+                if page.remaining_ids.len() > 0 {
+                    page.remaining_data.append(&mut match page.kind {
+                        ChronV2EndpointKind::Versions(before, after) => db.get_entity_versions(
+                            &page.remaining_ids.pop().unwrap(),
+                            before,
+                            after,
+                            false,
+                        )?,
+                        ChronV2EndpointKind::Entities(at) => {
+                            vec![db.get_entity(&page.remaining_ids.pop().unwrap(), at)?]
+                        }
+                    });
+                } else {
+                    break;
+                }
+            }
+        }
+
+        Ok(page
+            .remaining_data
+            .drain(..std::cmp::min(count, page.remaining_data.len()))
+            .collect())
     }
 
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {
@@ -504,6 +518,21 @@ impl MultiDatabase {
                 end_time: *end_time,
                 data: db.get_first_entity(&game)?.data,
             });
+        }
+
+        Ok(results)
+    }
+
+    pub fn game_versions_by_date_and_time(
+        &self,
+        date: &GameDate,
+        before: u32,
+        after: u32,
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
+        let mut db = self.dbs["game_updates"].lock().unwrap();
+        let mut results = Vec::new();
+        for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
+            results.append(&mut db.get_entity_versions(&game, before, after, true)?);
         }
 
         Ok(results)
@@ -626,236 +655,279 @@ impl MultiDatabase {
         }))
     }
 
-    pub fn stream_data(&self, at: u32) -> VCRResult<JSONValue> {
+    pub fn stream_data_versions(
+        &self,
+        before: u32,
+        after: u32,
+    ) -> VCRResult<Vec<ChroniclerEntity>> {
         //start_measure!(sim_time);
         //start_measure!(total_time);
-        let sim = self.get_entity("sim", "00000000-0000-0000-0000-000000000000", at)?;
         //end_measure!(sim_time);
-
-        let mut date = GameDate {
-            season: sim.data.get("season").unwrap().as_i64().unwrap() as i32,
-            day: sim.data.get("day").unwrap().as_i64().unwrap() as i32,
-            tournament: sim
-                .data
-                .get("tournament")
-                .map(|x| x.as_i64().unwrap() as i32),
-        };
-
-        //start_measure!(schedule_time);
-        let schedule: JSONValue = self
-            .games_by_date_and_time(&date, at)?
-            .into_iter()
-            .map(|g| g.data)
-            .collect();
-        //end_measure!(schedule_time);
-        date.day += 1;
-
-        //start_measure!(tomorrow_schedule_time);
-        let tomorrow_schedule: Vec<JSONValue> = self
-            .games_by_date(&date)?
-            .into_iter()
-            .map(|g| g.data)
-            .collect();
-        //end_measure!(tomorrow_schedule_time);
-
-        //start_measure!(season_time);
-        let season = self
-            .all_entities("season", at)?
-            .into_iter()
-            .find(|s| s.data["seasonNumber"] == sim.data["season"])
-            .unwrap();
-        //end_measure!(season_time);
-
-        //start_measure!(standings_time);
-        let standings =
-            self.get_entity("standings", season.data["standings"].as_str().unwrap(), at)?;
-        //end_measure!(standings_time);
-
-        //start_measure!(leagues_time);
-        let leagues: Vec<JSONValue> = self
-            .all_entities("league", at)?
-            .into_iter()
-            .map(|t| t.data)
-            .filter(|t| t != &json!({}))
-            .collect();
-        //end_measure!(leagues_time);
-
-        //start_measure!(subleagues_time);
-        let subleague_ids: Vec<String> = leagues
-            .iter()
-            .map(|x| {
-                x["subleagues"]
-                    .as_array()
-                    .unwrap_or(&Vec::new())
-                    .into_iter()
-                    .map(|x| x.as_str().unwrap().to_owned())
-                    .collect::<Vec<String>>()
-            })
-            .flatten()
-            .collect();
-
-        let tiebreaker_ids: Vec<String> = leagues
-            .iter()
-            .map(|x| {
-                x.get("tiebreakers")
-                    .unwrap_or(&json!(""))
-                    .as_str()
-                    .unwrap()
-                    .to_owned()
-            })
-            .collect();
-
-        let subleagues: Vec<JSONValue> = self
-            .get_entities("subleague", subleague_ids, at)?
-            .into_iter()
-            .map(|s| s.data)
-            .filter(|s| s != &json!({}))
-            .collect();
-        //end_measure!(subleagues_time);
-
-        let division_ids: Vec<String> = subleagues
-            .iter()
-            .map(|x| {
-                x["divisions"]
-                    .as_array()
-                    .unwrap_or(&Vec::new())
-                    .into_iter()
-                    .map(|x| x.as_str().unwrap().to_owned())
-                    .collect::<Vec<String>>()
-            })
-            .flatten()
-            .collect();
-
-        let divisions: Vec<JSONValue> = self
-            .get_entities("division", division_ids, at)?
-            .into_iter()
-            .map(|d| d.data)
-            .filter(|d| d != &json!({}))
-            .collect();
-
-        //start_measure!(teams_time);
-        let teams: Vec<JSONValue> = self
-            .all_entities("team", at)?
-            .into_iter()
-            .map(|t| t.data)
-            .filter(|t| t != &json!({}))
-            .collect();
-        //end_measure!(teams_time);
-
-        //start_measure!(fights_time);
-
-        let fights: Vec<JSONValue> = self
-            .all_entities("bossfight", at)?
-            .into_iter()
-            .map(|b| b.data)
-            .filter(|b| b != &json!({}) && b["homeHp"] != json!("0") && b["awayHp"] != json!("0"))
-            .collect();
-        //end_measure!(fights_time);
-
-        //start_measure!(stadiums_time);
-        let stadiums: Vec<JSONValue> = self
-            .all_entities("stadium", at)?
-            .into_iter()
-            .map(|s| s.data)
-            .filter(|s| s != &json!({}))
-            .collect();
-        //end_measure!(stadiums_time);
-
-        let tiebreakers: Vec<JSONValue> = self
-            .get_entities("tiebreakers", tiebreaker_ids, at)?
-            .into_iter()
-            .map(|t| t.data)
-            .filter(|t| t != &json!({}))
-            .collect();
-
-        let temporal = self.get_entity("temporal", "00000000-0000-0000-0000-000000000000", at)?;
-
-        let sunsun = self.get_entity("sunsun", "00000000-0000-0000-0000-000000000000", at)?;
-
-        let communitychest = self.get_entity(
-            "communitychestprogress",
+        let sim_vers = self.get_entity_versions(
+            "sim",
             "00000000-0000-0000-0000-000000000000",
-            at,
+            before,
+            after,
+            true,
         )?;
+        let mut results: Vec<ChroniclerEntity> = Vec::new();
 
-        //start_measure!(tournaments_and_playoffs);
+        for sim in sim_vers {
+            let mut date = GameDate {
+                season: sim.data.get("season").unwrap().as_i64().unwrap() as i32,
+                day: sim.data.get("day").unwrap().as_i64().unwrap() as i32,
+                tournament: sim
+                    .data
+                    .get("tournament")
+                    .map(|x| x.as_i64().unwrap() as i32),
+            };
 
-        let tournament = if let Some(tourn_idx) = date.tournament {
-            if tourn_idx > -1 {
-                self.all_entities("tournament", at)?
-                    .into_iter()
-                    .last()
-                    .map_or(json!({}), |x| x.data)
-            } else {
-                json!({})
-            }
-        } else {
-            json!({})
-        };
+            //start_measure!(schedule_time);
+            let mut schedule: Vec<Vec<ChroniclerEntity>> = self
+                .game_versions_by_date_and_time(&date, before, after)?
+                .into_iter()
+                .into_group_map_by(|g| g.entity_id.clone())
+                .into_iter()
+                .map(|(_, v)| v)
+                .collect();
 
-        let (playoff_key, playoffs): (&str, JSONValue) = if tournament != json!({}) {
-            (
-                "postseason",
-                self.playoffs(
-                    tournament["playoffs"].as_str().unwrap(),
-                    sim.data.get("tournamentRound").map(|i| i.as_i64().unwrap()),
-                    at,
-                )?,
-            )
-        } else {
-            if let Some(playoff_ids) = sim.data["playoffs"].as_array() {
-                let mut playoffs: Vec<JSONValue> = Vec::new();
-                for id in playoff_ids {
-                    playoffs.push(self.playoffs(id.as_str().unwrap(), None, at)?);
+            //end_measure!(schedule_time);
+            date.day += 1;
+
+            //start_measure!(tomorrow_schedule_time);
+            let tomorrow_schedule: Vec<JSONValue> = self
+                .games_by_date(&date)?
+                .into_iter()
+                .map(|g| g.data)
+                .collect();
+
+            'stream: loop {
+                let mut games = Vec::new();
+                for mut g in schedule.iter_mut() {
+                    if let Some(up) = g.pop() {
+                        games.push(up);
+                    } else {
+                        break 'stream;
+                    }
                 }
-                ("postseasons", json!(playoffs))
-            } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
-                (
-                    "postseason",
-                    self.playoffs(
-                        playoff_id,
-                        sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()),
-                        at,
-                    )?,
-                )
-            } else {
-                ("postseason", json!({}))
+
+                let valid_from = games[0].valid_from;
+
+                let at = valid_from.timestamp() as u32;
+                //end_measure!(tomorrow_schedule_time);
+
+                //start_measure!(season_time);
+                let season = self
+                    .all_entities("season", at)?
+                    .into_iter()
+                    .find(|s| s.data["seasonNumber"] == sim.data["season"])
+                    .unwrap();
+                //end_measure!(season_time);
+
+                //start_measure!(standings_time);
+                let standings =
+                    self.get_entity("standings", season.data["standings"].as_str().unwrap(), at)?;
+                //end_measure!(standings_time);
+
+                //start_measure!(leagues_time);
+                let leagues: Vec<JSONValue> = self
+                    .all_entities("league", at)?
+                    .into_iter()
+                    .map(|t| t.data)
+                    .filter(|t| t != &json!({}))
+                    .collect();
+                //end_measure!(leagues_time);
+
+                //start_measure!(subleagues_time);
+                let subleague_ids: Vec<String> = leagues
+                    .iter()
+                    .map(|x| {
+                        x["subleagues"]
+                            .as_array()
+                            .unwrap_or(&Vec::new())
+                            .into_iter()
+                            .map(|x| x.as_str().unwrap().to_owned())
+                            .collect::<Vec<String>>()
+                    })
+                    .flatten()
+                    .collect();
+
+                let tiebreaker_ids: Vec<String> = leagues
+                    .iter()
+                    .map(|x| {
+                        x.get("tiebreakers")
+                            .unwrap_or(&json!(""))
+                            .as_str()
+                            .unwrap()
+                            .to_owned()
+                    })
+                    .collect();
+
+                let subleagues: Vec<JSONValue> = self
+                    .get_entities("subleague", subleague_ids, at)?
+                    .into_iter()
+                    .map(|s| s.data)
+                    .filter(|s| s != &json!({}))
+                    .collect();
+                //end_measure!(subleagues_time);
+
+                let division_ids: Vec<String> = subleagues
+                    .iter()
+                    .map(|x| {
+                        x["divisions"]
+                            .as_array()
+                            .unwrap_or(&Vec::new())
+                            .into_iter()
+                            .map(|x| x.as_str().unwrap().to_owned())
+                            .collect::<Vec<String>>()
+                    })
+                    .flatten()
+                    .collect();
+
+                let divisions: Vec<JSONValue> = self
+                    .get_entities("division", division_ids, at)?
+                    .into_iter()
+                    .map(|d| d.data)
+                    .filter(|d| d != &json!({}))
+                    .collect();
+
+                //start_measure!(teams_time);
+                let teams: Vec<JSONValue> = self
+                    .all_entities("team", at)?
+                    .into_iter()
+                    .map(|t| t.data)
+                    .filter(|t| t != &json!({}))
+                    .collect();
+                //end_measure!(teams_time);
+
+                //start_measure!(fights_time);
+
+                let fights: Vec<JSONValue> = self
+                    .all_entities("bossfight", at)?
+                    .into_iter()
+                    .map(|b| b.data)
+                    .filter(|b| {
+                        b != &json!({}) && b["homeHp"] != json!("0") && b["awayHp"] != json!("0")
+                    })
+                    .collect();
+                //end_measure!(fights_time);
+
+                //start_measure!(stadiums_time);
+                let stadiums: Vec<JSONValue> = self
+                    .all_entities("stadium", at)?
+                    .into_iter()
+                    .map(|s| s.data)
+                    .filter(|s| s != &json!({}))
+                    .collect();
+                //end_measure!(stadiums_time);
+
+                let tiebreakers: Vec<JSONValue> = self
+                    .get_entities("tiebreakers", tiebreaker_ids, at)?
+                    .into_iter()
+                    .map(|t| t.data)
+                    .filter(|t| t != &json!({}))
+                    .collect();
+
+                let temporal =
+                    self.get_entity("temporal", "00000000-0000-0000-0000-000000000000", at)?;
+
+                let sunsun =
+                    self.get_entity("sunsun", "00000000-0000-0000-0000-000000000000", at)?;
+
+                let communitychest = self.get_entity(
+                    "communitychestprogress",
+                    "00000000-0000-0000-0000-000000000000",
+                    at,
+                )?;
+
+                //start_measure!(tournaments_and_playoffs);
+
+                let tournament = if let Some(tourn_idx) = date.tournament {
+                    if tourn_idx > -1 {
+                        self.all_entities("tournament", at)?
+                            .into_iter()
+                            .last()
+                            .map_or(json!({}), |x| x.data)
+                    } else {
+                        json!({})
+                    }
+                } else {
+                    json!({})
+                };
+
+                let (playoff_key, playoffs): (&str, JSONValue) = if tournament != json!({}) {
+                    (
+                        "postseason",
+                        self.playoffs(
+                            tournament["playoffs"].as_str().unwrap(),
+                            sim.data.get("tournamentRound").map(|i| i.as_i64().unwrap()),
+                            at,
+                        )?,
+                    )
+                } else {
+                    if let Some(playoff_ids) = sim.data["playoffs"].as_array() {
+                        let mut playoffs: Vec<JSONValue> = Vec::new();
+                        for id in playoff_ids {
+                            playoffs.push(self.playoffs(id.as_str().unwrap(), None, at)?);
+                        }
+                        ("postseasons", json!(playoffs))
+                    } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
+                        (
+                            "postseason",
+                            self.playoffs(
+                                playoff_id,
+                                sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()),
+                                at,
+                            )?,
+                        )
+                    } else {
+                        ("postseason", json!({}))
+                    }
+                };
+                //end_measure!(tournaments_and_playoffs);
+
+                //end_measure!(total_time);
+
+                // println!("---------------\n");
+
+                results.push(ChroniclerEntity {
+                    entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+                    hash: String::new(),
+                    valid_to: None,
+                    valid_from: valid_from,
+                    data: json!({
+                        "value": {
+                            "games": {
+                                "sim": sim.data,
+                                "season": season.data,
+                                "standings": standings.data,
+                                "schedule": games.into_iter().map(|v| v.data).collect::<Vec<JSONValue>>(),
+                                "tomorrowSchedule": tomorrow_schedule.clone(),
+                                "tournament": tournament,
+                                playoff_key: playoffs
+                            },
+                            "leagues": {
+                                "stats": {
+                                    "sunsun": sunsun.data,
+                                    "communityChest": communitychest.data
+                                },
+                                "teams": teams,
+                                "subleagues": subleagues,
+                                "divisions": divisions,
+                                "leagues": leagues,
+                                "tiebreakers": tiebreakers,
+                                "stadiums": stadiums
+                            },
+                            "fights": {
+                                "bossFights": fights
+                            },
+                            "temporal": temporal
+                        }
+                    })
+                });
             }
-        };
-        //end_measure!(tournaments_and_playoffs);
+        }
 
-        //end_measure!(total_time);
-
-        // println!("---------------\n");
-
-        Ok(json!({
-            "value": {
-                "games": {
-                    "sim": sim.data,
-                    "season": season.data,
-                    "standings": standings.data,
-                    "schedule": schedule,
-                    "tomorrowSchedule": tomorrow_schedule,
-                    "tournament": tournament,
-                    playoff_key: playoffs
-                },
-                "leagues": {
-                    "stats": {
-                        "sunsun": sunsun.data,
-                        "communityChest": communitychest.data
-                    },
-                    "teams": teams,
-                    "subleagues": subleagues,
-                    "divisions": divisions,
-                    "leagues": leagues,
-                    "tiebreakers": tiebreakers,
-                    "stadiums": stadiums
-                },
-                "fights": {
-                    "bossFights": fights
-                },
-                "temporal": temporal
-            }
-        }))
+        Ok(results)
     }
 }
