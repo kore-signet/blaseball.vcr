@@ -109,11 +109,9 @@ impl CompactedFeedEvent {
         };
 
         [
-            self.id.as_bytes().to_vec(),
             self.category.to_be_bytes().to_vec(),
             self.etype.to_be_bytes().to_vec(),
             self.day.to_be_bytes().to_vec(),
-            self.tournament.to_be_bytes().to_vec(),
             description_bytes,
             player_tag_bytes,
             team_tag_bytes,

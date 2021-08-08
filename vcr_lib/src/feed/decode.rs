@@ -154,25 +154,16 @@ impl FeedDatabase {
             )
             .map_err(VCRError::IOError)?;
 
-            let mut uuid_bytes: [u8; 16] = [0; 16];
-            decoder
-                .read_exact(&mut uuid_bytes)
-                .map_err(VCRError::IOError)?;
-
             let mut category: [u8; 1] = [0; 1];
             let mut etype: [u8; 2] = [0; 2];
             let mut day: [u8; 2] = [0; 2];
-            let mut tournament: [u8; 1] = [0; 1];
 
             decoder
                 .read_exact(&mut category)
                 .map_err(VCRError::IOError)?;
             decoder.read_exact(&mut etype).map_err(VCRError::IOError)?;
             decoder.read_exact(&mut day).map_err(VCRError::IOError)?;
-            decoder
-                .read_exact(&mut tournament)
-                .map_err(VCRError::IOError)?;
-
+            
             let mut description_len_bytes: [u8; 2] = [0; 2];
             decoder
                 .read_exact(&mut description_len_bytes)
@@ -263,7 +254,7 @@ impl FeedDatabase {
             let metadata: JSONValue = rmp_serde::from_read_ref(&metadata_bytes).unwrap();
 
             Ok(FeedEvent {
-                id: Uuid::from_bytes(uuid_bytes),
+                id: Uuid::nil(),
                 category: i8::from_be_bytes(category),
                 created: Utc.timestamp(timestamp as i64, 0),
                 day: i16::from_be_bytes(day),
@@ -274,7 +265,7 @@ impl FeedDatabase {
                 team_tags: Some(team_tags),
                 game_tags: Some(game_tags),
                 etype: i16::from_be_bytes(etype),
-                tournament: i8::from_be_bytes(tournament),
+                tournament: -1,
                 description: String::from_utf8(description_bytes).unwrap(),
                 metadata: metadata,
             })

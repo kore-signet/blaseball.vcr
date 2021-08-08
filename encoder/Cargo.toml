@@ -60,3 +60,7 @@ path = "src/feed.rs"
 [[bin]]
 name = "train_dict"
 path = "src/train_dict.rs"
+
+[[bin]]
+name = "train_feed_dict"
+path = "src/train_feed_dict.rs"

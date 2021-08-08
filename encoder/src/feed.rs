@@ -111,7 +111,7 @@ fn main() {
                 let mut feed_compressor = zstd::block::Compressor::with_dict(zstd_dict);
                 // Receive until channel closes
                 for (snowflake_id, bytes) in recvr.iter() {
-                    let compressed_bytes = feed_compressor.compress(&bytes, 15).unwrap();
+                    let compressed_bytes = feed_compressor.compress(&bytes, 10).unwrap();
                     sendr.send((snowflake_id, compressed_bytes)).unwrap();
                 }
             });
