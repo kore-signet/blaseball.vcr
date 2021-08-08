@@ -59,7 +59,7 @@ pub fn encode_resource<W: Write + Seek>(
 
         progress_bar.set_action("creating delta", Color::Blue, Style::Bold);
 
-        let delta = xdelta3::encode(&next, &last).unwrap();
+        let delta = xdelta3::encode(&next, &last, 9i32 << 20i32).unwrap();
 
         last = next;
 

@@ -74,22 +74,6 @@ pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new();
     let mut entity_types: Vec<String> = env::args().skip(1).collect();
     let checkpoint_every = entity_types.remove(0).parse::<u32>().unwrap_or(u32::MAX);
-    let dict_path = entity_types.remove(0);
-
-    let (mut table_compressor, mut patch_compressor) = if dict_path == "nodict" {
-        (
-            zstd::block::Compressor::new(),
-            zstd::block::Compressor::new(),
-        )
-    } else {
-        let mut dict_f = File::open(&dict_path).map_err(VCRError::IOError)?;
-        let mut dict: Vec<u8> = Vec::new();
-        dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
-        (
-            zstd::block::Compressor::new(),
-            zstd::block::Compressor::with_dict(dict),
-        )
-    };
 
     for etype in entity_types {
         let mut progress_bar = ProgressBar::new(0);
@@ -112,8 +96,6 @@ pub async fn main() -> VCRResult<()> {
         .map(|e| e.entity_id)
         .collect();
 
-        let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
-
         println!("| found {} entities", entity_ids.len());
         let mut progress_bar = ProgressBar::new(entity_ids.len());
         progress_bar.set_action(
@@ -122,14 +104,14 @@ pub async fn main() -> VCRResult<()> {
             Style::Bold,
         );
 
-        let out_file =
-            File::create(&format!("./tapes/{}.riv", etype)).map_err(VCRError::IOError)?;
-        let mut out = BufWriter::new(out_file);
+        let mut out_file = File::create(&format!("./zstd-dictionaries/{}.dict", &etype))
+            .map_err(VCRError::IOError)?;
+
+        let mut samples: Vec<u8> = Vec::new();
+        let mut sample_sizes: Vec<usize> = Vec::new();
 
         for id in entity_ids {
             progress_bar.set_action(&id, Color::Green, Style::Bold);
-
-            let entity_start_pos = out.stream_position().map_err(VCRError::IOError)?;
 
             progress_bar.print_info(
                 "downloading",
@@ -160,52 +142,22 @@ pub async fn main() -> VCRResult<()> {
 
             let (patches, path_map, baseval) = encode(entity_versions, checkpoint_every);
 
-            let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
-
             for (time, patch) in patches {
-                let start_pos = out.stream_position().map_err(VCRError::IOError)?;
-
-                let patch_bytes = patch.concat();
-                out.write_all(&patch_compressor.compress(&patch_bytes, 22).unwrap())
-                    .unwrap();
-
-                let end_pos = out.stream_position().map_err(VCRError::IOError)?;
-                offsets.push((time, start_pos, end_pos));
+                let mut patch_bytes = patch.concat();
+                sample_sizes.push(patch_bytes.len());
+                samples.append(&mut patch_bytes);
             }
 
-            entity_lookup_table.insert(
-                id.to_owned(),
-                EntityData {
-                    data_offset: entity_start_pos,
-                    patches: offsets,
-                    path_map: path_map,
-                    checkpoint_every: checkpoint_every,
-                    base: baseval,
-                },
-            );
-
             progress_bar.inc();
-
-            out.flush().map_err(VCRError::IOError)?;
         }
 
+        progress_bar.set_action("Training dictionary", Color::Blue, Style::Bold);
+
+        out_file
+            .write_all(&zstd::dict::from_continuous(&samples, &sample_sizes, 112640).unwrap())
+            .unwrap();
+
         progress_bar.finalize();
-
-        let mut entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
-            .map_err(VCRError::IOError)?;
-        entity_table_f
-            .write_all(
-                &table_compressor
-                    .compress(
-                        &rmp_serde::to_vec(&entity_lookup_table)
-                            .map_err(VCRError::MsgPackEncError)?,
-                        22,
-                    )
-                    .unwrap(),
-            )
-            .map_err(VCRError::IOError)?;
-
-        out.get_mut().sync_all().map_err(VCRError::IOError)?;
     }
 
     Ok(())

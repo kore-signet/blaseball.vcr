@@ -5,7 +5,6 @@ edition = "2018"
 
 [dependencies]
 json-patch = "0.2.6"
-serde_json = "1.0.64"
 rmp-serde = "0.15.5"
 xdelta3 = "0.1.5"
 zstd = "0.9"
@@ -33,3 +32,7 @@ features = ["serde"]
 [dependencies.serde]
 version = "1.0"
 features = ["derive"]
+
+[dependencies.serde_json]
+version = "1.0.64"
+features = ["preserve_order"]

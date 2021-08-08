@@ -12,7 +12,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde_json::{json, Value as JSONValue};
 
 use json_patch::{
-    patch as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
+    patch_unsafe as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
     PatchOperation, PatchOperation::*, RemoveOperation, ReplaceOperation, TestOperation,
 };
 
@@ -70,10 +70,10 @@ impl Database {
         entity: &str,
         until: u32,
         skip_to_checkpoint: bool,
-    ) -> VCRResult<Vec<(u32, JSONPatch)>> {
+    ) -> VCRResult<Vec<(u32, Patch)>> {
         let metadata = &self.entities[entity];
 
-        let mut patches: Vec<(u32, JSONPatch)> = Vec::new();
+        let mut patches: Vec<(u32, Patch)> = Vec::new();
 
         let patch_list: Vec<(u32, u64, u64)> = if skip_to_checkpoint {
             let patches_until: Vec<(u32, u64, u64)> = metadata
@@ -126,66 +126,83 @@ impl Database {
                 res
             };
 
+            let mut result = Patch::Normal(JSONPatch(vec![]));
             let mut operations: Vec<PatchOperation> = Vec::new();
 
             while e_bytes.len() > 1 {
                 let op_code = e_bytes.remove(0);
 
-                let paths = if op_code == 3 || op_code == 4 {
-                    vec![
-                        metadata
-                            .path_map
-                            .get(&u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]))
-                            .ok_or(VCRError::PathResolutionError)?,
-                        metadata
-                            .path_map
-                            .get(&u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]))
-                            .ok_or(VCRError::PathResolutionError)?,
-                    ]
-                } else {
-                    vec![metadata
-                        .path_map
-                        .get(&u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]))
-                        .ok_or(VCRError::PathResolutionError)?]
-                };
-
-                let value_length = u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]);
-
-                let value: Option<JSONValue> = if value_length > 0 {
+                if op_code == 6 {
+                    let value_length = u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]);
                     let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
-                    Some(rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?)
+                    result = Patch::ReplaceRoot(
+                        rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?,
+                    );
+                    break;
                 } else {
-                    None
-                };
+                    let paths = if op_code == 3 || op_code == 4 {
+                        vec![
+                            metadata
+                                .path_map
+                                .get(&u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]))
+                                .ok_or(VCRError::PathResolutionError)?,
+                            metadata
+                                .path_map
+                                .get(&u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]))
+                                .ok_or(VCRError::PathResolutionError)?,
+                        ]
+                    } else {
+                        vec![metadata
+                            .path_map
+                            .get(&u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]))
+                            .ok_or(VCRError::PathResolutionError)?]
+                    };
 
-                operations.push(match op_code {
-                    0 => Add(AddOperation {
-                        path: paths[0].to_string(),
-                        value: value.unwrap(),
-                    }),
-                    1 => Remove(RemoveOperation {
-                        path: paths[0].to_string(),
-                    }),
-                    2 => Replace(ReplaceOperation {
-                        path: paths[0].to_string(),
-                        value: value.unwrap(),
-                    }),
-                    3 => Move(MoveOperation {
-                        path: paths[0].to_string(),
-                        from: paths[1].to_string(),
-                    }),
-                    4 => Copy(CopyOperation {
-                        path: paths[0].to_string(),
-                        from: paths[1].to_string(),
-                    }),
-                    5 => Test(TestOperation {
-                        path: paths[0].to_string(),
-                        value: value.unwrap(),
-                    }),
-                    _ => return Err(VCRError::InvalidOpCode),
-                });
+                    let value_length = u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]);
+
+                    let value: Option<JSONValue> = if value_length > 0 {
+                        let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
+                        Some(rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?)
+                    } else {
+                        None
+                    };
+
+                    operations.push(match op_code {
+                        0 => Add(AddOperation {
+                            path: paths[0].to_string(),
+                            value: value.unwrap(),
+                        }),
+                        1 => Remove(RemoveOperation {
+                            path: paths[0].to_string(),
+                        }),
+                        2 => Replace(ReplaceOperation {
+                            path: paths[0].to_string(),
+                            value: value.unwrap(),
+                        }),
+                        3 => Move(MoveOperation {
+                            path: paths[0].to_string(),
+                            from: paths[1].to_string(),
+                        }),
+                        4 => Copy(CopyOperation {
+                            path: paths[0].to_string(),
+                            from: paths[1].to_string(),
+                        }),
+                        5 => Test(TestOperation {
+                            path: paths[0].to_string(),
+                            value: value.unwrap(),
+                        }),
+                        _ => return Err(VCRError::InvalidOpCode),
+                    });
+                }
             }
-            patches.push((time, JSONPatch(operations)));
+
+            patches.push((
+                time,
+                match result {
+                    Patch::Normal(_) => Patch::Normal(JSONPatch(operations)),
+                    Patch::ReplaceRoot(v) => Patch::ReplaceRoot(v),
+                },
+            ));
         }
 
         patches.sort_by_key(|x| x.0);
@@ -198,12 +215,19 @@ impl Database {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut entity_value = json!({});
+        let mut entity_value = self.entities[entity].base.clone();
         let patches = self.get_entity_data(entity, before, false)?;
         let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
 
         for (time, patch) in patches {
-            patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
+            match patch {
+                Patch::ReplaceRoot(v) => {
+                    entity_value = v.clone();
+                }
+                Patch::Normal(p) => {
+                    patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                }
+            }
 
             if time > after {
                 results.push(ChroniclerEntity {
@@ -223,11 +247,18 @@ impl Database {
     }
 
     pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
-        let mut entity_value = json!({});
+        let mut entity_value = self.entities[entity].base.clone();
         let mut last_time = 0;
 
         for (time, patch) in self.get_entity_data(entity, at, true)? {
-            patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
+            match patch {
+                Patch::ReplaceRoot(v) => {
+                    entity_value = v.clone();
+                }
+                Patch::Normal(p) => {
+                    patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                }
+            }
             last_time = time;
         }
 
@@ -244,12 +275,19 @@ impl Database {
     }
 
     pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity> {
-        let mut entity_value = json!({});
+        let mut entity_value = self.entities[entity].base.clone();
 
         let patches = self.get_entity_data(entity, u32::MAX, true)?;
         let (time, patch) = &patches[0];
 
-        patch_json(&mut entity_value, &patch).map_err(VCRError::JSONPatchError)?;
+        match patch {
+            Patch::ReplaceRoot(v) => {
+                entity_value = v.clone();
+            }
+            Patch::Normal(p) => {
+                patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+            }
+        }
 
         Ok(ChroniclerEntity {
             data: entity_value,
@@ -652,7 +690,7 @@ impl MultiDatabase {
 
         //start_measure!(tomorrow_schedule_time);
         let tomorrow_schedule: Vec<JSONValue> = self
-            .games_by_date(&date)?
+            .games_by_date_and_time(&date, at)?
             .into_iter()
             .map(|g| g.data)
             .collect();
