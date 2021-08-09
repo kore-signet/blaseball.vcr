@@ -1,4 +1,4 @@
-use json_patch::{diff, Patch as JSONPatch, PatchOperation, PatchOperation::*};
+use json_patch::{diff, PatchOperation, PatchOperation::*};
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
 use std::mem;

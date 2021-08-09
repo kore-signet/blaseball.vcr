@@ -163,7 +163,7 @@ impl FeedDatabase {
                 .map_err(VCRError::IOError)?;
             decoder.read_exact(&mut etype).map_err(VCRError::IOError)?;
             decoder.read_exact(&mut day).map_err(VCRError::IOError)?;
-            
+
             let mut description_len_bytes: [u8; 2] = [0; 2];
             decoder
                 .read_exact(&mut description_len_bytes)
@@ -292,28 +292,29 @@ impl FeedDatabase {
         let mut ids = Vec::new();
 
         while ids.len() < 1 {
-            ids = self
-                .times
-                .iter_prefix(&prefix)
-                .filter_map(|(k, v)| {
-                    let date = Utc
-                        .ymd(
-                            u16::from_be_bytes([k[0], k[1]]) as i32,
-                            u8::from_be_bytes([k[2]]) as u32,
-                            u8::from_be_bytes([k[3]]) as u32,
-                        )
-                        .and_hms(
-                            u8::from_be_bytes([k[4]]) as u32,
-                            u8::from_be_bytes([k[5]]) as u32,
-                            u8::from_be_bytes([k[6]]) as u32,
-                        );
-                    if date >= timestamp {
-                        Some((date, v.into_iter().copied().collect()))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>();
+            ids.extend(
+                self.times
+                    .iter_prefix(&prefix)
+                    .filter_map(|(k, v)| {
+                        let date = Utc
+                            .ymd(
+                                u16::from_be_bytes([k[0], k[1]]) as i32,
+                                u8::from_be_bytes([k[2]]) as u32,
+                                u8::from_be_bytes([k[3]]) as u32,
+                            )
+                            .and_hms(
+                                u8::from_be_bytes([k[4]]) as u32,
+                                u8::from_be_bytes([k[5]]) as u32,
+                                u8::from_be_bytes([k[6]]) as u32,
+                            );
+                        if date >= timestamp {
+                            Some((date, v.into_iter().copied().collect()))
+                        } else {
+                            None
+                        }
+                    })
+                    .take(count - ids.len()),
+            );
 
             prefix.pop();
         }
@@ -340,30 +341,31 @@ impl FeedDatabase {
         ]
         .concat();
 
-        let mut ids = Vec::new();
-        while ids.len() < 1 {
-            ids = self
-                .times
-                .iter_prefix(&prefix)
-                .filter_map(|(k, v)| {
-                    let date = Utc
-                        .ymd(
-                            u16::from_be_bytes([k[0], k[1]]) as i32,
-                            u8::from_be_bytes([k[2]]) as u32,
-                            u8::from_be_bytes([k[3]]) as u32,
-                        )
-                        .and_hms(
-                            u8::from_be_bytes([k[4]]) as u32,
-                            u8::from_be_bytes([k[5]]) as u32,
-                            u8::from_be_bytes([k[6]]) as u32,
-                        );
-                    if date <= timestamp {
-                        Some((date, v.into_iter().copied().collect()))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>();
+        let mut ids: Vec<(DateTime<Utc>, Vec<u8>)> = Vec::new();
+        while ids.len() < count {
+            ids.extend(
+                self.times
+                    .iter_prefix(&prefix)
+                    .filter_map(|(k, v)| {
+                        let date = Utc
+                            .ymd(
+                                u16::from_be_bytes([k[0], k[1]]) as i32,
+                                u8::from_be_bytes([k[2]]) as u32,
+                                u8::from_be_bytes([k[3]]) as u32,
+                            )
+                            .and_hms(
+                                u8::from_be_bytes([k[4]]) as u32,
+                                u8::from_be_bytes([k[5]]) as u32,
+                                u8::from_be_bytes([k[6]]) as u32,
+                            );
+                        if date <= timestamp {
+                            Some((date, v.into_iter().copied().collect()))
+                        } else {
+                            None
+                        }
+                    })
+                    .take(count - ids.len()),
+            );
 
             prefix.pop();
         }

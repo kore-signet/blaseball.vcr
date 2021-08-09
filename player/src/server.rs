@@ -3,10 +3,15 @@ use blaseball_vcr::{feed::*, *};
 use chrono::{DateTime, TimeZone, Utc};
 use lru::LruCache;
 use rand::Rng;
+use rocket::figment::{
+    providers::{Format, Toml},
+    Figment, Profile,
+};
+use rocket::tokio;
 use rocket::{
     get,
     http::{ContentType, Status},
-    launch, routes,
+    routes,
     serde::json::Json as RocketJson,
     FromForm, State,
 };
@@ -378,10 +383,7 @@ fn coffee() -> (Status, (ContentType, &'static str)) {
     (Status::ImATeapot, (ContentType::Plain, "Coffee?"))
 }
 
-#[launch]
-fn rocket() -> _ {
-    let mut rocket = rocket::build();
-
+fn build_vcr() -> rocket::Rocket<rocket::Build> {
     #[derive(serde::Deserialize)]
     struct VCRConfig {
         tapes: String,
@@ -399,8 +401,11 @@ fn rocket() -> _ {
         id_table: String,
     }
 
-    let figment = rocket.figment();
+    let figment = Figment::from(rocket::Config::default())
+        .merge(Toml::file("Vcr.toml").nested())
+        .select(Profile::from_env_or("VCR_PROFILE", "default"));
     let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
+    let mut rocket = rocket::custom(figment);
 
     let dicts = if let Some(dicts_folder) = config.zstd_dictionaries {
         std::fs::read_dir(dicts_folder)
@@ -453,14 +458,39 @@ fn rocket() -> _ {
         .manage(Mutex::new(cache))
         .attach(RequestTimer)
         .mount(
-            "/",
+            "/vcr",
             routes![
                 all_games,
                 entities,
                 get_asset,
                 site_updates,
                 versions,
+                feed,
                 coffee
             ],
         )
+}
+
+#[cfg(not(feature = "bundle_before"))]
+async fn launch() {
+    let vcr = build_vcr().launch();
+    let vcr_res = tokio::task::spawn(async { vcr.await.unwrap() });
+
+    vcr_res.await.unwrap();
+}
+
+#[cfg(feature = "bundle_before")]
+async fn launch() {
+    let vcr = build_vcr().launch();
+    let before = before::build().unwrap().launch();
+    let vcr_res = tokio::task::spawn(async { vcr.await.unwrap() });
+    let before_res = tokio::task::spawn(async { before.await.unwrap() });
+
+    before_res.await.unwrap();
+    vcr_res.await.unwrap();
+}
+
+#[tokio::main]
+async fn main() {
+    launch().await;
 }

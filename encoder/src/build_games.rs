@@ -205,8 +205,10 @@ pub fn main() -> VCRResult<()> {
                             id,
                             patches
                                 .into_iter()
-                                .map(|(t, v)| (t, compressor.compress(&v.concat(), compress_level).unwrap()))
-                                .collect::<Vec<(u32,Vec<u8>)>>(),
+                                .map(|(t, v)| {
+                                    (t, compressor.compress(&v.concat(), compress_level).unwrap())
+                                })
+                                .collect::<Vec<(u32, Vec<u8>)>>(),
                             path_map,
                             base,
                         ))

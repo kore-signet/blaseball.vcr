@@ -67,18 +67,18 @@ fn main() {
             .collect();
 
         let mut ev_bytes = CompactedFeedEvent {
-                        id: event.id,
-                        category: event.category,
-                        day: event.day,
-                        description: event.description,
-                        player_tags: compact_player_tags,
-                        game_tags: compact_game_tags,
-                        team_tags: compact_team_tags,
-                        etype: event.etype,
-                        tournament: event.tournament,
-                        metadata: event.metadata,
-                    }
-                    .encode();
+            id: event.id,
+            category: event.category,
+            day: event.day,
+            description: event.description,
+            player_tags: compact_player_tags,
+            game_tags: compact_game_tags,
+            team_tags: compact_team_tags,
+            etype: event.etype,
+            tournament: event.tournament,
+            metadata: event.metadata,
+        }
+        .encode();
         feed_sample_lens.push(ev_bytes.len());
         feed_samples.append(&mut ev_bytes);
     }

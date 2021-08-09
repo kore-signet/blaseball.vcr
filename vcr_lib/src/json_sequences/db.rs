@@ -892,7 +892,7 @@ impl MultiDatabase {
                 "fights": {
                     "bossFights": fights
                 },
-                "temporal": temporal
+                "temporal": temporal.data
             }
         }))
     }

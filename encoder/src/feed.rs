@@ -8,7 +8,7 @@ use uuid::Uuid;
 fn main() {
     let (snd1, rcv1) = bounded(1);
     let (snd2, rcv2) = bounded(1);
-    let n_workers = 8;
+    let n_workers = 4;
 
     let mut feed_dict: Vec<u8> = Vec::new();
     let mut dict_f = File::open("feed.dict").unwrap();
@@ -111,7 +111,7 @@ fn main() {
                 let mut feed_compressor = zstd::block::Compressor::with_dict(zstd_dict);
                 // Receive until channel closes
                 for (snowflake_id, bytes) in recvr.iter() {
-                    let compressed_bytes = feed_compressor.compress(&bytes, 10).unwrap();
+                    let compressed_bytes = feed_compressor.compress(&bytes, 19).unwrap();
                     sendr.send((snowflake_id, compressed_bytes)).unwrap();
                 }
             });
