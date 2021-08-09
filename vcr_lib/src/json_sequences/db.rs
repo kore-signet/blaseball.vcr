@@ -11,6 +11,8 @@ use std::time::Instant;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde_json::{json, Value as JSONValue};
 
+use lru::LruCache;
+
 use json_patch::{
     patch_unsafe as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
     PatchOperation, PatchOperation::*, RemoveOperation, ReplaceOperation, TestOperation,
@@ -36,6 +38,7 @@ pub struct Database {
     reader: BufReader<File>,
     entities: HashMap<String, EntityData>,
     dictionary: Option<Vec<u8>>,
+    entity_cache: LruCache<(String, u32, u32), ChroniclerEntity>,
 }
 
 impl Database {
@@ -43,6 +46,7 @@ impl Database {
         entities_lookup_path: P,
         db_path: P,
         dict_path: Option<P>,
+        cache_size: usize
     ) -> VCRResult<Database> {
         let entities_lookup_f = File::open(entities_lookup_path).map_err(VCRError::IOError)?;
         let decompressor =
@@ -62,6 +66,7 @@ impl Database {
             reader: BufReader::new(db_f),
             entities: rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?,
             dictionary: compression_dict,
+            entity_cache: LruCache::new(cache_size),
         })
     }
 
@@ -248,6 +253,35 @@ impl Database {
 
     pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
         let mut entity_value = self.entities[entity].base.clone();
+
+        let patch_location = {
+            let (start, end) = match self.entities[entity]
+                .patches
+                .binary_search_by_key(&at, |(t, _, _)| *t)
+            {
+                Ok(idx) => (idx, idx + 1),
+                Err(idx) => (idx.checked_sub(1).unwrap_or(0), idx + 1),
+            };
+
+            (
+                entity.to_owned(),
+                self.entities[entity]
+                    .patches
+                    .get(start)
+                    .unwrap_or(&(0, 0, 0))
+                    .0,
+                self.entities[entity]
+                    .patches
+                    .get(end)
+                    .unwrap_or(&(u32::MAX, 0, 0))
+                    .0,
+            )
+        };
+
+        if let Some(val) = self.entity_cache.get(&patch_location) {
+            return Ok(val.clone());
+        }
+
         let mut last_time = 0;
 
         for (time, patch) in self.get_entity_data(entity, at, true)? {
@@ -262,7 +296,7 @@ impl Database {
             last_time = time;
         }
 
-        Ok(ChroniclerEntity {
+        let e = ChroniclerEntity {
             data: entity_value,
             entity_id: entity.to_owned(),
             valid_from: DateTime::<Utc>::from_utc(
@@ -271,7 +305,11 @@ impl Database {
             ),
             valid_to: None,
             hash: String::new(),
-        })
+        };
+
+        self.entity_cache.put(patch_location, e.clone());
+
+        Ok(e)
     }
 
     pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity> {
@@ -389,6 +427,7 @@ impl MultiDatabase {
     pub fn from_folder<P: AsRef<Path>>(
         folder: P,
         dicts: HashMap<String, P>,
+        cache_size: usize
     ) -> VCRResult<MultiDatabase> {
         let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)
             .map_err(VCRError::IOError)?
@@ -455,6 +494,7 @@ impl MultiDatabase {
                     dicts
                         .get(&e_type)
                         .map(|p| PathBuf::from(p.as_ref().as_os_str())),
+                    cache_size
                 )?),
             );
         }

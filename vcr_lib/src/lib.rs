@@ -25,7 +25,7 @@ pub struct ChroniclerV1Response<T> {
     pub data: Vec<T>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChroniclerEntity {
     pub entity_id: String,

@@ -50,7 +50,7 @@ impl rocket::fairing::Fairing for RequestTimer {
                     .segments()
                     .fold(String::new(), |acc, (k, v)| format!("{}={} {}", k, v, acc));
                 println!(
-                    "\x1b[31;1m{}\x1b[m\x1b[1m + {}\x1b[m-> \x1b[4m{:?}",
+                    "\x1b[31;1m{}\x1b[m\x1b[1m + {}\x1b[m-> \x1b[4m{:?}\x1b[m",
                     route.name.as_ref().unwrap(),
                     query_params,
                     duration
@@ -425,6 +425,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         zstd_dictionaries: Option<String>,
         feed: Option<FeedConfig>,
         cached_page_capacity: Option<usize>,
+        entities_cache_size: Option<usize>
     }
 
     #[derive(serde::Deserialize)]
@@ -468,7 +469,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
     };
 
     println!("Reading entities database..");
-    let dbs = MultiDatabase::from_folder(PathBuf::from(config.tapes), dicts).unwrap();
+    let dbs = MultiDatabase::from_folder(PathBuf::from(config.tapes), dicts, config.entities_cache_size.unwrap_or(30)).unwrap();
     println!("Reading site assets...");
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
 
