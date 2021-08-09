@@ -10,6 +10,7 @@
 ./target/release/build_entities -1 nodict division subleague
 ./target/release/build_entities -1 nodict player
 ./target/release/build_entities -1 nodict item
+./target/release/build_entities -1 ./zstd-dictionaries/librarystory.dict librarystory
 ./target/release/build_entities -1 nodict nullified
 ./target/release/build_entities -1 nodict fuelprogress
 ./target/release/build_entities 100 nodict team

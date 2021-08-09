@@ -36,7 +36,7 @@ fn default_base() -> JSONValue {
 pub struct GameDate {
     pub day: i32,
     pub season: i32,
-    #[serde(skip_serializing_if = "Option::is_none")] 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tournament: Option<i32>,
 }
 

@@ -679,14 +679,23 @@ impl MultiDatabase {
                 .map(|x| x.as_i64().unwrap() as i32),
         };
 
-        let schedule: JSONValue = if sim.data.get("phase").unwrap_or(&json!(-1)).as_i64().unwrap() == 14 && date.season == 22 {
-            json!([self.get_entity("game_updates","d162b23a-9832-4e78-8d78-5d131393fd61", at)?.data])
+        let schedule: JSONValue = if sim
+            .data
+            .get("phase")
+            .unwrap_or(&json!(-1))
+            .as_i64()
+            .unwrap()
+            == 14
+            && date.season == 22
+        {
+            json!([self
+                .get_entity("game_updates", "d162b23a-9832-4e78-8d78-5d131393fd61", at)?
+                .data])
         } else {
-            self
-            .games_by_date_and_time(&date, at)?
-            .into_iter()
-            .map(|g| g.data)
-            .collect()
+            self.games_by_date_and_time(&date, at)?
+                .into_iter()
+                .map(|g| g.data)
+                .collect()
         };
         //end_measure!(schedule_time);
         date.day += 1;

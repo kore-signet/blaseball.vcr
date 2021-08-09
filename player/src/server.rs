@@ -15,7 +15,7 @@ use rocket::{
     serde::json::Json as RocketJson,
     FromForm, State,
 };
-use serde_json::json;
+use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -43,8 +43,18 @@ impl rocket::fairing::Fairing for RequestTimer {
         let start_time = req.local_cache(|| TimerStart(None));
         if let Some(duration) = start_time.0.map(|st| st.elapsed()) {
             if let Some(route) = req.route() {
-                let query_params = req.uri().query().unwrap().segments().fold(String::new(), |acc,(k,v)| format!("{}={} {}",k,v,acc));
-                println!("\x1b[31;1m{}\x1b[m\x1b[1m + {}\x1b[m-> \x1b[4m{:?}", route.name.as_ref().unwrap(), query_params, duration);
+                let query_params = req
+                    .uri()
+                    .query()
+                    .unwrap()
+                    .segments()
+                    .fold(String::new(), |acc, (k, v)| format!("{}={} {}", k, v, acc));
+                println!(
+                    "\x1b[31;1m{}\x1b[m\x1b[1m + {}\x1b[m-> \x1b[4m{:?}",
+                    route.name.as_ref().unwrap(),
+                    query_params,
+                    duration
+                );
             }
         }
     }
@@ -136,6 +146,27 @@ fn feed(
             limit.unwrap_or(100),
         )?))
     }
+}
+
+#[get("/feed/story?<time>&<id>")]
+fn library(
+    time: Option<i64>,
+    id: &str,
+    db: &State<MultiDatabase>,
+) -> VCRResult<RocketJson<Vec<JSONValue>>> {
+    Ok(RocketJson(
+        serde_json::from_value::<Vec<JSONValue>>(
+            db.get_entity(
+                "librarystory",
+                id,
+                time.map_or(Utc::now().timestamp() as u32, |d| {
+                    Utc.timestamp_millis(d).timestamp() as u32
+                }),
+            )?
+            .data,
+        )
+        .unwrap(),
+    ))
 }
 
 #[get("/v2/versions?<req..>")]
@@ -472,6 +503,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
                 site_updates,
                 versions,
                 feed,
+                library,
                 coffee
             ],
         )
