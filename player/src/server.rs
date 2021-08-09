@@ -42,7 +42,10 @@ impl rocket::fairing::Fairing for RequestTimer {
     async fn on_response<'r>(&self, req: &'r rocket::Request<'_>, _: &mut rocket::Response<'r>) {
         let start_time = req.local_cache(|| TimerStart(None));
         if let Some(duration) = start_time.0.map(|st| st.elapsed()) {
-            println!("\x1b[1m{}\x1b[m took {:?}", req.uri(), duration);
+            if let Some(route) = req.route() {
+                let query_params = req.uri().query().unwrap().segments().fold(String::new(), |acc,(k,v)| format!("{}={} {}",k,v,acc));
+                println!("\x1b[31;1m{}\x1b[m\x1b[1m + {}\x1b[m-> \x1b[4m{:?}", route.name.as_ref().unwrap(), query_params, duration);
+            }
         }
     }
 }
@@ -433,10 +436,13 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         HashMap::new()
     };
 
+    println!("Reading entities database..");
     let dbs = MultiDatabase::from_folder(PathBuf::from(config.tapes), dicts).unwrap();
+    println!("Reading site assets...");
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
 
     if let Some(feed_config) = config.feed {
+        println!("Reading feed data..");
         let feed_db = Mutex::new(
             FeedDatabase::from_files(
                 feed_config.index,
