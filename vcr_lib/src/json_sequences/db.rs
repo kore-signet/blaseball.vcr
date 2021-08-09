@@ -85,12 +85,9 @@ impl Database {
                 .patches
                 .iter()
                 .copied()
-                .take_while(|x| x.0 < until)
+                .take_while(|x| x.0 <= until)
                 .collect();
-            let latest_check_idx = match patches_until.binary_search_by_key(&until, |x| x.0) {
-                Ok(i) => i,
-                Err(i) => i,
-            };
+            let latest_check_idx = patches_until.len().checked_sub(1).unwrap_or(0);
 
             let closest_checkpoint =
                 latest_check_idx - (latest_check_idx % metadata.checkpoint_every as usize);
@@ -100,7 +97,7 @@ impl Database {
                 .patches
                 .iter()
                 .copied()
-                .take_while(|x| x.0 < until)
+                .take_while(|x| x.0 <= until)
                 .collect()
         };
 
@@ -254,6 +251,7 @@ impl Database {
     pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
         let mut entity_value = self.entities[entity].base.clone();
 
+
         let patch_location = {
             let (start, end) = match self.entities[entity]
                 .patches
@@ -278,8 +276,10 @@ impl Database {
             )
         };
 
-        if let Some(val) = self.entity_cache.get(&patch_location) {
-            return Ok(val.clone());
+        if patch_location.1 != 0 && patch_location.2 != u32::MAX {
+            if let Some(val) = self.entity_cache.get(&patch_location) {
+                return Ok(val.clone());
+            }
         }
 
         let mut last_time = 0;
@@ -307,7 +307,9 @@ impl Database {
             hash: String::new(),
         };
 
-        self.entity_cache.put(patch_location, e.clone());
+        if patch_location.1 != 0 && patch_location.2 != u32::MAX {
+            self.entity_cache.put(patch_location, e.clone());
+        }
 
         Ok(e)
     }
@@ -749,6 +751,8 @@ impl MultiDatabase {
         //end_measure!(tomorrow_schedule_time);
 
         //start_measure!(season_time);
+
+
         let season = self
             .all_entities("season", at)?
             .into_iter()

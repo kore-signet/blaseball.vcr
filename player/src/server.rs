@@ -503,7 +503,6 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
                 get_asset,
                 site_updates,
                 versions,
-                feed,
                 library,
                 coffee
             ],
