@@ -10,7 +10,8 @@ use rocket::figment::{
 use rocket::tokio;
 use rocket::{
     get,
-    http::{ContentType, Status},
+    options,
+    http::{ContentType, Header, Status},
     routes,
     serde::json::Json as RocketJson,
     FromForm, State,
@@ -25,6 +26,42 @@ pub struct RequestTimer;
 
 #[derive(Copy, Clone)]
 struct TimerStart(Option<Instant>);
+
+struct CORS;
+#[rocket::async_trait]
+impl rocket::fairing::Fairing for CORS {
+    fn info(&self) -> rocket::fairing::Info {
+        rocket::fairing::Info {
+            name: "CORS headers",
+            kind: rocket::fairing::Kind::Response,
+        }
+    }
+
+    async fn on_response<'r>(&self, _: &'r rocket::Request<'_>, response: &mut rocket::Response<'r>) {
+        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        response.set_header(Header::new("Access-Control-Allow-Methods", "GET"));
+        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+    }
+}
+
+#[rocket::async_trait]
+impl<'r> rocket::response::Responder<'r, 'static> for CORS {
+    fn respond_to(self, _: &'r rocket::Request<'_>) -> rocket::response::Result<'static> {
+        rocket::Response::build()
+            .header(Header::new("Access-Control-Allow-Origin", "*"))
+            .header(Header::new("Access-Control-Allow-Methods", "GET"))
+            .header(Header::new("Access-Control-Allow-Headers", "*"))
+            .header(Header::new("Access-Control-Max-Age", "86400"))
+            .header(Header::new("Allow", "OPTIONS, GET"))
+            .status(Status::NoContent)
+            .ok()
+    }
+}
+
+#[options("/<_..>")]
+async fn cors_preflight() -> CORS {
+    CORS
+}
 
 #[rocket::async_trait]
 impl rocket::fairing::Fairing for RequestTimer {
@@ -484,7 +521,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
             )
             .unwrap(),
         );
-        rocket = rocket.manage(feed_db).mount("/", routes![feed]);
+        rocket = rocket.manage(feed_db).mount("/vcr", routes![feed]);
     }
 
     let cache: LruCache<String, InternalPaging> =
@@ -495,6 +532,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         .manage(manager)
         .manage(Mutex::new(cache))
         .attach(RequestTimer)
+        .attach(CORS)
         .mount(
             "/vcr",
             routes![
@@ -503,9 +541,9 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
                 get_asset,
                 site_updates,
                 versions,
-                feed,
                 library,
-                coffee
+                coffee,
+                cors_preflight
             ],
         )
 }
