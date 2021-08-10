@@ -4,6 +4,8 @@ use std::io;
 #[derive(Debug)]
 pub enum VCRError {
     EntityNotFound,
+    EntityTypeNotFound,
+    InvalidPatchData,
     PathResolutionError,
     InvalidOpCode,
     MsgPackError(rmp_serde::decode::Error),
@@ -56,8 +58,10 @@ impl fmt::Display for VCRError {
             JSONPatchError(err) => write!(f, "JSONPATCHERR {}", err),
             ReqwestError(err) => write!(f, "REQWESTERR {}", err),
             EntityNotFound => write!(f, "entity not found"),
+            EntityTypeNotFound => write!(f, "entity type not found"),
             PathResolutionError => write!(f, "could not resolve patch path"),
             InvalidOpCode => write!(f, "invalid patch opcode"),
+            InvalidPatchData => write!(f, "invalid patch data"),
         }
     }
 }

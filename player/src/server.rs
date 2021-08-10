@@ -285,7 +285,7 @@ fn versions(
             } else {
                 InternalPaging {
                     remaining_data: vec![],
-                    remaining_ids: db.all_ids(&req.entity_type.to_lowercase()),
+                    remaining_ids: db.all_ids(&req.entity_type.to_lowercase())?,
                     kind: ChronV2EndpointKind::Versions(end_time, start_time),
                 }
             };
@@ -388,7 +388,7 @@ fn entities(
         } else {
             InternalPaging {
                 remaining_data: vec![],
-                remaining_ids: db.all_ids(&req.entity_type.to_lowercase()),
+                remaining_ids: db.all_ids(&req.entity_type.to_lowercase())?,
                 kind: ChronV2EndpointKind::Entities(at),
             }
         };
@@ -462,7 +462,9 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         zstd_dictionaries: Option<String>,
         feed: Option<FeedConfig>,
         cached_page_capacity: Option<usize>,
-        entities_cache_size: Option<usize>
+        entities_cache_size: Option<usize>,
+        time_responses: Option<bool>,
+        cors: Option<bool>
     }
 
     #[derive(serde::Deserialize)]
@@ -524,6 +526,14 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         rocket = rocket.manage(feed_db).mount("/vcr", routes![feed]);
     }
 
+    if config.time_responses.unwrap_or(false) {
+        rocket = rocket.attach(RequestTimer);
+    }
+
+    if config.cors.unwrap_or(false) {
+        rocket = rocket.attach(CORS);
+    }
+
     let cache: LruCache<String, InternalPaging> =
         LruCache::new(config.cached_page_capacity.unwrap_or(20));
 
@@ -531,8 +541,6 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         .manage(dbs)
         .manage(manager)
         .manage(Mutex::new(cache))
-        .attach(RequestTimer)
-        .attach(CORS)
         .mount(
             "/vcr",
             routes![

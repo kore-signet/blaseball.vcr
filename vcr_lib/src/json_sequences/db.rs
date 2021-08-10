@@ -76,7 +76,7 @@ impl Database {
         until: u32,
         skip_to_checkpoint: bool,
     ) -> VCRResult<Vec<(u32, Patch)>> {
-        let metadata = &self.entities[entity];
+        let metadata = &self.entities.get(entity).ok_or(VCRError::EntityNotFound)?;
 
         let mut patches: Vec<(u32, Patch)> = Vec::new();
 
@@ -172,14 +172,14 @@ impl Database {
                     operations.push(match op_code {
                         0 => Add(AddOperation {
                             path: paths[0].to_string(),
-                            value: value.unwrap(),
+                            value: value.ok_or(VCRError::InvalidPatchData)?,
                         }),
                         1 => Remove(RemoveOperation {
                             path: paths[0].to_string(),
                         }),
                         2 => Replace(ReplaceOperation {
                             path: paths[0].to_string(),
-                            value: value.unwrap(),
+                            value: value.ok_or(VCRError::InvalidPatchData)?,
                         }),
                         3 => Move(MoveOperation {
                             path: paths[0].to_string(),
@@ -191,7 +191,7 @@ impl Database {
                         }),
                         5 => Test(TestOperation {
                             path: paths[0].to_string(),
-                            value: value.unwrap(),
+                            value: value.ok_or(VCRError::InvalidPatchData)?,
                         }),
                         _ => return Err(VCRError::InvalidOpCode),
                     });
@@ -217,7 +217,7 @@ impl Database {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut entity_value = self.entities[entity].base.clone();
+        let mut entity_value = self.entities.get(entity).ok_or(VCRError::EntityNotFound)?.base.clone();
         let patches = self.get_entity_data(entity, before, false)?;
         let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
 
@@ -249,8 +249,7 @@ impl Database {
     }
 
     pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
-        let mut entity_value = self.entities[entity].base.clone();
-
+        let mut entity_value = self.entities.get(entity).ok_or(VCRError::EntityNotFound)?.base.clone();
 
         let patch_location = {
             let (start, end) = match self.entities[entity]
@@ -315,7 +314,7 @@ impl Database {
     }
 
     pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity> {
-        let mut entity_value = self.entities[entity].base.clone();
+        let mut entity_value = self.entities.get(entity).ok_or(VCRError::EntityNotFound)?.base.clone();
 
         let patches = self.get_entity_data(entity, u32::MAX, true)?;
         let (time, patch) = &patches[0];
@@ -508,7 +507,7 @@ impl MultiDatabase {
     }
 
     pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
-        let mut db = self.dbs[e_type].lock().unwrap();
+        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         db.get_entity(entity, at)
     }
 
@@ -519,7 +518,7 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
+        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         db.get_entity_versions(entity, before, after)
     }
 
@@ -529,7 +528,7 @@ impl MultiDatabase {
         entities: Vec<String>,
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
+        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         db.get_entities(entities, at)
     }
 
@@ -540,12 +539,12 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
+        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         db.get_entities_versions(entities, before, after)
     }
 
     pub fn all_entities(&self, e_type: &str, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
+        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         db.all_entities(at)
     }
 
@@ -555,13 +554,13 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
+        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         db.all_entities_versions(before, after)
     }
 
-    pub fn all_ids(&self, e_type: &str) -> Vec<String> {
-        let db = self.dbs[e_type].lock().unwrap();
-        db.entities.keys().map(|x| x.to_owned()).collect()
+    pub fn all_ids(&self, e_type: &str) -> VCRResult<Vec<String>> {
+        let db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        Ok(db.entities.keys().map(|x| x.to_owned()).collect())
     }
 
     pub fn fetch_page(
@@ -570,12 +569,12 @@ impl MultiDatabase {
         page: &mut InternalPaging,
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs[e_type].lock().unwrap();
+        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         db.fetch_page(page, count)
     }
 
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {
-        let mut db = self.dbs["game_updates"].lock().unwrap();
+        let mut db = self.dbs.get("game_updates").ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         let mut results = Vec::new();
         for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
             results.push(ChronV1Game {
@@ -590,7 +589,7 @@ impl MultiDatabase {
     }
 
     pub fn games_by_date_and_time(&self, date: &GameDate, at: u32) -> VCRResult<Vec<ChronV1Game>> {
-        let mut db = self.dbs["game_updates"].lock().unwrap();
+        let mut db = self.dbs.get("game_updates").ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
         let mut results = Vec::new();
         for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
             results.push(ChronV1Game {
