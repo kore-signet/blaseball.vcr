@@ -7,6 +7,7 @@ pub enum VCRError {
     EntityTypeNotFound,
     InvalidPatchData,
     PathResolutionError,
+    InvalidPageToken,
     InvalidOpCode,
     MsgPackError(rmp_serde::decode::Error),
     MsgPackEncError(rmp_serde::encode::Error),
@@ -62,6 +63,7 @@ impl fmt::Display for VCRError {
             PathResolutionError => write!(f, "could not resolve patch path"),
             InvalidOpCode => write!(f, "invalid patch opcode"),
             InvalidPatchData => write!(f, "invalid patch data"),
+            InvalidPageToken => write!(f, "invalid page token"),
         }
     }
 }

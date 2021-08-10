@@ -10,9 +10,8 @@ use rocket::figment::{
 use rocket::tokio;
 use rocket::{
     get,
-    options,
     http::{ContentType, Header, Status},
-    routes,
+    options, routes,
     serde::json::Json as RocketJson,
     FromForm, State,
 };
@@ -37,7 +36,11 @@ impl rocket::fairing::Fairing for CORS {
         }
     }
 
-    async fn on_response<'r>(&self, _: &'r rocket::Request<'_>, response: &mut rocket::Response<'r>) {
+    async fn on_response<'r>(
+        &self,
+        _: &'r rocket::Request<'_>,
+        response: &mut rocket::Response<'r>,
+    ) {
         response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
         response.set_header(Header::new("Access-Control-Allow-Methods", "GET"));
         response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
@@ -80,12 +83,13 @@ impl rocket::fairing::Fairing for RequestTimer {
         let start_time = req.local_cache(|| TimerStart(None));
         if let Some(duration) = start_time.0.map(|st| st.elapsed()) {
             if let Some(route) = req.route() {
-                let query_params = req
-                    .uri()
-                    .query()
-                    .unwrap()
-                    .segments()
-                    .fold(String::new(), |acc, (k, v)| format!("{}={} {}", k, v, acc));
+                let query_params = if let Some(query) = req.uri().query() {
+                    query
+                        .segments()
+                        .fold(String::new(), |acc, (k, v)| format!("{}={} {}", k, v, acc))
+                } else {
+                    "no params".to_owned()
+                };
                 println!(
                     "\x1b[31;1m{}\x1b[m\x1b[1m + {}\x1b[m-> \x1b[4m{:?}\x1b[m",
                     route.name.as_ref().unwrap(),
@@ -262,7 +266,7 @@ fn versions(
                     }
                 }
             } else {
-                panic!() // TODO|:| RESULT
+                return Err(VCRError::InvalidPageToken);
             }
         } else {
             let start_time = req.after.as_ref().map_or(u32::MIN, |y| {
@@ -369,7 +373,7 @@ fn entities(
                 }
             }
         } else {
-            panic!() // TODO|:| RESULT
+            return Err(VCRError::InvalidPageToken);
         }
     } else {
         let at = req.at.map_or(u32::MAX, |when| {
@@ -464,7 +468,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         cached_page_capacity: Option<usize>,
         entities_cache_size: Option<usize>,
         time_responses: Option<bool>,
-        cors: Option<bool>
+        cors: Option<bool>,
     }
 
     #[derive(serde::Deserialize)]
@@ -508,7 +512,12 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
     };
 
     println!("Reading entities database..");
-    let dbs = MultiDatabase::from_folder(PathBuf::from(config.tapes), dicts, config.entities_cache_size.unwrap_or(30)).unwrap();
+    let dbs = MultiDatabase::from_folder(
+        PathBuf::from(config.tapes),
+        dicts,
+        config.entities_cache_size.unwrap_or(30),
+    )
+    .unwrap();
     println!("Reading site assets...");
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
 

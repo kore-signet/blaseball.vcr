@@ -46,7 +46,7 @@ impl Database {
         entities_lookup_path: P,
         db_path: P,
         dict_path: Option<P>,
-        cache_size: usize
+        cache_size: usize,
     ) -> VCRResult<Database> {
         let entities_lookup_f = File::open(entities_lookup_path).map_err(VCRError::IOError)?;
         let decompressor =
@@ -217,7 +217,12 @@ impl Database {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut entity_value = self.entities.get(entity).ok_or(VCRError::EntityNotFound)?.base.clone();
+        let mut entity_value = self
+            .entities
+            .get(entity)
+            .ok_or(VCRError::EntityNotFound)?
+            .base
+            .clone();
         let patches = self.get_entity_data(entity, before, false)?;
         let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
 
@@ -249,7 +254,12 @@ impl Database {
     }
 
     pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
-        let mut entity_value = self.entities.get(entity).ok_or(VCRError::EntityNotFound)?.base.clone();
+        let mut entity_value = self
+            .entities
+            .get(entity)
+            .ok_or(VCRError::EntityNotFound)?
+            .base
+            .clone();
 
         let patch_location = {
             let (start, end) = match self.entities[entity]
@@ -314,7 +324,12 @@ impl Database {
     }
 
     pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity> {
-        let mut entity_value = self.entities.get(entity).ok_or(VCRError::EntityNotFound)?.base.clone();
+        let mut entity_value = self
+            .entities
+            .get(entity)
+            .ok_or(VCRError::EntityNotFound)?
+            .base
+            .clone();
 
         let patches = self.get_entity_data(entity, u32::MAX, true)?;
         let (time, patch) = &patches[0];
@@ -428,7 +443,7 @@ impl MultiDatabase {
     pub fn from_folder<P: AsRef<Path>>(
         folder: P,
         dicts: HashMap<String, P>,
-        cache_size: usize
+        cache_size: usize,
     ) -> VCRResult<MultiDatabase> {
         let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)
             .map_err(VCRError::IOError)?
@@ -495,7 +510,7 @@ impl MultiDatabase {
                     dicts
                         .get(&e_type)
                         .map(|p| PathBuf::from(p.as_ref().as_os_str())),
-                    cache_size
+                    cache_size,
                 )?),
             );
         }
@@ -507,7 +522,12 @@ impl MultiDatabase {
     }
 
     pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
-        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         db.get_entity(entity, at)
     }
 
@@ -518,7 +538,12 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         db.get_entity_versions(entity, before, after)
     }
 
@@ -528,7 +553,12 @@ impl MultiDatabase {
         entities: Vec<String>,
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         db.get_entities(entities, at)
     }
 
@@ -539,12 +569,22 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         db.get_entities_versions(entities, before, after)
     }
 
     pub fn all_entities(&self, e_type: &str, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         db.all_entities(at)
     }
 
@@ -554,12 +594,22 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         db.all_entities_versions(before, after)
     }
 
     pub fn all_ids(&self, e_type: &str) -> VCRResult<Vec<String>> {
-        let db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         Ok(db.entities.keys().map(|x| x.to_owned()).collect())
     }
 
@@ -569,12 +619,22 @@ impl MultiDatabase {
         page: &mut InternalPaging,
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
-        let mut db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get(e_type)
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         db.fetch_page(page, count)
     }
 
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {
-        let mut db = self.dbs.get("game_updates").ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get("game_updates")
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         let mut results = Vec::new();
         for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
             results.push(ChronV1Game {
@@ -589,7 +649,12 @@ impl MultiDatabase {
     }
 
     pub fn games_by_date_and_time(&self, date: &GameDate, at: u32) -> VCRResult<Vec<ChronV1Game>> {
-        let mut db = self.dbs.get("game_updates").ok_or(VCRError::EntityTypeNotFound)?.lock().unwrap();
+        let mut db = self
+            .dbs
+            .get("game_updates")
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .lock()
+            .unwrap();
         let mut results = Vec::new();
         for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
             results.push(ChronV1Game {
@@ -750,7 +815,6 @@ impl MultiDatabase {
         //end_measure!(tomorrow_schedule_time);
 
         //start_measure!(season_time);
-
 
         let season = self
             .all_entities("season", at)?
