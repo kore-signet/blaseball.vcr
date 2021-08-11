@@ -458,7 +458,7 @@ fn coffee() -> (Status, (ContentType, &'static str)) {
     (Status::ImATeapot, (ContentType::Plain, "Coffee?"))
 }
 
-fn build_vcr() -> rocket::Rocket<rocket::Build> {
+fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
     #[derive(serde::Deserialize)]
     struct VCRConfig {
         tapes: String,
@@ -469,6 +469,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         entities_cache_size: Option<usize>,
         time_responses: Option<bool>,
         cors: Option<bool>,
+        open_in_browser: Option<bool>,
     }
 
     #[derive(serde::Deserialize)]
@@ -546,23 +547,26 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
     let cache: LruCache<String, InternalPaging> =
         LruCache::new(config.cached_page_capacity.unwrap_or(20));
 
-    rocket
-        .manage(dbs)
-        .manage(manager)
-        .manage(Mutex::new(cache))
-        .mount(
-            "/vcr",
-            routes![
-                all_games,
-                entities,
-                get_asset,
-                site_updates,
-                versions,
-                library,
-                coffee,
-                cors_preflight
-            ],
-        )
+    (
+        rocket
+            .manage(dbs)
+            .manage(manager)
+            .manage(Mutex::new(cache))
+            .mount(
+                "/vcr",
+                routes![
+                    all_games,
+                    entities,
+                    get_asset,
+                    site_updates,
+                    versions,
+                    library,
+                    coffee,
+                    cors_preflight
+                ],
+            ),
+        config.open_in_browser.unwrap_or(false),
+    )
 }
 
 #[cfg(not(feature = "bundle_before"))]
@@ -575,10 +579,22 @@ async fn launch() {
 
 #[cfg(feature = "bundle_before")]
 async fn launch() {
-    let vcr = build_vcr().launch();
-    let before = before::build().unwrap().launch();
-    let vcr_res = tokio::task::spawn(async { vcr.await.unwrap() });
-    let before_res = tokio::task::spawn(async { before.await.unwrap() });
+    let (vcr_launcher, open_in_browser) = build_vcr();
+    let vcr = vcr_launcher.ignite().await.unwrap();
+    let before = before::build().unwrap().ignite().await.unwrap();
+    let url = format!(
+        "http://{}:{}",
+        before.config().address,
+        before.config().port
+    );
+    let vcr_res = tokio::task::spawn(async { vcr.launch().await.unwrap() });
+    let before_res = tokio::task::spawn(async { before.launch().await.unwrap() });
+
+    if open_in_browser {
+        if open::that(&url).is_err() {
+            println!("Couldn't open before in default browser");
+        }
+    }
 
     before_res.await.unwrap();
     vcr_res.await.unwrap();
