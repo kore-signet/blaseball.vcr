@@ -2,7 +2,6 @@
 /resources
 /datasets
 datasets.tar.bz2
-Cargo.lock
 tapes/
 tapes.tar.bz2
 tapes.tar.gz

@@ -493,6 +493,33 @@ fn coffee() -> (Status, (ContentType, &'static str)) {
     (Status::ImATeapot, (ContentType::Plain, "Coffee?"))
 }
 
+#[cfg(not(feature = "bundle_before"))]
+fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+    rocket::custom(figment)
+}
+
+#[cfg(feature = "bundle_before")]
+fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+    use rocket::figment::{providers::Serialized, util::map};
+
+    let figment = figment
+        .merge(Serialized::from(
+            &map![
+                "chronicler_base_url" => "{addr}/vcr/",
+                "upnuts_base_url" => "{addr}/vcr/",
+            ],
+            "default",
+        ))
+        .merge(Serialized::from(
+            &map![
+                "siesta_mode" => true,
+                "chronplete" => true,
+            ],
+            "default",
+        ));
+    before::build(&figment).unwrap()
+}
+
 fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
     #[derive(serde::Deserialize)]
     struct VCRConfig {
@@ -520,7 +547,7 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
         .merge(Toml::file("Vcr.toml").nested())
         .select(Profile::from_env_or("VCR_PROFILE", "default"));
     let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
-    let mut rocket = rocket::custom(figment);
+    let mut rocket = build_rocket(figment);
 
     let dicts = if let Some(dicts_folder) = config.zstd_dictionaries {
         std::fs::read_dir(dicts_folder)
@@ -606,36 +633,21 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
     )
 }
 
-#[cfg(not(feature = "bundle_before"))]
-async fn launch() {
-    let (vcr_, _) = build_vcr();
-    let vcr = vcr_.launch();
-    let vcr_res = tokio::task::spawn(async { vcr.await.unwrap() });
-
-    vcr_res.await.unwrap();
-}
-
-#[cfg(feature = "bundle_before")]
 async fn launch() {
     let (vcr_launcher, open_in_browser) = build_vcr();
     let vcr = vcr_launcher.ignite().await.unwrap();
-    let before = before::build().unwrap().ignite().await.unwrap();
-    let url = format!(
-        "http://{}:{}",
-        before.config().address,
-        before.config().port
-    );
-    let vcr_res = tokio::task::spawn(async { vcr.launch().await.unwrap() });
-    let before_res = tokio::task::spawn(async { before.launch().await.unwrap() });
 
-    if open_in_browser {
-        if open::that(&url).is_err() {
-            println!("Couldn't open before in default browser");
+    #[cfg(feature = "bundle_before")]
+    {
+        let url = format!("http://{}:{}", vcr.config().address, vcr.config().port);
+        if open_in_browser {
+            if open::that(&url).is_err() {
+                println!("Couldn't open before in default browser");
+            }
         }
     }
 
-    before_res.await.unwrap();
-    vcr_res.await.unwrap();
+    vcr.launch().await.unwrap();
 }
 
 #[tokio::main]
