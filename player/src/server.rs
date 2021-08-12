@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
+use uuid::Uuid;
 
 pub struct RequestTimer;
 
@@ -166,8 +167,10 @@ fn all_games(
     }))
 }
 
-#[get("/feed/global?<time>&<limit>&<phase>&<season>")]
+#[get("/feed/<kind>?<id>&<time>&<limit>&<phase>&<season>")]
 fn feed(
+    kind: &str,
+    id: Option<String>,
     time: Option<i64>,
     limit: Option<usize>,
     phase: Option<u8>,
@@ -175,17 +178,49 @@ fn feed(
     db: &State<Mutex<FeedDatabase>>,
 ) -> VCRResult<RocketJson<Vec<FeedEvent>>> {
     let mut feed = db.lock().unwrap();
-    if phase.is_some() && season.is_some() {
-        Ok(RocketJson(feed.events_by_phase(
-            season.unwrap(),
-            phase.unwrap(),
-            limit.unwrap_or(1000),
-        )?))
-    } else {
-        Ok(RocketJson(feed.events_before(
-            time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
-            limit.unwrap_or(100),
-        )?))
+
+    println!("{}", kind);
+
+    match kind {
+        "global" => {
+            if phase.is_some() && season.is_some() {
+                Ok(RocketJson(feed.events_by_phase(
+                    season.unwrap(),
+                    phase.unwrap(),
+                    limit.unwrap_or(1000),
+                )?))
+            } else {
+                Ok(RocketJson(feed.events_before(
+                    time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                    limit.unwrap_or(100),
+                )?))
+            }
+        }
+        "player" => {
+            Ok(RocketJson(feed.events_by_tag_and_time(
+                time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
+                TagType::Player,
+                limit.unwrap_or(100),
+            )?))
+        }
+        "team" => {
+            Ok(RocketJson(feed.events_by_tag_and_time(
+                time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
+                TagType::Team,
+                limit.unwrap_or(100),
+            )?))
+        }
+        "game" => {
+            Ok(RocketJson(feed.events_by_tag_and_time(
+                time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
+                TagType::Game,
+                limit.unwrap_or(100),
+            )?))
+        }
+        _ => Err(VCRError::EntityTypeNotFound),
     }
 }
 
@@ -478,6 +513,7 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
         path: String,
         dict: String,
         id_table: String,
+        tag_table: String,
     }
 
     let figment = Figment::from(rocket::Config::default())
@@ -530,6 +566,7 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
                 feed_config.path,
                 feed_config.dict,
                 feed_config.id_table,
+                feed_config.tag_table,
             )
             .unwrap(),
         );
@@ -571,7 +608,8 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
 
 #[cfg(not(feature = "bundle_before"))]
 async fn launch() {
-    let vcr = build_vcr().launch();
+    let (vcr_, _) = build_vcr();
+    let vcr = vcr_.launch();
     let vcr_res = tokio::task::spawn(async { vcr.await.unwrap() });
 
     vcr_res.await.unwrap();

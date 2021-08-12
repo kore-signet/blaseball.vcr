@@ -20,6 +20,9 @@ fn main() {
             let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
             let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
             let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
+            let mut player_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+            let mut game_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+            let mut team_tag_idx: HashMap<u8, Vec<Vec<u8>>> = HashMap::new();
 
             let f = File::open("feed.json").unwrap();
             let reader = BufReader::new(f);
@@ -27,9 +30,9 @@ fn main() {
             for l in reader.lines() {
                 let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
                 let snowflake_id = event.generate_id();
-
                 let compact_player_tags: Vec<u16> = event
                     .player_tags
+                    .clone()
                     .unwrap_or(Vec::new())
                     .iter()
                     .map(|id| {
@@ -38,6 +41,7 @@ fn main() {
                         } else {
                             let n = player_tag_table.len() as u16;
                             player_tag_table.insert(*id, n);
+                            player_tag_idx.insert(n, Vec::new());
                             n
                         }
                     })
@@ -45,6 +49,7 @@ fn main() {
 
                 let compact_game_tags: Vec<u16> = event
                     .game_tags
+                    .clone()
                     .unwrap_or(Vec::new())
                     .iter()
                     .map(|id| {
@@ -53,6 +58,7 @@ fn main() {
                         } else {
                             let n = game_tag_table.len() as u16;
                             game_tag_table.insert(*id, n);
+                            game_tag_idx.insert(n, Vec::new());
                             n
                         }
                     })
@@ -60,6 +66,7 @@ fn main() {
 
                 let compact_team_tags: Vec<u8> = event
                     .team_tags
+                    .clone()
                     .unwrap_or(Vec::new())
                     .iter()
                     .map(|id| {
@@ -68,10 +75,29 @@ fn main() {
                         } else {
                             let n = team_tag_table.len() as u8;
                             team_tag_table.insert(*id, n);
+                            team_tag_idx.insert(n, Vec::new());
                             n
                         }
                     })
                     .collect();
+
+                for t in &compact_team_tags {
+                    if let Some(ids) = team_tag_idx.get_mut(&t) {
+                        ids.push(snowflake_id.clone());
+                    }
+                }
+
+                for t in &compact_player_tags {
+                    if let Some(ids) = player_tag_idx.get_mut(&t) {
+                        ids.push(snowflake_id.clone());
+                    }
+                }
+
+                for t in &compact_game_tags {
+                    if let Some(ids) = game_tag_idx.get_mut(&t) {
+                        ids.push(snowflake_id.clone());
+                    }
+                }
 
                 snd1.send((
                     snowflake_id,
@@ -95,6 +121,18 @@ fn main() {
             let mut f = File::create("id_lookup.bin").unwrap();
             f.write_all(
                 &rmp_serde::to_vec(&(team_tag_table, player_tag_table, game_tag_table)).unwrap(),
+            )
+            .unwrap();
+
+            let mut tagf = File::create("tag_lookup.bin.zstd").unwrap();
+            tagf.write_all(
+                &zstd::encode_all(
+                    Cursor::new(
+                        rmp_serde::to_vec(&(team_tag_idx, player_tag_idx, game_tag_idx)).unwrap(),
+                    ),
+                    22,
+                )
+                .unwrap(),
             )
             .unwrap();
             // Close the channel - this is necessary to exit

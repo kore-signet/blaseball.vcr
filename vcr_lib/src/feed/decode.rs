@@ -65,10 +65,16 @@ fn make_tries<R: Read>(mut reader: R) -> (Trie<Vec<u8>, (u64, u64)>, Trie<Vec<u8
 pub struct FeedDatabase {
     pub snowflakes: Trie<Vec<u8>, (u64, u64)>,
     times: Trie<Vec<u8>, Vec<u8>>,
+    player_index: HashMap<u16, Vec<Vec<u8>>>,
+    team_index: HashMap<u8, Vec<Vec<u8>>>,
+    game_index: HashMap<u16, Vec<Vec<u8>>>,
     reader: BufReader<File>,
     player_tags: HashMap<u16, Uuid>,
     game_tags: HashMap<u16, Uuid>,
     team_tags: HashMap<u8, Uuid>,
+    reverse_player_tags: HashMap<Uuid, u16>,
+    reverse_game_tags: HashMap<Uuid, u16>,
+    reverse_team_tags: HashMap<Uuid, u8>,
     dictionary: Vec<u8>,
 }
 
@@ -78,6 +84,7 @@ impl FeedDatabase {
         db_file_path: P,
         dict_file_path: P,
         id_table_path: P,
+        idx_file_path: P,
     ) -> VCRResult<FeedDatabase> {
         let id_file = File::open(id_table_path).map_err(VCRError::IOError)?;
         let (team_tags, player_tags, game_tags) = rmp_serde::from_read::<
@@ -85,6 +92,17 @@ impl FeedDatabase {
             (HashMap<Uuid, u8>, HashMap<Uuid, u16>, HashMap<Uuid, u16>),
         >(id_file)
         .unwrap(); // todo: result
+
+        let idx_file = File::open(idx_file_path).map_err(VCRError::IOError)?;
+        let (team_idx, player_idx, game_idx) = rmp_serde::from_read_ref::<
+            Vec<u8>,
+            (
+                HashMap<u8, Vec<Vec<u8>>>,
+                HashMap<u16, Vec<Vec<u8>>>,
+                HashMap<u16, Vec<Vec<u8>>>,
+            ),
+        >(&zstd::decode_all(idx_file).unwrap())
+        .unwrap();
 
         let position_index_file = File::open(position_index_path).map_err(VCRError::IOError)?;
         let position_index_decompressor =
@@ -100,22 +118,71 @@ impl FeedDatabase {
         let main_file = File::open(db_file_path).map_err(VCRError::IOError)?;
         let main_file_reader = BufReader::new(main_file);
 
+        let mut player_index = HashMap::new();
+        let mut team_index = HashMap::new();
+        let mut game_index = HashMap::new();
+
+        for (tag, snowflakes) in player_idx {
+            if !player_index.contains_key(&tag) {
+                player_index.insert(tag, Vec::new());
+            }
+
+            if let Some(tr) = player_index.get_mut(&tag) {
+                for s in snowflakes {
+                    tr.push(s.clone());
+                }
+            }
+        }
+
+        for (tag, snowflakes) in team_idx {
+            if !team_index.contains_key(&tag) {
+                team_index.insert(tag, Vec::new());
+            }
+
+            if let Some(tr) = team_index.get_mut(&tag) {
+                for s in snowflakes {
+                    tr.push(s.clone());
+                }
+            }
+        }
+
+        for (tag, snowflakes) in game_idx {
+            if !game_index.contains_key(&tag) {
+                game_index.insert(tag, Vec::new());
+            }
+
+            if let Some(tr) = game_index.get_mut(&tag) {
+                for s in snowflakes {
+                    tr.push(s.clone());
+                }
+            }
+        }
+
         Ok(FeedDatabase {
             snowflakes: snowflakes,
             times: times,
             reader: main_file_reader,
             player_tags: player_tags
+                .clone()
                 .into_iter()
                 .map(|(k, v)| (v, k))
                 .collect::<HashMap<u16, Uuid>>(),
             team_tags: team_tags
+                .clone()
                 .into_iter()
                 .map(|(k, v)| (v, k))
                 .collect::<HashMap<u8, Uuid>>(),
             game_tags: game_tags
+                .clone()
                 .into_iter()
                 .map(|(k, v)| (v, k))
                 .collect::<HashMap<u16, Uuid>>(),
+            reverse_player_tags: player_tags,
+            reverse_team_tags: team_tags,
+            reverse_game_tags: game_tags,
+            player_index: player_index,
+            game_index: game_index,
+            team_index: team_index,
             dictionary: dictionary,
         })
     }
@@ -394,6 +461,59 @@ impl FeedDatabase {
 
         ids.iter()
             .map(|snowflake| self.read_event(snowflake))
+            .collect::<VCRResult<Vec<FeedEvent>>>()
+    }
+
+    pub fn events_by_tag_and_time(
+        &mut self,
+        timestamp: DateTime<Utc>,
+        tag: &Uuid,
+        tag_type: TagType,
+        count: usize,
+    ) -> VCRResult<Vec<FeedEvent>> {
+        let tag: u16 = match tag_type {
+            TagType::Game => *self
+                .reverse_game_tags
+                .get(tag)
+                .ok_or(VCRError::EntityNotFound)? as u16,
+            TagType::Team => *self
+                .reverse_team_tags
+                .get(tag)
+                .ok_or(VCRError::EntityNotFound)? as u16,
+            TagType::Player => *self
+                .reverse_player_tags
+                .get(tag)
+                .ok_or(VCRError::EntityNotFound)? as u16,
+        };
+
+        let mut ids = Vec::new();
+
+        while ids.len() < 1 {
+            ids.extend(
+                (match tag_type {
+                    TagType::Game => self.game_index[&tag].iter(),
+                    TagType::Team => self.team_index[&(tag as u8)].iter(),
+                    TagType::Player => self.player_index[&tag].iter(),
+                })
+                .filter_map(|snowflake| {
+                    let time = u32::from_be_bytes(snowflake[2..6].try_into().unwrap());
+                    let date = Utc.timestamp(time as i64, 0);
+                    if date <= timestamp {
+                        Some((date, snowflake.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .take(count - ids.len()),
+            );
+        }
+
+        ids.sort_by_key(|(t, _)| t.clone());
+        ids.reverse();
+
+        ids.iter()
+            .take(count)
+            .map(|(_, snowflake)| self.read_event(snowflake))
             .collect::<VCRResult<Vec<FeedEvent>>>()
     }
 }
