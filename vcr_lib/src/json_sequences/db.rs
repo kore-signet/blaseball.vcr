@@ -785,6 +785,12 @@ impl MultiDatabase {
                 .map(|x| x.as_i64().unwrap() as i32),
         };
 
+        if let Some(i) = date.tournament {
+            if i != -1 {
+                date.season = -1;
+            }
+        }
+
         let schedule: JSONValue = if sim
             .data
             .get("phase")
