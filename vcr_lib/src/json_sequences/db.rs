@@ -817,6 +817,7 @@ impl MultiDatabase {
             .games_by_date_and_time(&date, at)?
             .into_iter()
             .map(|g| g.data)
+            .filter(|g| g != &json!({}))
             .collect();
         //end_measure!(tomorrow_schedule_time);
 
