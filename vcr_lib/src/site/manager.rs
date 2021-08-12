@@ -97,7 +97,7 @@ impl ResourceManager {
 
         let mut res: Vec<u8> = header.basis.iter().copied().collect();
 
-        for idx in 0..delta_idx+1 {
+        for idx in 0..delta_idx + 1 {
             let (offset, length, _) = header.deltas[idx as usize];
             delta_file
                 .seek(SeekFrom::Start(offset))

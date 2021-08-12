@@ -706,12 +706,12 @@ impl MultiDatabase {
             .iter()
             .find(|r| r["roundNumber"] == playoffs["tomorrowRound"])
             .cloned()
-            .unwrap();
+            .unwrap_or(json!({}));
         let round: JSONValue = all_rounds
             .iter()
             .find(|r| r["roundNumber"].as_i64().unwrap() == round_number)
             .cloned()
-            .unwrap();
+            .unwrap_or(json!({}));
 
         let main_matchup_ids: Vec<String> = round["matchups"]
             .as_array()
