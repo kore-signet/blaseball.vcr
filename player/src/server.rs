@@ -502,20 +502,21 @@ fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
 fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
     use rocket::figment::{providers::Serialized, util::map};
 
+    let profile = Profile::from_env_or("VCR_PROFILE", "default");
     let figment = figment
         .merge(Serialized::from(
             &map![
                 "chronicler_base_url" => "{addr}/vcr/",
                 "upnuts_base_url" => "{addr}/vcr/",
             ],
-            "default",
+            profile.as_str(),
         ))
         .merge(Serialized::from(
             &map![
                 "siesta_mode" => true,
                 "chronplete" => true,
             ],
-            "default",
+            profile.as_str(),
         ));
     before::build(&figment).unwrap()
 }
@@ -541,6 +542,13 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
         dict: String,
         id_table: String,
         tag_table: String,
+    }
+
+    // traverse from the directory where we live up until we find a Vcr.toml, then chdir there.
+    if let Ok(dir) = std::env::current_exe() {
+        if let Some(new_dir) = dir.ancestors().find(|d| d.join("Vcr.toml").exists()) {
+            std::env::set_current_dir(new_dir).unwrap();
+        }
     }
 
     let figment = Figment::from(rocket::Config::default())
