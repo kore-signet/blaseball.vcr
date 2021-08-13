@@ -7,7 +7,6 @@ use rocket::figment::{
     providers::{Format, Toml},
     Figment, Profile,
 };
-use rocket::tokio;
 use rocket::{
     get,
     http::{ContentType, Header, Status},
@@ -504,12 +503,12 @@ fn coffee() -> (Status, (ContentType, &'static str)) {
 }
 
 #[cfg(not(feature = "bundle_before"))]
-fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
     rocket::custom(figment)
 }
 
 #[cfg(feature = "bundle_before")]
-fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
     use rocket::figment::{providers::Serialized, util::map};
 
     let profile = Profile::from_env_or("VCR_PROFILE", "default");
@@ -528,10 +527,11 @@ fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
             ],
             profile.as_str(),
         ));
-    before::build(&figment).unwrap()
+    before::build(&figment).await.unwrap()
 }
 
-fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
+#[rocket::launch]
+async fn build_vcr() -> rocket::Rocket<rocket::Build> {
     #[derive(serde::Deserialize)]
     struct VCRConfig {
         tapes: String,
@@ -542,6 +542,7 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
         entities_cache_size: Option<usize>,
         time_responses: Option<bool>,
         cors: Option<bool>,
+        #[cfg(feature = "bundle_before")]
         open_in_browser: Option<bool>,
     }
 
@@ -565,7 +566,7 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
         .merge(Toml::file("Vcr.toml").nested())
         .select(Profile::from_env_or("VCR_PROFILE", "default"));
     let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
-    let mut rocket = build_rocket(figment);
+    let mut rocket = build_rocket(figment).await;
 
     let dicts = if let Some(dicts_folder) = config.zstd_dictionaries {
         std::fs::read_dir(dicts_folder)
@@ -629,46 +630,42 @@ fn build_vcr() -> (rocket::Rocket<rocket::Build>, bool) {
     let cache: LruCache<String, InternalPaging> =
         LruCache::new(config.cached_page_capacity.unwrap_or(20));
 
-    (
-        rocket
-            .manage(dbs)
-            .manage(manager)
-            .manage(Mutex::new(cache))
-            .mount(
-                "/vcr",
-                routes![
-                    all_games,
-                    entities,
-                    get_asset,
-                    site_updates,
-                    versions,
-                    library,
-                    coffee,
-                    cors_preflight
-                ],
-            ),
-        config.open_in_browser.unwrap_or(false),
-    )
-}
-
-async fn launch() {
-    let (vcr_launcher, open_in_browser) = build_vcr();
-    let vcr = vcr_launcher.ignite().await.unwrap();
-
     #[cfg(feature = "bundle_before")]
-    {
-        let url = format!("http://{}:{}", vcr.config().address, vcr.config().port);
-        if open_in_browser {
-            if open::that(&url).is_err() {
-                println!("Couldn't open before in default browser");
-            }
-        }
+    if config.open_in_browser.unwrap_or(false) {
+        rocket = rocket.attach(rocket::fairing::AdHoc::on_liftoff("Open in browser", |r| {
+            Box::pin(async move {
+                let url = format!(
+                    "{}://{}:{}",
+                    if r.config().tls_enabled() {
+                        "https"
+                    } else {
+                        "http"
+                    },
+                    r.config().address,
+                    r.config().port,
+                );
+                if open::that(&url).is_err() {
+                    println!("Couldn't open before in default browser");
+                }
+            })
+        }));
     }
 
-    vcr.launch().await.unwrap();
-}
-
-#[tokio::main]
-async fn main() {
-    launch().await;
+    rocket
+        .manage(dbs)
+        .manage(manager)
+        .manage(Mutex::new(cache))
+        .mount(
+            "/vcr",
+            routes![
+                all_games,
+                entities,
+                get_asset,
+                site_updates,
+                versions,
+                library,
+                coffee,
+                cors_preflight
+            ],
+        )
 }
