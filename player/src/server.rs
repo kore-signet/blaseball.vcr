@@ -167,19 +167,25 @@ fn all_games(
     }))
 }
 
-#[get("/feed/<kind>?<id>&<time>&<limit>&<phase>&<season>")]
+#[get("/feed/<kind>?<id>&<time>&<start>&<category>&<limit>&<phase>&<season>")]
 fn feed(
     kind: &str,
     id: Option<String>,
     time: Option<i64>,
+    start: Option<String>,
     limit: Option<usize>,
     phase: Option<u8>,
     season: Option<i8>,
+    category: Option<i8>,
     db: &State<Mutex<FeedDatabase>>,
 ) -> VCRResult<RocketJson<Vec<FeedEvent>>> {
     let mut feed = db.lock().unwrap();
 
-    println!("{}", kind);
+    let time = start
+        .map(|s| s.parse::<DateTime<Utc>>().unwrap())
+        .unwrap_or(time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)));
+
+    let category: i8 = category.unwrap_or(-3);
 
     match kind {
         "global" => {
@@ -191,33 +197,37 @@ fn feed(
                 )?))
             } else {
                 Ok(RocketJson(feed.events_before(
-                    time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                    time,
                     limit.unwrap_or(100),
+                    category,
                 )?))
             }
         }
         "player" => {
             Ok(RocketJson(feed.events_by_tag_and_time(
-                time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                time,
                 &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
                 TagType::Player,
                 limit.unwrap_or(100),
+                category,
             )?))
         }
         "team" => {
             Ok(RocketJson(feed.events_by_tag_and_time(
-                time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                time,
                 &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
                 TagType::Team,
                 limit.unwrap_or(100),
+                category,
             )?))
         }
         "game" => {
             Ok(RocketJson(feed.events_by_tag_and_time(
-                time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)),
+                time,
                 &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
                 TagType::Game,
                 limit.unwrap_or(100),
+                category,
             )?))
         }
         _ => Err(VCRError::EntityTypeNotFound),

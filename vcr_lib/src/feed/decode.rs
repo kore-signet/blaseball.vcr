@@ -345,6 +345,7 @@ impl FeedDatabase {
         &mut self,
         timestamp: DateTime<Utc>,
         count: usize,
+        category: i8,
     ) -> VCRResult<Vec<FeedEvent>> {
         let mut prefix = [
             (timestamp.year() as u16).to_be_bytes().to_vec(),
@@ -388,15 +389,29 @@ impl FeedDatabase {
 
         ids.sort_by_key(|(t, _)| t.clone());
 
-        ids.iter()
-            .map(|(_, snowflake)| self.read_event(snowflake))
-            .collect::<VCRResult<Vec<FeedEvent>>>()
+        Ok(ids
+            .iter()
+            .map(|(_, snowflake)| {
+                self.read_event(snowflake).map(|e| {
+                    if category == -3 || e.category == category {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<VCRResult<Vec<Option<FeedEvent>>>>()?
+            .into_iter()
+            .filter_map(|s| s)
+            .take(count)
+            .collect::<Vec<FeedEvent>>())
     }
 
     pub fn events_before(
         &mut self,
         timestamp: DateTime<Utc>,
         count: usize,
+        category: i8,
     ) -> VCRResult<Vec<FeedEvent>> {
         let mut prefix = [
             (timestamp.year() as u16).to_be_bytes().to_vec(),
@@ -408,10 +423,10 @@ impl FeedDatabase {
         ]
         .concat();
 
-        let mut ids: Vec<(DateTime<Utc>, Vec<u8>)> = Vec::new();
-        while ids.len() < count {
-            ids.extend(
-                self.times
+        let mut events: Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)> = Vec::new();
+        while events.len() < count {
+            events.append(&mut (self
+                    .times
                     .iter_prefix(&prefix)
                     .filter_map(|(k, v)| {
                         let date = Utc
@@ -431,19 +446,32 @@ impl FeedDatabase {
                             None
                         }
                     })
-                    .take(count - ids.len()),
+                    .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>()
+                    .into_iter()
+                    .map(|(t, v)| Ok((t, self.read_event(&v)?, v)))
+                    .collect::<VCRResult<Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)>>>()?
+                    .into_iter()
+                    .filter_map(|(t, e, v)| {
+                        if category == -3 || e.category == category {
+                            Some((t, e, v))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)>>()),
             );
 
             prefix.pop();
         }
 
-        ids.sort_by_key(|(t, _)| t.clone());
-        ids.reverse();
-
-        ids.iter()
+        events.sort_by_key(|&(t, _, _)| t);
+        events.reverse();
+        events.dedup_by_key(|(_, _, v)| v.clone()); // .clone() :ballclark:
+        Ok(events
+            .into_iter()
+            .map(|(_, e, _)| e)
             .take(count)
-            .map(|(_, snowflake)| self.read_event(snowflake))
-            .collect::<VCRResult<Vec<FeedEvent>>>()
+            .collect::<Vec<FeedEvent>>())
     }
 
     pub fn events_by_phase(
@@ -470,6 +498,7 @@ impl FeedDatabase {
         tag: &Uuid,
         tag_type: TagType,
         count: usize,
+        category: i8,
     ) -> VCRResult<Vec<FeedEvent>> {
         let tag: u16 = match tag_type {
             TagType::Game => *self
@@ -511,9 +540,21 @@ impl FeedDatabase {
         ids.sort_by_key(|(t, _)| t.clone());
         ids.reverse();
 
-        ids.iter()
+        Ok(ids
+            .iter()
+            .map(|(_, snowflake)| {
+                self.read_event(snowflake).map(|e| {
+                    if category == -3 || e.category == category {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<VCRResult<Vec<Option<FeedEvent>>>>()?
+            .into_iter()
+            .filter_map(|s| s)
             .take(count)
-            .map(|(_, snowflake)| self.read_event(snowflake))
-            .collect::<VCRResult<Vec<FeedEvent>>>()
+            .collect::<Vec<FeedEvent>>())
     }
 }
