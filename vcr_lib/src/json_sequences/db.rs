@@ -34,6 +34,16 @@ macro_rules! end_measure {
     };
 }
 
+fn clamp(input: u32, min: u32, max: u32) -> u32 {
+    if input < min {
+        min
+    } else if input > max {
+        max
+    } else {
+        input
+    }
+}
+
 pub struct Database {
     reader: BufReader<File>,
     entities: HashMap<String, EntityData>,
@@ -837,12 +847,11 @@ impl MultiDatabase {
 
         //start_measure!(leagues_time);
         let leagues: Vec<JSONValue> = self
-            .all_entities("league", at)?
+            .all_entities("league", clamp(at, 1599169238, u32::MAX))?
             .into_iter()
             .map(|t| t.data)
             .filter(|t| t != &json!({}))
             .collect();
-        //end_measure!(leagues_time);
 
         //start_measure!(subleagues_time);
         let subleague_ids: Vec<String> = leagues
@@ -870,7 +879,7 @@ impl MultiDatabase {
             .collect();
 
         let subleagues: Vec<JSONValue> = self
-            .get_entities("subleague", subleague_ids, at)?
+            .get_entities("subleague", subleague_ids, clamp(at, 1599169238, u32::MAX))?
             .into_iter()
             .map(|s| s.data)
             .filter(|s| s != &json!({}))
@@ -891,7 +900,7 @@ impl MultiDatabase {
             .collect();
 
         let divisions: Vec<JSONValue> = self
-            .get_entities("division", division_ids, at)?
+            .get_entities("division", division_ids, clamp(at, 1599169238, u32::MAX))?
             .into_iter()
             .map(|d| d.data)
             .filter(|d| d != &json!({}))
@@ -926,7 +935,11 @@ impl MultiDatabase {
         //end_measure!(stadiums_time);
 
         let tiebreakers: Vec<JSONValue> = self
-            .get_entities("tiebreakers", tiebreaker_ids, at)?
+            .get_entities(
+                "tiebreakers",
+                tiebreaker_ids,
+                clamp(at, 1599760290, u32::MAX),
+            )?
             .into_iter()
             .map(|t| t.data)
             .filter(|t| t != &json!({}))

@@ -13,10 +13,26 @@ use chrono::{DateTime, Utc};
 use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
 use reqwest;
-use std::io::{Seek, Write};
+use std::io::{Read, Seek, Write};
+
+use std::collections::HashMap;
+
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+pub struct Replace {
+    replace: String,
+    with: String,
+}
+
+#[derive(Deserialize)]
+pub struct AssetConfig {
+    patches: Vec<Replace>,
+}
 
 pub fn encode_resource<W: Write + Seek>(
     steps: Vec<FileStep>,
+    replaces: &Vec<Replace>,
     out: &mut W,
 ) -> VCRResult<EncodedResource> {
     let client = reqwest::blocking::Client::new();
@@ -45,17 +61,22 @@ pub fn encode_resource<W: Write + Seek>(
     for step in steps {
         progress_bar.set_action("downloading", Color::Green, Style::Bold);
 
-        let mut next: Vec<u8> = Vec::new();
-        let mut next_response = client
-            .get(&format!(
-                "https://api.sibr.dev/chronicler/v1{}",
-                &step.download_url
-            ))
-            .send()
-            .map_err(VCRError::ReqwestError)?;
-        next_response
-            .copy_to(&mut next)
-            .map_err(VCRError::ReqwestError)?;
+        let next: Vec<u8> = {
+            let mut basis = client
+                .get(&format!(
+                    "https://api.sibr.dev/chronicler/v1{}",
+                    &step.download_url
+                ))
+                .send()
+                .map_err(VCRError::ReqwestError)?
+                .text()
+                .map_err(VCRError::ReqwestError)?;
+            for r in replaces {
+                basis = basis.replace(&r.replace, &r.with);
+            }
+
+            basis.as_bytes().to_vec()
+        };
 
         progress_bar.set_action("creating delta", Color::Blue, Style::Bold);
 
@@ -88,6 +109,7 @@ pub fn encode_resource<W: Write + Seek>(
     })
 }
 
+// usage: download_site_data <out folder> <optional toml file with replaces>
 fn main() -> VCRResult<()> {
     let chron_res: ChroniclerV1Response<chron::SiteUpdate> =
         blocking::get("https://api.sibr.dev/chronicler/v1/site/updates")
@@ -97,6 +119,17 @@ fn main() -> VCRResult<()> {
     let all_steps = chron::updates_to_steps(chron_res.data);
     let args: Vec<String> = env::args().collect();
 
+    let replacer: HashMap<String, AssetConfig> = {
+        if let Some(path) = args.get(2) {
+            let mut cfile = File::open(path).map_err(VCRError::IOError)?;
+            let mut cfg = String::new();
+            cfile.read_to_string(&mut cfg).map_err(VCRError::IOError)?;
+            toml::from_str(&cfg).unwrap()
+        } else {
+            HashMap::new()
+        }
+    };
+
     for (name, steps) in all_steps {
         println!("Recording asset {}", name);
         let main_path = Path::new(&args[1]).join(&format!("{}.riv", name));
@@ -105,7 +138,14 @@ fn main() -> VCRResult<()> {
         let main_f = File::create(main_path).map_err(VCRError::IOError)?;
         let mut main_out = BufWriter::new(main_f);
 
-        let header = encode_resource(steps, &mut main_out)?;
+        let header = encode_resource(
+            steps,
+            replacer
+                .get(&name)
+                .map(|c| &c.patches)
+                .unwrap_or(&Vec::new()),
+            &mut main_out,
+        )?;
 
         let mut header_f = File::create(header_path).map_err(VCRError::IOError)?;
         rmp_serde::encode::write(&mut header_f, &header).map_err(VCRError::MsgPackEncError)?;

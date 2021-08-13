@@ -1,5 +1,5 @@
 #!/bin/bash
-./target/release/download_site_data tapes/site_data/
+./target/release/download_site_data tapes/site_data/ asset_replaces.toml
 ./target/release/build_entities -1 nodict idols risingstars
 ./target/release/build_entities -1 ./zstd-dictionaries/tributes.dict tributes
 ./target/release/build_entities -1 nodict giftprogress

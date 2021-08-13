@@ -36,7 +36,6 @@ COPY player ./player
 COPY encoder ./encoder
 COPY Cargo.toml ./Cargo.toml
 
-RUN rustup update beta
 RUN rustup default beta
 RUN rustup target add x86_64-unknown-linux-musl
 

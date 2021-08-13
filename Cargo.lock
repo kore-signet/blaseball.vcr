@@ -638,6 +638,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "toml",
  "uuid",
  "xdelta3 0.1.5 (git+https://github.com/alisww/xdelta3-rs.git)",
  "zstd",
