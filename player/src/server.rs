@@ -503,12 +503,12 @@ fn coffee() -> (Status, (ContentType, &'static str)) {
 }
 
 #[cfg(not(feature = "bundle_before"))]
-fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
     rocket::custom(figment)
 }
 
 #[cfg(feature = "bundle_before")]
-fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
     use rocket::figment::{providers::Serialized, util::map};
 
     let profile = Profile::from_env_or("VCR_PROFILE", "default");
@@ -527,11 +527,11 @@ fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
             ],
             profile.as_str(),
         ));
-    before::build(&figment).unwrap()
+    before::build(&figment).await.unwrap()
 }
 
 #[rocket::launch]
-fn build_vcr() -> rocket::Rocket<rocket::Build> {
+async fn build_vcr() -> rocket::Rocket<rocket::Build> {
     #[derive(serde::Deserialize)]
     struct VCRConfig {
         tapes: String,
@@ -566,7 +566,7 @@ fn build_vcr() -> rocket::Rocket<rocket::Build> {
         .merge(Toml::file("Vcr.toml").nested())
         .select(Profile::from_env_or("VCR_PROFILE", "default"));
     let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
-    let mut rocket = build_rocket(figment);
+    let mut rocket = build_rocket(figment).await;
 
     let dicts = if let Some(dicts_folder) = config.zstd_dictionaries {
         std::fs::read_dir(dicts_folder)
