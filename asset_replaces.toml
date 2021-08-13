@@ -1,4 +1,4 @@
 [maincss]
   patches = [
-    { replace = "https://d35iw2jmbg6ut8.cloudfront.net/", with = "http://localhost:8000/" }
+    { replace = "https://d35iw2jmbg6ut8.cloudfront.net/", with = "/" }
   ]
