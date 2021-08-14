@@ -971,8 +971,6 @@ impl MultiDatabase {
             .collect();
         //end_measure!(stadiums_time);
 
-
-
         let temporal = self.get_entity("temporal", "00000000-0000-0000-0000-000000000000", at)?;
 
         let sunsun = self.get_entity("sunsun", "00000000-0000-0000-0000-000000000000", at)?;

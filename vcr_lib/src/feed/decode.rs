@@ -225,6 +225,14 @@ impl FeedDatabase {
             let mut etype: [u8; 2] = [0; 2];
             let mut day: [u8; 2] = [0; 2];
 
+            let id = if phase == 13 {
+                let mut uuid: [u8; 16] = [0; 16];
+                decoder.read_exact(&mut uuid).map_err(VCRError::IOError)?;
+                Uuid::from_bytes(uuid)
+            } else {
+                Uuid::nil()
+            };
+
             decoder
                 .read_exact(&mut category)
                 .map_err(VCRError::IOError)?;
@@ -321,7 +329,7 @@ impl FeedDatabase {
             let metadata: JSONValue = rmp_serde::from_read_ref(&metadata_bytes).unwrap();
 
             Ok(FeedEvent {
-                id: Uuid::nil(),
+                id: id,
                 category: i8::from_be_bytes(category),
                 created: Utc.timestamp(timestamp as i64, 0),
                 day: i16::from_be_bytes(day),
@@ -364,17 +372,9 @@ impl FeedDatabase {
                 self.times
                     .iter_prefix(&prefix)
                     .filter_map(|(k, v)| {
-                        let date = Utc
-                            .ymd(
-                                u16::from_be_bytes([k[0], k[1]]) as i32,
-                                u8::from_be_bytes([k[2]]) as u32,
-                                u8::from_be_bytes([k[3]]) as u32,
-                            )
-                            .and_hms(
-                                u8::from_be_bytes([k[4]]) as u32,
-                                u8::from_be_bytes([k[5]]) as u32,
-                                u8::from_be_bytes([k[6]]) as u32,
-                            );
+                        let date = Utc.timestamp(u32::from_be_bytes(
+                            v[2..6].try_into().unwrap(),
+                        ) as i64, 0);
                         if date >= timestamp {
                             Some((date, v.into_iter().copied().collect()))
                         } else {
@@ -425,21 +425,14 @@ impl FeedDatabase {
 
         let mut events: Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)> = Vec::new();
         while events.len() < count {
-            events.append(&mut (self
+            events.append(
+                &mut (self
                     .times
                     .iter_prefix(&prefix)
                     .filter_map(|(k, v)| {
-                        let date = Utc
-                            .ymd(
-                                u16::from_be_bytes([k[0], k[1]]) as i32,
-                                u8::from_be_bytes([k[2]]) as u32,
-                                u8::from_be_bytes([k[3]]) as u32,
-                            )
-                            .and_hms(
-                                u8::from_be_bytes([k[4]]) as u32,
-                                u8::from_be_bytes([k[5]]) as u32,
-                                u8::from_be_bytes([k[6]]) as u32,
-                            );
+                        let date = Utc.timestamp(u32::from_be_bytes(
+                            v[2..6].try_into().unwrap(),
+                        ) as i64, 0);
                         if date <= timestamp {
                             Some((date, v.into_iter().copied().collect()))
                         } else {

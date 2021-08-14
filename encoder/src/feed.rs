@@ -8,10 +8,10 @@ use uuid::Uuid;
 fn main() {
     let (snd1, rcv1) = bounded(1);
     let (snd2, rcv2) = bounded(1);
-    let n_workers = 4;
+    let n_workers = 8;
 
     let mut feed_dict: Vec<u8> = Vec::new();
-    let mut dict_f = File::open("feed.dict").unwrap();
+    let mut dict_f = File::open("zstd-dictionaries/feed.dict").unwrap();
     dict_f.read_to_end(&mut feed_dict).unwrap();
 
     crossbeam::scope(|s| {
@@ -112,19 +112,20 @@ fn main() {
                         etype: event.etype,
                         tournament: event.tournament,
                         metadata: event.metadata,
+                        phase: event.phase,
                     })
                     .encode(),
                 ))
                 .unwrap();
             }
 
-            let mut f = File::create("id_lookup.bin").unwrap();
+            let mut f = File::create("./tapes/feed/id_lookup.bin").unwrap();
             f.write_all(
                 &rmp_serde::to_vec(&(team_tag_table, player_tag_table, game_tag_table)).unwrap(),
             )
             .unwrap();
 
-            let mut tagf = File::create("tag_lookup.bin.zstd").unwrap();
+            let mut tagf = File::create("./tapes/feed/tag_lookup.bin.zstd").unwrap();
             tagf.write_all(
                 &zstd::encode_all(
                     Cursor::new(
@@ -160,7 +161,7 @@ fn main() {
 
         // Sink
         let mut position_index: Vec<(Vec<u8>, u16)> = Vec::new();
-        let out_f = File::create("feed.riv").unwrap();
+        let out_f = File::create("./tapes/feed/feed.riv").unwrap();
         let mut out = BufWriter::new(out_f);
         let mut last_position = out.stream_position().unwrap();
 
@@ -174,7 +175,7 @@ fn main() {
 
         out.flush().unwrap();
 
-        let mut trie_f = File::create("feed.fp").unwrap();
+        let mut trie_f = File::create("./tapes/feed/feed.fp").unwrap();
         trie_f
             .write_all(
                 &zstd::encode_all(
