@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
+use std::io::Write;
 use uuid::Uuid;
 
 pub struct RequestTimer;
@@ -530,6 +531,14 @@ async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
     before::build(&figment).await.unwrap()
 }
 
+async fn spinny(formatting: &str, msg: &str) {
+    for frame in vec!["[    ]","[=   ]","[==  ]","[=== ]","[ ===]","[  ==]","[   =]","[    ]","[   =]","[  ==]","[ ===]","[====]","[=== ]","[==  ]","[=   ]"].into_iter().cycle() {
+        print!("\x1b[1000D{}{} {}\x1b[0m",formatting,frame,msg);
+        std::io::stdout().flush();
+        rocket::tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+    }
+}
+
 #[rocket::launch]
 async fn build_vcr() -> rocket::Rocket<rocket::Build> {
     #[derive(serde::Deserialize)]
@@ -594,18 +603,24 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         HashMap::new()
     };
 
-    println!("Reading entities database..");
+    let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m","reading entities database"));
     let dbs = MultiDatabase::from_folder(
         PathBuf::from(config.tapes),
         dicts,
         config.entities_cache_size.unwrap_or(30),
     )
     .unwrap();
-    println!("Reading site assets...");
+    blahaj.abort();
+
+    println!("");
+
+    let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m","reading site assets"));
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
+    blahaj.abort();
+    println!("");
 
     if let Some(feed_config) = config.feed {
-        println!("Reading feed data..");
+        let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m","reading feed data"));
         let feed_db = Mutex::new(
             FeedDatabase::from_files(
                 feed_config.index,
@@ -616,6 +631,8 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
             )
             .unwrap(),
         );
+        blahaj.abort();
+        println!("");
         rocket = rocket.manage(feed_db).mount("/vcr", routes![feed]);
     }
 
