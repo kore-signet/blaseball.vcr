@@ -187,7 +187,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "before"
 version = "0.1.0"
-source = "git+https://github.com/iliana/before.git?branch=main#d56b1a517224b39dde6de37fc013613516b1fdab"
+source = "git+https://github.com/iliana/before.git?branch=main#f49533bf0a24501524cf7a36d937358b31cbac81"
 dependencies = [
  "anyhow",
  "askama",
@@ -195,6 +195,7 @@ dependencies = [
  "derive_builder",
  "either",
  "erased-serde",
+ "http-range",
  "itertools",
  "lazy_static",
  "log",
@@ -900,6 +901,12 @@ dependencies = [
  "http",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eee9694f83d9b7c09682fdb32213682939507884e5bcf227be9aff5d644b90dc"
 
 [[package]]
 name = "httparse"
