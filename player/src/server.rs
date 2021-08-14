@@ -18,10 +18,10 @@ use rocket::{
 };
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
-use std::io::Write;
 use uuid::Uuid;
 
 #[cfg(feature = "bundle_before")]
@@ -260,9 +260,13 @@ fn library(
     ))
 }
 
+#[derive(Debug)]
+struct StreamDataStep(u32);
+
 #[get("/v2/versions?<req..>")]
 fn versions(
     req: VersionsReq,
+    step: &State<StreamDataStep>,
     db: &State<MultiDatabase>,
     page_map: &State<Mutex<LruCache<String, InternalPaging>>>,
 ) -> VCRResult<RocketJson<ChroniclerResponse<ChroniclerEntity>>> {
@@ -272,23 +276,23 @@ fn versions(
         let start_time = req.after.as_ref().map_or(
             req.before.as_ref().map_or(u32::MAX, |x| {
                 DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-            }) - ((req.count.unwrap_or(1) as u32) * 5),
+            }) - ((req.count.unwrap_or(1) as u32) * step.0),
             |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
         );
 
         let end_time = req.before.map_or(
             req.after.map_or(u32::MIN, |x| {
                 DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-            }) + ((req.count.unwrap_or(1) as u32) * 5),
+            }) + ((req.count.unwrap_or(1) as u32) * step.0),
             |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
         );
 
         let mut results: Vec<ChroniclerEntity> = Vec::new();
-        for at in (start_time..end_time).into_iter().step_by(5) {
+        for at in (start_time..end_time).into_iter().step_by(step.0 as usize) {
             results.push(ChroniclerEntity {
                 entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
                 valid_from: Utc.timestamp(at as i64, 0),
-                valid_to: Some(Utc.timestamp((at + 5) as i64, 0).to_rfc3339()),
+                valid_to: Some(Utc.timestamp((at + step.0) as i64, 0).to_rfc3339()),
                 hash: String::new(),
                 data: db.stream_data(at)?,
             });
@@ -566,8 +570,14 @@ async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
 }
 
 async fn spinny(formatting: &str, msg: &str) {
-    for frame in vec!["[    ]","[=   ]","[==  ]","[=== ]","[ ===]","[  ==]","[   =]","[    ]","[   =]","[  ==]","[ ===]","[====]","[=== ]","[==  ]","[=   ]"].into_iter().cycle() {
-        print!("\x1b[1000D{}{} {}\x1b[0m",formatting,frame,msg);
+    for frame in vec![
+        "[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]", "[    ]", "[   =]",
+        "[  ==]", "[ ===]", "[====]", "[=== ]", "[==  ]", "[=   ]",
+    ]
+    .into_iter()
+    .cycle()
+    {
+        print!("\x1b[1000D{}{} {}\x1b[0m", formatting, frame, msg);
         std::io::stdout().flush();
         rocket::tokio::time::sleep(std::time::Duration::from_millis(80)).await;
     }
@@ -585,6 +595,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         entities_cache_size: Option<usize>,
         time_responses: Option<bool>,
         cors: Option<bool>,
+        stream_data_step: Option<u32>,
         #[cfg(feature = "bundle_before")]
         open_in_browser: Option<bool>,
     }
@@ -639,7 +650,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         HashMap::new()
     };
 
-    let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m","reading entities database"));
+    let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading entities database"));
     let dbs = MultiDatabase::from_folder(
         PathBuf::from(config.tapes),
         dicts,
@@ -650,13 +661,13 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
 
     println!("");
 
-    let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m","reading site assets"));
+    let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading site assets"));
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
     blahaj.abort();
     println!("");
 
     if let Some(feed_config) = config.feed {
-        let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m","reading feed data"));
+        let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading feed data"));
         let feed_db = Mutex::new(
             FeedDatabase::from_files(
                 feed_config.index,
@@ -708,6 +719,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         .manage(dbs)
         .manage(manager)
         .manage(Mutex::new(cache))
+        .manage(StreamDataStep(config.stream_data_step.unwrap_or(5)))
         .mount(
             "/vcr",
             routes![
