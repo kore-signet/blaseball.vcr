@@ -846,7 +846,7 @@ impl MultiDatabase {
         //end_measure!(standings_time);
 
         //start_measure!(leagues_time);
-        let leagues: Vec<JSONValue> = self
+        let mut leagues: Vec<JSONValue> = self
             .all_entities("league", clamp(at, 1599169238, u32::MAX))?
             .into_iter()
             .map(|t| t.data)
@@ -878,7 +878,7 @@ impl MultiDatabase {
             })
             .collect();
 
-        let subleagues: Vec<JSONValue> = self
+        let mut subleagues: Vec<JSONValue> = self
             .get_entities("subleague", subleague_ids, clamp(at, 1599169238, u32::MAX))?
             .into_iter()
             .map(|s| s.data)
@@ -899,12 +899,49 @@ impl MultiDatabase {
             .flatten()
             .collect();
 
-        let divisions: Vec<JSONValue> = self
+        let mut divisions: Vec<JSONValue> = self
             .get_entities("division", division_ids, clamp(at, 1599169238, u32::MAX))?
             .into_iter()
             .map(|d| d.data)
             .filter(|d| d != &json!({}))
             .collect();
+
+        let mut tiebreakers: Vec<JSONValue> = self
+            .get_entities(
+                "tiebreakers",
+                tiebreaker_ids,
+                clamp(at, 1599760290, u32::MAX),
+            )?
+            .into_iter()
+            .map(|t| t.data)
+            .filter(|t| t != &json!({}))
+            .collect();
+
+        if at < 1598224980 {
+            for d in &mut divisions {
+                if let Some(id) = d.get("id") {
+                    d["_id"] = id.clone();
+                }
+            }
+
+            for d in &mut subleagues {
+                if let Some(id) = d.get("id") {
+                    d["_id"] = id.clone();
+                }
+            }
+
+            for d in &mut leagues {
+                if let Some(id) = d.get("id") {
+                    d["_id"] = id.clone();
+                }
+            }
+
+            for d in &mut tiebreakers {
+                if let Some(id) = d.get("id") {
+                    d["_id"] = id.clone();
+                }
+            }
+        }
 
         //start_measure!(teams_time);
         let teams: Vec<JSONValue> = self
@@ -934,16 +971,7 @@ impl MultiDatabase {
             .collect();
         //end_measure!(stadiums_time);
 
-        let tiebreakers: Vec<JSONValue> = self
-            .get_entities(
-                "tiebreakers",
-                tiebreaker_ids,
-                clamp(at, 1599760290, u32::MAX),
-            )?
-            .into_iter()
-            .map(|t| t.data)
-            .filter(|t| t != &json!({}))
-            .collect();
+
 
         let temporal = self.get_entity("temporal", "00000000-0000-0000-0000-000000000000", at)?;
 
