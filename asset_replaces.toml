@@ -2,3 +2,8 @@
   patches = [
     { replace = "https://d35iw2jmbg6ut8.cloudfront.net/", with = "/" }
   ]
+
+[2js]
+  patches = [
+    { replace = "https://www.youtube.com/embed/", with = "/vcr/youtube/" }
+  ]
