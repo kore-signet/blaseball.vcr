@@ -6,6 +6,6 @@ members = [
   "player"
 ]
 
-# [profile.release]
-# opt-level = 'z'
-# lto = true
+[profile.release]
+opt-level = 'z'
+lto = true
