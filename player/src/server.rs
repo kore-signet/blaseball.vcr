@@ -9,8 +9,10 @@ use rocket::figment::{
 };
 use rocket::{
     get,
-    http::{ContentType, Header, Status},
-    options, routes,
+    http::{uri::Origin, ContentType, Header, Status},
+    options,
+    response::Redirect,
+    routes,
     serde::json::Json as RocketJson,
     FromForm, State,
 };
@@ -20,6 +22,9 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 use uuid::Uuid;
+
+#[cfg(feature = "bundle_before")]
+use rocket::{response::content::Html, Either};
 
 pub struct RequestTimer;
 
@@ -503,6 +508,35 @@ fn coffee() -> (Status, (ContentType, &'static str)) {
 }
 
 #[cfg(not(feature = "bundle_before"))]
+#[get("/youtube/<id>")]
+fn embed(id: &str, origin: &Origin) -> Redirect {
+    Redirect::to(format!(
+        "https://www.youtube.com/embed/{}?{}",
+        id,
+        origin.query().map(|q| q.as_str()).unwrap_or_default(),
+    ))
+}
+
+#[cfg(feature = "bundle_before")]
+#[get("/youtube/<id>")]
+fn embed(
+    id: &str,
+    origin: &Origin,
+    config: &State<before::Config>,
+) -> Either<Html<String>, Redirect> {
+    println!("{:?}", config.static_dir.join(format!("{}.webm", id)));
+    if config.static_dir.join(format!("{}.webm", id)).exists() {
+        Either::Left(Html(format!(include_str!("video.html"), id = id)))
+    } else {
+        Either::Right(Redirect::to(format!(
+            "https://www.youtube.com/embed/{}?{}",
+            id,
+            origin.query().map(|q| q.as_str()).unwrap_or_default(),
+        )))
+    }
+}
+
+#[cfg(not(feature = "bundle_before"))]
 async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
     rocket::custom(figment)
 }
@@ -554,6 +588,8 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         id_table: String,
         tag_table: String,
     }
+
+    println!("Please wait.....");
 
     // traverse from the directory where we live up until we find a Vcr.toml, then chdir there.
     if let Ok(dir) = std::env::current_exe() {
@@ -665,6 +701,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
                 versions,
                 library,
                 coffee,
+                embed,
                 cors_preflight
             ],
         )
