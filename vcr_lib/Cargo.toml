@@ -10,6 +10,7 @@ xdelta3 = "0.1.5"
 zstd = "0.9"
 crossbeam = "0.8.1"
 lru = "0.6.6"
+patricia_tree = "0.3.1"
 
 [dependencies.reqwest]
 version = "0.11.4"
@@ -20,10 +21,6 @@ version = "0.5.0-rc.1"
 
 [dependencies.uuid]
 version = "0.8.2"
-features = ["serde"]
-
-[dependencies.qp-trie]
-version = "0.7.6"
 features = ["serde"]
 
 [dependencies.chrono]

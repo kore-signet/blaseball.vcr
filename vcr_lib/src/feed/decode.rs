@@ -2,7 +2,7 @@ use super::*;
 use crate::{VCRError, VCRResult};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use lru::LruCache;
-use qp_trie::Trie;
+use patricia_tree::PatriciaMap;
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -11,7 +11,7 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 use uuid::Uuid;
 
-fn make_tries<R: Read>(mut reader: R) -> (Trie<Vec<u8>, (u64, u64)>, Trie<Vec<u8>, Vec<u8>>) {
+fn make_tries<R: Read>(mut reader: R) -> (PatriciaMap<(u64, u64)>, PatriciaMap<Vec<u8>>) {
     let mut last_position: u64 = 0;
     let mut index: Vec<(Vec<u8>, (u64, u64))> = Vec::new();
 
@@ -37,8 +37,8 @@ fn make_tries<R: Read>(mut reader: R) -> (Trie<Vec<u8>, (u64, u64)>, Trie<Vec<u8
         last_position = start_pos;
     }
 
-    let mut snowflake_trie: Trie<Vec<u8>, (u64, u64)> = Trie::new();
-    let mut time_trie: Trie<Vec<u8>, Vec<u8>> = Trie::new();
+    let mut snowflake_trie: PatriciaMap<(u64, u64)> = PatriciaMap::new();
+    let mut time_trie: PatriciaMap<Vec<u8>> = PatriciaMap::new();
 
     for (snowflake, (start_pos, end_pos)) in index {
         snowflake_trie.insert(snowflake.clone(), (start_pos, end_pos));
@@ -64,8 +64,8 @@ fn make_tries<R: Read>(mut reader: R) -> (Trie<Vec<u8>, (u64, u64)>, Trie<Vec<u8
 }
 
 pub struct FeedDatabase {
-    pub snowflakes: Trie<Vec<u8>, (u64, u64)>,
-    times: Trie<Vec<u8>, Vec<u8>>,
+    pub snowflakes: PatriciaMap<(u64, u64)>,
+    times: PatriciaMap<Vec<u8>>,
     player_index: HashMap<u16, Vec<Vec<u8>>>,
     team_index: HashMap<u8, Vec<Vec<u8>>>,
     game_index: HashMap<u16, Vec<Vec<u8>>>,
