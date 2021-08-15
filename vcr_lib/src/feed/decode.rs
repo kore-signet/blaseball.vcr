@@ -1,6 +1,7 @@
 use super::*;
 use crate::{VCRError, VCRResult};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
+use lru::LruCache;
 use qp_trie::Trie;
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
@@ -76,6 +77,7 @@ pub struct FeedDatabase {
     reverse_game_tags: HashMap<Uuid, u16>,
     reverse_team_tags: HashMap<Uuid, u8>,
     dictionary: Vec<u8>,
+    cache: LruCache<Vec<u8>, FeedEvent>,
 }
 
 impl FeedDatabase {
@@ -85,15 +87,15 @@ impl FeedDatabase {
         dict_file_path: P,
         id_table_path: P,
         idx_file_path: P,
+        cache_size: usize,
     ) -> VCRResult<FeedDatabase> {
-        let id_file = File::open(id_table_path).map_err(VCRError::IOError)?;
+        let id_file = File::open(id_table_path)?;
         let (team_tags, player_tags, game_tags) = rmp_serde::from_read::<
             File,
             (HashMap<Uuid, u8>, HashMap<Uuid, u16>, HashMap<Uuid, u16>),
-        >(id_file)
-        .unwrap(); // todo: result
+        >(id_file)?; // todo: result
 
-        let idx_file = File::open(idx_file_path).map_err(VCRError::IOError)?;
+        let idx_file = File::open(idx_file_path)?;
         let (team_idx, player_idx, game_idx) = rmp_serde::from_read_ref::<
             Vec<u8>,
             (
@@ -101,21 +103,17 @@ impl FeedDatabase {
                 HashMap<u16, Vec<Vec<u8>>>,
                 HashMap<u16, Vec<Vec<u8>>>,
             ),
-        >(&zstd::decode_all(idx_file).unwrap())
-        .unwrap();
+        >(&zstd::decode_all(idx_file).unwrap())?;
 
-        let position_index_file = File::open(position_index_path).map_err(VCRError::IOError)?;
-        let position_index_decompressor =
-            zstd::stream::Decoder::new(position_index_file).map_err(VCRError::IOError)?;
+        let position_index_file = File::open(position_index_path)?;
+        let position_index_decompressor = zstd::stream::Decoder::new(position_index_file)?;
         let (snowflakes, times) = make_tries(position_index_decompressor);
 
-        let mut dictionary_file = File::open(dict_file_path).map_err(VCRError::IOError)?;
+        let mut dictionary_file = File::open(dict_file_path)?;
         let mut dictionary: Vec<u8> = Vec::new();
-        dictionary_file
-            .read_to_end(&mut dictionary)
-            .map_err(VCRError::IOError)?;
+        dictionary_file.read_to_end(&mut dictionary)?;
 
-        let main_file = File::open(db_file_path).map_err(VCRError::IOError)?;
+        let main_file = File::open(db_file_path)?;
         let main_file_reader = BufReader::new(main_file);
 
         let mut player_index = HashMap::new();
@@ -184,42 +182,38 @@ impl FeedDatabase {
             game_index: game_index,
             team_index: team_index,
             dictionary: dictionary,
+            cache: LruCache::new(cache_size),
         })
     }
 
-    pub fn read_event(&mut self, id: &Vec<u8>) -> VCRResult<FeedEvent> {
-        if let Some(idx) = self.snowflakes.get(id) {
+    pub fn read_event(&mut self, snowflake: &Vec<u8>) -> VCRResult<FeedEvent> {
+        if let Some(ev) = self.cache.get(snowflake) {
+            return Ok(ev.clone());
+        }
+
+        if let Some(idx) = self.snowflakes.get(snowflake) {
             let compressed_bytes: Vec<u8> = if idx.1 == 0 {
                 let mut bytes: Vec<u8> = Vec::new();
-                self.reader
-                    .seek(SeekFrom::Start(idx.0))
-                    .map_err(VCRError::IOError)?;
-                self.reader
-                    .read_to_end(&mut bytes)
-                    .map_err(VCRError::IOError)?;
+                self.reader.seek(SeekFrom::Start(idx.0))?;
+                self.reader.read_to_end(&mut bytes)?;
                 bytes
             } else {
                 let mut bytes: Vec<u8> = vec![0; (idx.1 - idx.0) as usize];
 
-                self.reader
-                    .seek(SeekFrom::Start(idx.0))
-                    .map_err(VCRError::IOError)?;
+                self.reader.seek(SeekFrom::Start(idx.0))?;
 
-                self.reader
-                    .read_exact(&mut bytes)
-                    .map_err(VCRError::IOError)?;
+                self.reader.read_exact(&mut bytes)?;
                 bytes
             };
 
-            let season = i8::from_be_bytes([id[0]]);
-            let phase = u8::from_be_bytes([id[1]]);
-            let timestamp = u32::from_be_bytes(id[2..6].try_into().unwrap());
+            let season = i8::from_be_bytes([snowflake[0]]);
+            let phase = u8::from_be_bytes([snowflake[1]]);
+            let timestamp = u32::from_be_bytes(snowflake[2..6].try_into().unwrap());
 
             let mut decoder = zstd::stream::Decoder::with_dictionary(
                 Cursor::new(compressed_bytes),
                 &self.dictionary,
-            )
-            .map_err(VCRError::IOError)?;
+            )?;
 
             let mut category: [u8; 1] = [0; 1];
             let mut etype: [u8; 2] = [0; 2];
@@ -227,62 +221,42 @@ impl FeedDatabase {
 
             let id = if phase == 13 {
                 let mut uuid: [u8; 16] = [0; 16];
-                decoder.read_exact(&mut uuid).map_err(VCRError::IOError)?;
+                decoder.read_exact(&mut uuid)?;
                 Uuid::from_bytes(uuid)
             } else {
                 Uuid::nil()
             };
 
-            decoder
-                .read_exact(&mut category)
-                .map_err(VCRError::IOError)?;
-            decoder.read_exact(&mut etype).map_err(VCRError::IOError)?;
-            decoder.read_exact(&mut day).map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut category)?;
+            decoder.read_exact(&mut etype)?;
+            decoder.read_exact(&mut day)?;
 
             let mut description_len_bytes: [u8; 2] = [0; 2];
-            decoder
-                .read_exact(&mut description_len_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut description_len_bytes)?;
             let description_len = u16::from_be_bytes(description_len_bytes);
             let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
-            decoder
-                .read_exact(&mut description_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut description_bytes)?;
 
             let mut player_tag_len_bytes: [u8; 1] = [0; 1];
-            decoder
-                .read_exact(&mut player_tag_len_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut player_tag_len_bytes)?;
             let player_tag_len = u8::from_be_bytes(player_tag_len_bytes);
             let mut player_tag_bytes: Vec<u8> = vec![0; (player_tag_len * 2) as usize];
-            decoder
-                .read_exact(&mut player_tag_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut player_tag_bytes)?;
 
             let mut team_tag_len_bytes: [u8; 1] = [0; 1];
-            decoder
-                .read_exact(&mut team_tag_len_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut team_tag_len_bytes)?;
             let team_tag_len = u8::from_be_bytes(team_tag_len_bytes);
             let mut team_tag_bytes: Vec<u8> = vec![0; team_tag_len as usize];
-            decoder
-                .read_exact(&mut team_tag_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut team_tag_bytes)?;
 
             let mut game_tag_len_bytes: [u8; 1] = [0; 1];
-            decoder
-                .read_exact(&mut game_tag_len_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut game_tag_len_bytes)?;
             let game_tag_len = u8::from_be_bytes(game_tag_len_bytes);
             let mut game_tag_bytes: Vec<u8> = vec![0; (game_tag_len * 2) as usize];
-            decoder
-                .read_exact(&mut game_tag_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_exact(&mut game_tag_bytes)?;
 
             let mut metadata_bytes: Vec<u8> = Vec::new();
-            decoder
-                .read_to_end(&mut metadata_bytes)
-                .map_err(VCRError::IOError)?;
+            decoder.read_to_end(&mut metadata_bytes)?;
 
             let player_tags: Vec<Uuid> = {
                 let mut player_tag_ids: Vec<u16> = Vec::new();
@@ -326,9 +300,9 @@ impl FeedDatabase {
                     .collect()
             };
 
-            let metadata: JSONValue = rmp_serde::from_read_ref(&metadata_bytes).unwrap();
+            let metadata: JSONValue = rmp_serde::from_read_ref(&metadata_bytes)?;
 
-            Ok(FeedEvent {
+            let ev = FeedEvent {
                 id: id,
                 category: i8::from_be_bytes(category),
                 created: Utc.timestamp(timestamp as i64, 0),
@@ -343,7 +317,10 @@ impl FeedDatabase {
                 tournament: -1,
                 description: String::from_utf8(description_bytes).unwrap(),
                 metadata: metadata,
-            })
+            };
+
+            self.cache.put(snowflake.clone(), ev.clone());
+            Ok(ev)
         } else {
             Err(VCRError::EntityNotFound)
         }
@@ -372,11 +349,10 @@ impl FeedDatabase {
                 self.times
                     .iter_prefix(&prefix)
                     .filter_map(|(k, v)| {
-                        let date = Utc.timestamp(u32::from_be_bytes(
-                            v[2..6].try_into().unwrap(),
-                        ) as i64, 0);
+                        let date = Utc
+                            .timestamp(u32::from_be_bytes(v[2..6].try_into().unwrap()) as i64, 0);
                         if date >= timestamp {
-                            Some((date, v.into_iter().copied().collect()))
+                            Some((date, v.clone()))
                         } else {
                             None
                         }
@@ -430,11 +406,10 @@ impl FeedDatabase {
                     .times
                     .iter_prefix(&prefix)
                     .filter_map(|(k, v)| {
-                        let date = Utc.timestamp(u32::from_be_bytes(
-                            v[2..6].try_into().unwrap(),
-                        ) as i64, 0);
+                        let date = Utc
+                            .timestamp(u32::from_be_bytes(v[2..6].try_into().unwrap()) as i64, 0);
                         if date <= timestamp {
-                            Some((date, v.into_iter().copied().collect()))
+                            Some((date, v.clone()))
                         } else {
                             None
                         }
@@ -476,7 +451,7 @@ impl FeedDatabase {
         let ids = self
             .snowflakes
             .iter_prefix(&[season.to_be_bytes(), phase.to_be_bytes()].concat())
-            .map(|(k, _)| k.into_iter().copied().collect())
+            .map(|(k, _)| k.clone())
             .take(count)
             .collect::<Vec<Vec<u8>>>();
 

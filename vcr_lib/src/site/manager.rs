@@ -95,7 +95,7 @@ impl ResourceManager {
         let mut delta_file = self.resources[name].lock().unwrap();
         let header = &self.headers[name];
 
-        let mut res: Vec<u8> = header.basis.iter().copied().collect();
+        let mut res: Vec<u8> = header.basis.clone();
 
         for idx in 0..delta_idx + 1 {
             let (offset, length, _) = header.deltas[idx as usize];

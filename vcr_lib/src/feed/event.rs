@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FeedEvent {
     pub id: Uuid,
@@ -49,9 +49,7 @@ impl FeedEvent {
         [
             self.season.to_be_bytes().to_vec(),
             self.phase.to_be_bytes().to_vec(),
-            (self.created.timestamp() as u32)
-                .to_be_bytes()
-                .to_vec(),
+            (self.created.timestamp() as u32).to_be_bytes().to_vec(),
             self.id.as_bytes()[0..2].to_vec(),
         ]
         .concat()

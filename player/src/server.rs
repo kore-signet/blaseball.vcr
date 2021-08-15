@@ -607,6 +607,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         dict: String,
         id_table: String,
         tag_table: String,
+        cache_size: Option<usize>,
     }
 
     println!("Please wait.....");
@@ -675,6 +676,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
                 feed_config.dict,
                 feed_config.id_table,
                 feed_config.tag_table,
+                feed_config.cache_size.unwrap_or(50),
             )
             .unwrap(),
         );

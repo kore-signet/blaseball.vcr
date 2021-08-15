@@ -77,6 +77,7 @@ fn main() {
             etype: event.etype,
             tournament: event.tournament,
             metadata: event.metadata,
+            phase: event.phase,
         }
         .encode();
         feed_sample_lens.push(ev_bytes.len());

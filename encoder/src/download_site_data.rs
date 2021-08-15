@@ -49,7 +49,7 @@ pub fn encode_resource<W: Write + Seek>(
         .copy_to(&mut basis)
         .map_err(VCRError::ReqwestError)?;
 
-    let mut last: Vec<u8> = basis.iter().copied().collect();
+    let mut last: Vec<u8> = basis.clone();
 
     let mut deltas: Vec<(u64, u64, String)> = Vec::new();
     let mut paths: Vec<(DateTime<Utc>, String, u16)> = Vec::new();

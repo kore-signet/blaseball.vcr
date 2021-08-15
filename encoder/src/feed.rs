@@ -8,7 +8,7 @@ use uuid::Uuid;
 fn main() {
     let (snd1, rcv1) = bounded(1);
     let (snd2, rcv2) = bounded(1);
-    let n_workers = 8;
+    let n_workers = 4;
 
     let mut feed_dict: Vec<u8> = Vec::new();
     let mut dict_f = File::open("zstd-dictionaries/feed.dict").unwrap();
