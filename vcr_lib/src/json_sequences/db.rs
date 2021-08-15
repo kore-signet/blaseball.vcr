@@ -11,6 +11,8 @@ use std::time::Instant;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde_json::{json, Value as JSONValue};
 
+use zstd::dict::DecoderDictionary;
+
 use lru::LruCache;
 
 use json_patch::{
@@ -47,7 +49,7 @@ fn clamp(input: u32, min: u32, max: u32) -> u32 {
 pub struct Database {
     reader: BufReader<File>,
     entities: HashMap<String, EntityData>,
-    dictionary: Option<Vec<u8>>,
+    dictionary: Option<DecoderDictionary<'static>>,
     entity_cache: LruCache<(String, u32, u32), ChroniclerEntity>,
 }
 
@@ -67,7 +69,7 @@ impl Database {
             let mut dict_f = File::open(dict_f_path).map_err(VCRError::IOError)?;
             let mut dict = Vec::new();
             dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
-            Some(dict)
+            Some(DecoderDictionary::copy(&dict))
         } else {
             None
         };
@@ -122,7 +124,7 @@ impl Database {
                 .map_err(VCRError::IOError)?;
 
             let mut e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
-                let mut decoder = zstd::stream::Decoder::with_dictionary(
+                let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
                     Cursor::new(compressed_bytes),
                     compress_dict,
                 )

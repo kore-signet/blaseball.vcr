@@ -10,6 +10,7 @@ use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 use uuid::Uuid;
+use zstd::dict::DecoderDictionary;
 
 fn make_tries<R: Read>(mut reader: R) -> (PatriciaMap<(u64, u64)>, PatriciaMap<Vec<u8>>) {
     let mut last_position: u64 = 0;
@@ -76,7 +77,7 @@ pub struct FeedDatabase {
     reverse_player_tags: HashMap<Uuid, u16>,
     reverse_game_tags: HashMap<Uuid, u16>,
     reverse_team_tags: HashMap<Uuid, u8>,
-    dictionary: Vec<u8>,
+    dictionary: DecoderDictionary<'static>,
     cache: LruCache<Vec<u8>, FeedEvent>,
 }
 
@@ -181,7 +182,7 @@ impl FeedDatabase {
             player_index: player_index,
             game_index: game_index,
             team_index: team_index,
-            dictionary: dictionary,
+            dictionary: DecoderDictionary::copy(&dictionary),
             cache: LruCache::new(cache_size),
         })
     }
@@ -210,7 +211,7 @@ impl FeedDatabase {
             let phase = u8::from_be_bytes([snowflake[1]]);
             let timestamp = u32::from_be_bytes(snowflake[2..6].try_into().unwrap());
 
-            let mut decoder = zstd::stream::Decoder::with_dictionary(
+            let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
                 Cursor::new(compressed_bytes),
                 &self.dictionary,
             )?;
@@ -342,13 +343,12 @@ impl FeedDatabase {
         ]
         .concat();
 
-        let mut ids = Vec::new();
-
-        while ids.len() < 1 {
-            ids.extend(
+        let mut events: Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)> = Vec::with_capacity(count * 2);
+        while events.len() < count {
+            events.extend(
                 self.times
                     .iter_prefix(&prefix)
-                    .filter_map(|(k, v)| {
+                    .filter_map(|(_, v)| {
                         let date = Utc
                             .timestamp(u32::from_be_bytes(v[2..6].try_into().unwrap()) as i64, 0);
                         if date >= timestamp {
@@ -357,28 +357,26 @@ impl FeedDatabase {
                             None
                         }
                     })
-                    .take(count - ids.len()),
+                    .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>()
+                    .into_iter()
+                    .map(|(t, v)| (t, self.read_event(&v).unwrap(), v))
+                    .filter_map(|(t, e, v)| {
+                        if category == -3 || e.category == category {
+                            Some((t, e, v))
+                        } else {
+                            None
+                        }
+                    }),
             );
 
             prefix.pop();
         }
 
-        ids.sort_by_key(|(t, _)| t.clone());
-
-        Ok(ids
-            .iter()
-            .map(|(_, snowflake)| {
-                self.read_event(snowflake).map(|e| {
-                    if category == -3 || e.category == category {
-                        Some(e)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .collect::<VCRResult<Vec<Option<FeedEvent>>>>()?
+        events.sort_by_key(|&(t, _, _)| t);
+        events.reverse();
+        Ok(events
             .into_iter()
-            .filter_map(|s| s)
+            .map(|(_, e, _)| e)
             .take(count)
             .collect::<Vec<FeedEvent>>())
     }
@@ -399,13 +397,12 @@ impl FeedDatabase {
         ]
         .concat();
 
-        let mut events: Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)> = Vec::new();
+        let mut events: Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)> = Vec::with_capacity(count * 2);
         while events.len() < count {
-            events.append(
-                &mut (self
-                    .times
+            events.extend(
+                self.times
                     .iter_prefix(&prefix)
-                    .filter_map(|(k, v)| {
+                    .filter_map(|(_, v)| {
                         let date = Utc
                             .timestamp(u32::from_be_bytes(v[2..6].try_into().unwrap()) as i64, 0);
                         if date <= timestamp {
@@ -416,17 +413,14 @@ impl FeedDatabase {
                     })
                     .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>()
                     .into_iter()
-                    .map(|(t, v)| Ok((t, self.read_event(&v)?, v)))
-                    .collect::<VCRResult<Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)>>>()?
-                    .into_iter()
+                    .map(|(t, v)| (t, self.read_event(&v).unwrap(), v)) // so, not unwrapping here means collecting twice. personally i'm ok trading that off for now, though it might not be worth it.
                     .filter_map(|(t, e, v)| {
                         if category == -3 || e.category == category {
                             Some((t, e, v))
                         } else {
                             None
                         }
-                    })
-                    .collect::<Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)>>()),
+                    }),
             );
 
             prefix.pop();
@@ -434,7 +428,6 @@ impl FeedDatabase {
 
         events.sort_by_key(|&(t, _, _)| t);
         events.reverse();
-        events.dedup_by_key(|(_, _, v)| v.clone()); // .clone() :ballclark:
         Ok(events
             .into_iter()
             .map(|(_, e, _)| e)
