@@ -791,10 +791,15 @@ impl MultiDatabase {
         let mut date = GameDate {
             season: sim.data.get("season").unwrap().as_i64().unwrap() as i32,
             day: sim.data.get("day").unwrap().as_i64().unwrap() as i32,
-            tournament: sim
-                .data
-                .get("tournament")
-                .map(|x| x.as_i64().unwrap() as i32),
+            tournament: if sim.data.get("season") == Some(&json!(10))
+                && sim.data["day"].as_i64().unwrap() < 100
+            {
+                Some(-1)
+            } else {
+                sim.data
+                    .get("tournament")
+                    .map(|x| x.as_i64().unwrap() as i32)
+            },
         };
 
         if let Some(i) = date.tournament {
@@ -821,6 +826,7 @@ impl MultiDatabase {
                 .map(|g| g.data)
                 .collect()
         };
+
         //end_measure!(schedule_time);
         date.day += 1;
 
