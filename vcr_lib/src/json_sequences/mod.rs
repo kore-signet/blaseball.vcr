@@ -7,7 +7,6 @@ pub use db::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
 use serde_json::{json, Value as JSONValue};
 
 use json_patch::Patch as JSONPatch;
@@ -29,24 +28,6 @@ pub struct EntityData {
 
 fn default_base() -> JSONValue {
     json!({})
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
-pub struct GameDate {
-    pub day: i32,
-    pub season: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tournament: Option<i32>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct ChronV1Game {
-    pub game_id: String,
-    pub start_time: Option<DateTime<Utc>>,
-    pub end_time: Option<DateTime<Utc>>,
-    pub data: JSONValue,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

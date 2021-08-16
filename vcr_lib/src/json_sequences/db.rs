@@ -6,7 +6,6 @@ use std::fs::{read_dir, File};
 use std::io::{self, prelude::*, BufReader, Cursor, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Instant;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde_json::{json, Value as JSONValue};
@@ -19,22 +18,6 @@ use json_patch::{
     patch_unsafe as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
     PatchOperation, PatchOperation::*, RemoveOperation, ReplaceOperation, TestOperation,
 };
-
-macro_rules! start_measure {
-    ($t:tt) => {
-        let $t = Instant::now();
-    };
-}
-
-macro_rules! end_measure {
-    ($t:tt) => {
-        println!(
-            "\x1b[1;31m{}:\x1b[0m {}ms",
-            stringify!($t),
-            $t.elapsed().as_millis()
-        );
-    };
-}
 
 fn clamp(input: u32, min: u32, max: u32) -> u32 {
     if input < min {
@@ -779,10 +762,7 @@ impl MultiDatabase {
     }
 
     pub fn stream_data(&self, at: u32) -> VCRResult<JSONValue> {
-        //start_measure!(sim_time);
-        //start_measure!(total_time);
         let sim = self.get_entity("sim", "00000000-0000-0000-0000-000000000000", at)?;
-        //end_measure!(sim_time);
 
         let mut date = GameDate {
             season: sim.data.get("season").unwrap().as_i64().unwrap() as i32,
@@ -824,33 +804,24 @@ impl MultiDatabase {
                 .collect()
         };
 
-        //end_measure!(schedule_time);
         date.day += 1;
 
-        //start_measure!(tomorrow_schedule_time);
         let tomorrow_schedule: Vec<JSONValue> = self
             .games_by_date_and_time(&date, at)?
             .into_iter()
             .map(|g| g.data)
             .filter(|g| g != &json!({}))
             .collect();
-        //end_measure!(tomorrow_schedule_time);
-
-        //start_measure!(season_time);
 
         let season = self
             .all_entities("season", at)?
             .into_iter()
             .find(|s| s.data["seasonNumber"] == sim.data["season"])
             .unwrap();
-        //end_measure!(season_time);
 
-        //start_measure!(standings_time);
         let standings =
             self.get_entity("standings", season.data["standings"].as_str().unwrap(), at)?;
-        //end_measure!(standings_time);
 
-        //start_measure!(leagues_time);
         let mut leagues: Vec<JSONValue> = self
             .all_entities("league", clamp(at, 1599169238, u32::MAX))?
             .into_iter()
@@ -858,7 +829,6 @@ impl MultiDatabase {
             .filter(|t| t != &json!({}))
             .collect();
 
-        //start_measure!(subleagues_time);
         let subleague_ids: Vec<String> = leagues
             .iter()
             .map(|x| {
@@ -889,7 +859,6 @@ impl MultiDatabase {
             .map(|s| s.data)
             .filter(|s| s != &json!({}))
             .collect();
-        //end_measure!(subleagues_time);
 
         let division_ids: Vec<String> = subleagues
             .iter()
@@ -948,16 +917,12 @@ impl MultiDatabase {
             }
         }
 
-        //start_measure!(teams_time);
         let teams: Vec<JSONValue> = self
             .all_entities("team", at)?
             .into_iter()
             .map(|t| t.data)
             .filter(|t| t != &json!({}))
             .collect();
-        //end_measure!(teams_time);
-
-        //start_measure!(fights_time);
 
         let fights: Vec<JSONValue> = self
             .all_entities("bossfight", at)?
@@ -965,16 +930,13 @@ impl MultiDatabase {
             .map(|b| b.data)
             .filter(|b| b != &json!({}) && b["homeHp"] != json!("0") && b["awayHp"] != json!("0"))
             .collect();
-        //end_measure!(fights_time);
 
-        //start_measure!(stadiums_time);
         let stadiums: Vec<JSONValue> = self
             .all_entities("stadium", at)?
             .into_iter()
             .map(|s| s.data)
             .filter(|s| s != &json!({}))
             .collect();
-        //end_measure!(stadiums_time);
 
         let temporal = self.get_entity("temporal", "00000000-0000-0000-0000-000000000000", at)?;
 
@@ -985,8 +947,6 @@ impl MultiDatabase {
             "00000000-0000-0000-0000-000000000000",
             at,
         )?;
-
-        //start_measure!(tournaments_and_playoffs);
 
         let tournament = if let Some(tourn_idx) = date.tournament {
             if tourn_idx > -1 {
@@ -1030,9 +990,6 @@ impl MultiDatabase {
                 ("postseason", json!({}))
             }
         };
-        //end_measure!(tournaments_and_playoffs);
-
-        //end_measure!(total_time);
 
         // println!("---------------\n");
 
