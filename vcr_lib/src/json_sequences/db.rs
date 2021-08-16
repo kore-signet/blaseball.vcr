@@ -50,7 +50,7 @@ pub struct Database {
     reader: BufReader<File>,
     entities: HashMap<String, EntityData>,
     dictionary: Option<DecoderDictionary<'static>>,
-    entity_cache: LruCache<(String, u32, u32), ChroniclerEntity>,
+    entity_cache: LruCache<(String, usize), ChroniclerEntity>,
 }
 
 impl Database {
@@ -87,6 +87,7 @@ impl Database {
         entity: &str,
         until: u32,
         skip_to_checkpoint: bool,
+        from_index: usize,
     ) -> VCRResult<Vec<(u32, Patch)>> {
         let metadata = &self.entities.get(entity).ok_or(VCRError::EntityNotFound)?;
 
@@ -108,6 +109,7 @@ impl Database {
             metadata
                 .patches
                 .iter()
+                .skip(from_index)
                 .copied()
                 .take_while(|x| x.0 <= until)
                 .collect()
@@ -129,13 +131,13 @@ impl Database {
                     compress_dict,
                 )
                 .map_err(VCRError::IOError)?;
-                let mut res = Vec::new();
+                let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
                 decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
                 res
             } else {
                 let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))
                     .map_err(VCRError::IOError)?;
-                let mut res = Vec::new();
+                let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
                 decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
                 res
             };
@@ -235,7 +237,7 @@ impl Database {
             .ok_or(VCRError::EntityNotFound)?
             .base
             .clone();
-        let patches = self.get_entity_data(entity, before, false)?;
+        let patches = self.get_entity_data(entity, before, false, 0)?;
         let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
 
         for (time, patch) in patches {
@@ -273,39 +275,32 @@ impl Database {
             .base
             .clone();
 
-        let patch_location = {
-            let (start, end) = match self.entities[entity]
-                .patches
-                .binary_search_by_key(&at, |(t, _, _)| *t)
-            {
-                Ok(idx) => (idx, idx + 1),
-                Err(idx) => (idx.checked_sub(1).unwrap_or(0), idx + 1),
-            };
-
-            (
-                entity.to_owned(),
-                self.entities[entity]
-                    .patches
-                    .get(start)
-                    .unwrap_or(&(0, 0, 0))
-                    .0,
-                self.entities[entity]
-                    .patches
-                    .get(end)
-                    .unwrap_or(&(u32::MAX, 0, 0))
-                    .0,
-            )
+        let patch_idx = match self.entities[entity]
+            .patches
+            .binary_search_by_key(&at, |(t, _, _)| *t)
+        {
+            Ok(idx) => idx,
+            Err(idx) => idx.checked_sub(1).unwrap_or(0),
         };
 
-        if patch_location.1 != 0 && patch_location.2 != u32::MAX {
-            if let Some(val) = self.entity_cache.get(&patch_location) {
+        if patch_idx > 0 {
+            if let Some(val) = self.entity_cache.get(&(entity.to_owned(), patch_idx)) {
                 return Ok(val.clone());
+            }
+        }
+
+        let mut patch_data_idx = 0;
+
+        if self.entities[entity].checkpoint_every != u32::MAX && patch_idx > 0 {
+            if let Some(val) = self.entity_cache.get(&(entity.to_owned(), patch_idx - 1)) {
+                entity_value = val.data.clone();
+                patch_data_idx = patch_idx - 1;
             }
         }
 
         let mut last_time = 0;
 
-        for (time, patch) in self.get_entity_data(entity, at, true)? {
+        for (time, patch) in self.get_entity_data(entity, at, true, patch_data_idx)? {
             match patch {
                 Patch::ReplaceRoot(v) => {
                     entity_value = v.clone();
@@ -328,8 +323,9 @@ impl Database {
             hash: String::new(),
         };
 
-        if patch_location.1 != 0 && patch_location.2 != u32::MAX {
-            self.entity_cache.put(patch_location, e.clone());
+        if patch_idx != 0 {
+            self.entity_cache
+                .put((entity.to_owned(), patch_idx), e.clone());
         }
 
         Ok(e)
@@ -343,7 +339,7 @@ impl Database {
             .base
             .clone();
 
-        let patches = self.get_entity_data(entity, u32::MAX, true)?;
+        let patches = self.get_entity_data(entity, u32::MAX, true, 0)?;
         let (time, patch) = &patches[0];
 
         match patch {
@@ -792,7 +788,8 @@ impl MultiDatabase {
             season: sim.data.get("season").unwrap().as_i64().unwrap() as i32,
             day: sim.data.get("day").unwrap().as_i64().unwrap() as i32,
             tournament: if sim.data.get("season") == Some(&json!(10))
-                && sim.data["day"].as_i64().unwrap() < 100 && sim.data.get("tournament").is_none()
+                && sim.data["day"].as_i64().unwrap() < 100
+                && sim.data.get("tournament").is_none()
             {
                 Some(-1)
             } else {
