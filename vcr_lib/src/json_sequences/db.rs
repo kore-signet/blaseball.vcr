@@ -792,7 +792,7 @@ impl MultiDatabase {
             season: sim.data.get("season").unwrap().as_i64().unwrap() as i32,
             day: sim.data.get("day").unwrap().as_i64().unwrap() as i32,
             tournament: if sim.data.get("season") == Some(&json!(10))
-                && sim.data["day"].as_i64().unwrap() < 100
+                && sim.data["day"].as_i64().unwrap() < 100 && sim.data.get("tournament").is_none()
             {
                 Some(-1)
             } else {
