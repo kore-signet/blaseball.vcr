@@ -45,11 +45,18 @@ pub struct CompactedFeedEvent {
 }
 
 impl FeedEvent {
-    pub fn generate_id(&self) -> Vec<u8> {
+    pub fn generate_id(&self, millis_epoch: Option<u32>) -> Vec<u8> {
+        let timestamp = match millis_epoch {
+            Some(epoch) => {
+                let epoch = (epoch as i64) * 1000;
+                (self.created.timestamp_millis() - epoch) as u32
+            }
+            None => self.created.timestamp() as u32,
+        };
         [
             self.season.to_be_bytes().to_vec(),
             self.phase.to_be_bytes().to_vec(),
-            (self.created.timestamp() as u32).to_be_bytes().to_vec(),
+            timestamp.to_be_bytes().to_vec(),
             self.id.as_bytes()[0..2].to_vec(),
         ]
         .concat()

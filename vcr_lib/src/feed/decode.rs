@@ -77,6 +77,7 @@ pub struct FeedDatabase {
     reverse_player_tags: HashMap<Uuid, u16>,
     reverse_game_tags: HashMap<Uuid, u16>,
     reverse_team_tags: HashMap<Uuid, u8>,
+    millis_epoch_table: HashMap<(i8, u8), u32>,
     dictionary: DecoderDictionary<'static>,
     cache: LruCache<Vec<u8>, FeedEvent>,
 }
@@ -91,9 +92,14 @@ impl FeedDatabase {
         cache_size: usize,
     ) -> VCRResult<FeedDatabase> {
         let id_file = File::open(id_table_path)?;
-        let (team_tags, player_tags, game_tags) = rmp_serde::from_read::<
+        let (team_tags, player_tags, game_tags, millis_epoch_table) = rmp_serde::from_read::<
             File,
-            (HashMap<Uuid, u8>, HashMap<Uuid, u16>, HashMap<Uuid, u16>),
+            (
+                HashMap<Uuid, u8>,
+                HashMap<Uuid, u16>,
+                HashMap<Uuid, u16>,
+                HashMap<(i8, u8), u32>,
+            ),
         >(id_file)?; // todo: result
 
         let idx_file = File::open(idx_file_path)?;
@@ -182,6 +188,7 @@ impl FeedDatabase {
             player_index: player_index,
             game_index: game_index,
             team_index: team_index,
+            millis_epoch_table,
             dictionary: DecoderDictionary::copy(&dictionary),
             cache: LruCache::new(cache_size),
         })
@@ -209,7 +216,11 @@ impl FeedDatabase {
 
             let season = i8::from_be_bytes([snowflake[0]]);
             let phase = u8::from_be_bytes([snowflake[1]]);
-            let timestamp = u32::from_be_bytes(snowflake[2..6].try_into().unwrap());
+            let timestamp_raw = u32::from_be_bytes(snowflake[2..6].try_into().unwrap());
+            let timestamp = match self.millis_epoch_table.get(&(season, phase)) {
+                Some(epoch) => (*epoch as i64) * 1000 + (timestamp_raw as i64),
+                None => (timestamp_raw as i64) * 1000,
+            };
 
             let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
                 Cursor::new(compressed_bytes),
@@ -306,7 +317,7 @@ impl FeedDatabase {
             let ev = FeedEvent {
                 id: id,
                 category: i8::from_be_bytes(category),
-                created: Utc.timestamp(timestamp as i64, 0),
+                created: Utc.timestamp_millis(timestamp),
                 day: i16::from_be_bytes(day),
                 season: season,
                 nuts: 0,
