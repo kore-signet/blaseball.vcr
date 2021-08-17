@@ -1,4 +1,5 @@
 use blaseball_vcr::feed::{CompactedFeedEvent, FeedEvent};
+use chrono::{Duration, DurationRound};
 use crossbeam::channel::bounded;
 use std::collections::HashMap;
 use std::fs::File;
@@ -20,6 +21,7 @@ fn main() {
             let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
             let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
             let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
+            let mut millis_epoch_table: HashMap<(i8, u8), u32> = HashMap::new();
             let mut player_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
             let mut game_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
             let mut team_tag_idx: HashMap<u8, Vec<Vec<u8>>> = HashMap::new();
@@ -29,7 +31,24 @@ fn main() {
 
             for l in reader.lines() {
                 let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
-                let snowflake_id = event.generate_id();
+
+                let millis_epoch = if event.season >= 11 && [3, 5, 13].contains(&event.phase) {
+                    Some(
+                        millis_epoch_table
+                            .entry((event.season, event.phase))
+                            .or_insert(
+                                event
+                                    .created
+                                    .duration_trunc(Duration::hours(1))
+                                    .unwrap()
+                                    .timestamp() as u32,
+                            ),
+                    )
+                } else {
+                    None
+                };
+
+                let snowflake_id = event.generate_id(millis_epoch.copied());
                 let compact_player_tags: Vec<u16> = event
                     .player_tags
                     .clone()
@@ -121,7 +140,13 @@ fn main() {
 
             let mut f = File::create("./tapes/feed/id_lookup.bin").unwrap();
             f.write_all(
-                &rmp_serde::to_vec(&(team_tag_table, player_tag_table, game_tag_table)).unwrap(),
+                &rmp_serde::to_vec(&(
+                    team_tag_table,
+                    player_tag_table,
+                    game_tag_table,
+                    millis_epoch_table,
+                ))
+                .unwrap(),
             )
             .unwrap();
 
