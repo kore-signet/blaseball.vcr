@@ -26,19 +26,26 @@ pub fn versions(
             |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
         );
 
+        let step = if req.after.is_some() && (1596747150..1596747270).contains(&start_time) {
+            // grand unslam workaround
+            1
+        } else {
+            step.0
+        };
+
         let end_time = req.before.map_or(
             req.after.map_or(u32::MIN, |x| {
                 DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
-            }) + ((req.count.unwrap_or(1) as u32) * step.0),
+            }) + ((req.count.unwrap_or(1) as u32) * step),
             |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
         );
 
         let mut results: Vec<ChroniclerEntity> = Vec::new();
-        for at in (start_time..end_time).into_iter().step_by(step.0 as usize) {
+        for at in (start_time..end_time).into_iter().step_by(step as usize) {
             results.push(ChroniclerEntity {
                 entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
                 valid_from: Utc.timestamp(at as i64, 0),
-                valid_to: Some(Utc.timestamp((at + step.0) as i64, 0).to_rfc3339()),
+                valid_to: Some(Utc.timestamp((at + step) as i64, 0).to_rfc3339()),
                 hash: String::new(),
                 data: db.stream_data(at)?,
             });
