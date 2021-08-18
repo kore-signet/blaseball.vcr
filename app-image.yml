@@ -17,8 +17,8 @@ script:
   - mkdir  AppDir/usr/bin
   - rsync --recursive -P zstd-dictionaries/ AppDir/usr/share/blaseball-vcr/zstd-dictionaries/
   - rsync --recursive -P tapes/ AppDir/usr/share/blaseball-vcr/tapes/ --exclude feed
-  - cargo build -p player --release
-  - mv target/release/player AppDir/usr/bin/blaseball-vcr
+  - RUSTFLAGS='-C target-feature=+crt-static' cargo build -p player --release --target x86_64-unknown-linux-gnu
+  - mv target/x86_64-unknown-linux-gnu/release/player AppDir/usr/bin/blaseball-vcr
   - cp configs/Vcr-AppImage.toml AppDir/Vcr.toml
 
 
