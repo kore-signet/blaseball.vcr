@@ -5,3 +5,5 @@ datasets.tar.bz2
 tapes/
 tapes.tar.bz2
 tapes.tar.gz
+AppDir
+appimage-builder-cache

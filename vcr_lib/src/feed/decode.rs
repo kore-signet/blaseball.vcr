@@ -384,7 +384,7 @@ impl FeedDatabase {
         }
 
         events.sort_by_key(|&(t, _, _)| t);
-        events.dedup_by_key(|(_,_,s)| s.clone()); // clone :ballclark: (i don't know how i could avoid it here so, here we are.)
+        events.dedup_by_key(|(_, _, s)| s.clone()); // clone :ballclark: (i don't know how i could avoid it here so, here we are.)
         Ok(events
             .into_iter()
             .map(|(_, e, _)| e)
@@ -438,7 +438,7 @@ impl FeedDatabase {
         }
 
         events.sort_by_key(|&(t, _, _)| t);
-        events.dedup_by_key(|(_,_,s)| s.clone()); // clone :ballclark: (i don't know how i could avoid it here so, here we are.)
+        events.dedup_by_key(|(_, _, s)| s.clone()); // clone :ballclark: (i don't know how i could avoid it here so, here we are.)
         events.reverse();
         Ok(events
             .into_iter()

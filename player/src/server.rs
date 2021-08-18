@@ -9,7 +9,7 @@ use rocket::{
     get,
     http::{uri::Origin, ContentType, Status},
     response::Redirect,
-    routes, State,
+    routes
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -124,14 +124,16 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         cache_size: Option<usize>,
     }
 
-    println!("Please wait.....");
-
-    // traverse from the directory where we live up until we find a Vcr.toml, then chdir there.
-    if let Ok(dir) = std::env::current_exe() {
-        if let Some(new_dir) = dir.ancestors().find(|d| d.join("Vcr.toml").exists()) {
-            std::env::set_current_dir(new_dir).unwrap();
+    if let Some((_, path)) = std::env::vars().find(|(k, _)| k == "APPDIR") {
+        std::env::set_current_dir(path).unwrap();
+    } else {
+        // traverse from the directory where we live up until we find a Vcr.toml, then chdir there.
+        if let Ok(dir) = std::env::current_exe() {
+            if let Some(new_dir) = dir.ancestors().find(|d| d.join("Vcr.toml").exists()) {
+                std::env::set_current_dir(new_dir).unwrap();
+            }
         }
-    }
+    };
 
     let figment = Figment::from(rocket::Config::default())
         .merge(Toml::file("Vcr.toml").nested())
