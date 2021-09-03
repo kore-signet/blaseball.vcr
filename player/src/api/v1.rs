@@ -90,7 +90,6 @@ pub fn games(
                         && req.season.as_ref().map_or(true, |s| s == &date.season)
                 })
                 .flat_map(|(_, v)| v)
-                .take(req.count.unwrap_or(usize::MAX))
                 .filter_map(|(id, start, end)| {
                     if start.is_some() && (start.unwrap() < after || start.unwrap() > before) {
                         return None;
@@ -141,6 +140,7 @@ pub fn games(
                         Err(e) => Some(Err(e)),
                     }
                 })
+                .take(req.count.unwrap_or(usize::MAX))
                 .collect::<VCRResult<Vec<ChronV1Game>>>()?,
         };
 
