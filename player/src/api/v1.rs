@@ -140,7 +140,6 @@ pub fn games(
                         Err(e) => Some(Err(e)),
                     }
                 })
-                .take(req.count.unwrap_or(usize::MAX))
                 .collect::<VCRResult<Vec<ChronV1Game>>>()?,
         };
 
@@ -150,6 +149,8 @@ pub fn games(
                 res.data.reverse();
             }
         }
+
+        res.data.truncate(req.count.unwrap_or(usize::MAX));
 
         Ok(RocketJson(res))
     } else {

@@ -9,7 +9,7 @@ use rocket::{
     get,
     http::{uri::Origin, ContentType, Status},
     response::Redirect,
-    routes
+    routes,
 };
 use std::collections::HashMap;
 use std::io::Write;
