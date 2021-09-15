@@ -21,9 +21,9 @@ pub fn versions(
     {
         let start_time = req.after.as_ref().map_or(
             req.before.as_ref().map_or(u32::MAX, |x| {
-                DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+                DateTime::parse_from_rfc3339(x).unwrap().timestamp() as u32
             }) - ((req.count.unwrap_or(1) as u32) * step.0),
-            |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+            |y| DateTime::parse_from_rfc3339(y).unwrap().timestamp() as u32,
         );
 
         let step = if req.after.is_some() && (1596747150..1596747270).contains(&start_time) {
@@ -55,89 +55,87 @@ pub fn versions(
             next_page: None,
             items: results,
         }
-    } else {
-        if let Some(page_token) = req.page {
-            let mut page_cache = page_map.lock().unwrap();
-            if let Some(ref mut p) = page_cache.get_mut(&page_token) {
-                let results: Vec<ChroniclerEntity> =
-                    db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?;
-                if results.len() < req.count.unwrap_or(100) {
-                    ChroniclerResponse {
-                        next_page: None,
-                        items: results,
-                    }
-                } else {
-                    ChroniclerResponse {
-                        next_page: Some(page_token),
-                        items: results,
-                    }
-                }
-            } else {
-                return Err(VCRError::InvalidPageToken);
-            }
-        } else {
-            let start_time = req.after.as_ref().map_or(u32::MIN, |y| {
-                DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
-            });
-
-            let end_time = req.before.map_or(u32::MAX, |y| {
-                DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
-            });
-
-            let mut page = if let Some(ids) = req
-                .ids
-                .map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>())
-            {
-                InternalPaging {
-                    remaining_data: vec![],
-                    remaining_ids: ids,
-                    kind: ChronV2EndpointKind::Versions(end_time, start_time),
-                }
-            } else {
-                InternalPaging {
-                    remaining_data: vec![],
-                    remaining_ids: db.all_ids(&req.entity_type.to_lowercase())?,
-                    kind: ChronV2EndpointKind::Versions(end_time, start_time),
-                }
-            };
-
-            let res = db.fetch_page(
-                &req.entity_type.to_lowercase(),
-                &mut page,
-                req.count.unwrap_or(100),
-            )?;
-            if !(res.len() < req.count.unwrap_or(100)) {
-                let mut page_cache = page_map.lock().unwrap();
-                let key = {
-                    let mut k = String::new();
-                    let mut rng = rand::thread_rng();
-
-                    loop {
-                        let chars: String = std::iter::repeat(())
-                            .map(|()| rng.sample(rand::distributions::Alphanumeric))
-                            .map(char::from)
-                            .take(16)
-                            .collect();
-                        if !page_cache.contains(&chars) {
-                            k = chars;
-                            break;
-                        }
-                    }
-
-                    k
-                };
-
-                page_cache.put(key.clone(), page);
-
-                ChroniclerResponse {
-                    next_page: Some(key),
-                    items: res,
-                }
-            } else {
+    } else if let Some(page_token) = req.page {
+        let mut page_cache = page_map.lock().unwrap();
+        if let Some(ref mut p) = page_cache.get_mut(&page_token) {
+            let results: Vec<ChroniclerEntity> =
+                db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?;
+            if results.len() < req.count.unwrap_or(100) {
                 ChroniclerResponse {
                     next_page: None,
-                    items: res,
+                    items: results,
                 }
+            } else {
+                ChroniclerResponse {
+                    next_page: Some(page_token),
+                    items: results,
+                }
+            }
+        } else {
+            return Err(VCRError::InvalidPageToken);
+        }
+    } else {
+        let start_time = req.after.as_ref().map_or(u32::MIN, |y| {
+            DateTime::parse_from_rfc3339(y).unwrap().timestamp() as u32
+        });
+
+        let end_time = req.before.map_or(u32::MAX, |y| {
+            DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
+        });
+
+        let mut page = if let Some(ids) = req
+            .ids
+            .map(|i| i.split(',').map(|x| x.to_owned()).collect::<Vec<String>>())
+        {
+            InternalPaging {
+                remaining_data: vec![],
+                remaining_ids: ids,
+                kind: ChronV2EndpointKind::Versions(end_time, start_time),
+            }
+        } else {
+            InternalPaging {
+                remaining_data: vec![],
+                remaining_ids: db.all_ids(&req.entity_type.to_lowercase())?,
+                kind: ChronV2EndpointKind::Versions(end_time, start_time),
+            }
+        };
+
+        let res = db.fetch_page(
+            &req.entity_type.to_lowercase(),
+            &mut page,
+            req.count.unwrap_or(100),
+        )?;
+        if res.len() >= req.count.unwrap_or(100) {
+            let mut page_cache = page_map.lock().unwrap();
+            let key = {
+                let mut k = String::new();
+                let mut rng = rand::thread_rng();
+
+                loop {
+                    let chars: String = std::iter::repeat(())
+                        .map(|()| rng.sample(rand::distributions::Alphanumeric))
+                        .map(char::from)
+                        .take(16)
+                        .collect();
+                    if !page_cache.contains(&chars) {
+                        k = chars;
+                        break;
+                    }
+                }
+
+                k
+            };
+
+            page_cache.put(key.clone(), page);
+
+            ChroniclerResponse {
+                next_page: Some(key),
+                items: res,
+            }
+        } else {
+            ChroniclerResponse {
+                next_page: None,
+                items: res,
             }
         }
     };
@@ -187,7 +185,7 @@ pub fn entities(
 
         let mut page = if let Some(ids) = req
             .ids
-            .map(|i| i.split(",").map(|x| x.to_owned()).collect::<Vec<String>>())
+            .map(|i| i.split(',').map(|x| x.to_owned()).collect::<Vec<String>>())
         {
             InternalPaging {
                 remaining_data: vec![],
@@ -211,7 +209,7 @@ pub fn entities(
             .into_iter()
             .filter(|x| x.data != json!({}))
             .collect();
-        if !(res.len() < req.count.unwrap_or(100)) {
+        if res.len() >= req.count.unwrap_or(100) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
                 let mut k = String::new();

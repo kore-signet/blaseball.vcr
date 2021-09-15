@@ -56,28 +56,28 @@ pub fn games(
         }))
     } else if let Some(req) = req {
         let before = req.before.as_ref().map_or(chrono::MAX_DATETIME, |d| {
-            DateTime::parse_from_rfc3339(&d)
+            DateTime::parse_from_rfc3339(d)
                 .unwrap()
                 .with_timezone(&Utc)
         });
         let after = req.after.as_ref().map_or(Utc.timestamp(0, 0), |d| {
-            DateTime::parse_from_rfc3339(&d)
+            DateTime::parse_from_rfc3339(d)
                 .unwrap()
                 .with_timezone(&Utc)
         });
         let weathers = req.weather.as_ref().map(|w| {
-            w.split(",")
+            w.split(',')
                 .map(|v| json!(v.parse::<i64>().unwrap()))
                 .collect::<Vec<JSONValue>>()
         });
         let teams = req
             .team
             .as_ref()
-            .map(|v| v.split(",").map(|t| json!(t)).collect::<Vec<JSONValue>>());
+            .map(|v| v.split(',').map(|t| json!(t)).collect::<Vec<JSONValue>>());
         let pitchers = req
             .pitcher
             .as_ref()
-            .map(|v| v.split(",").map(|t| json!(t)).collect::<Vec<JSONValue>>());
+            .map(|v| v.split(',').map(|t| json!(t)).collect::<Vec<JSONValue>>());
         let mut res = ChroniclerV1Response {
             next_page: None,
             data: db
@@ -219,15 +219,15 @@ pub fn game_updates(
         }
     } else {
         let ids = if let Some(games) = req.game {
-            games.split(",").map(|v| v.to_owned()).collect()
+            games.split(',').map(|v| v.to_owned()).collect()
         } else {
             let before = req.before.as_ref().map_or(chrono::MAX_DATETIME, |d| {
-                DateTime::parse_from_rfc3339(&d)
+                DateTime::parse_from_rfc3339(d)
                     .unwrap()
                     .with_timezone(&Utc)
             });
             let after = req.after.as_ref().map_or(Utc.timestamp(0, 0), |d| {
-                DateTime::parse_from_rfc3339(&d)
+                DateTime::parse_from_rfc3339(d)
                     .unwrap()
                     .with_timezone(&Utc)
             });
@@ -253,7 +253,7 @@ pub fn game_updates(
         };
 
         let start_time = req.after.as_ref().map_or(u32::MIN, |y| {
-            DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32
+            DateTime::parse_from_rfc3339(y).unwrap().timestamp() as u32
         });
 
         let end_time = req.before.map_or(u32::MAX, |y| {
@@ -267,7 +267,7 @@ pub fn game_updates(
         };
 
         let res = db.fetch_page("game_updates", &mut page, req.count.unwrap_or(100))?;
-        if !(res.len() < req.count.unwrap_or(100)) {
+        if res.len() >= req.count.unwrap_or(100) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
                 let mut k = String::new();

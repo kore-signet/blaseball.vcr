@@ -32,7 +32,7 @@ pub fn updates_to_steps(updates: Vec<SiteUpdate>) -> HashMap<String, Vec<FileSte
                     let chunks = file_name
                         .to_str()
                         .unwrap()
-                        .split(".")
+                        .split('.')
                         .collect::<Vec<&str>>();
                     (*(chunks.first().unwrap())).to_owned() + *(chunks.last().unwrap())
                 } else {

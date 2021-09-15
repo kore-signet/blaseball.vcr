@@ -4,10 +4,10 @@ use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
 use serde::Serialize;
 use serde_json::Value as JSONValue;
-use std::collections::HashMap;
+
 use std::env;
 use std::fs::File;
-use std::io::{BufWriter, Read, Seek, Write};
+use std::io::{Write};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -140,9 +140,9 @@ pub async fn main() -> VCRResult<()> {
 
             entity_versions.sort_by_key(|v| v.0);
 
-            let (patches, path_map, baseval) = encode(entity_versions, checkpoint_every);
+            let (patches, _path_map, _baseval) = encode(entity_versions, checkpoint_every);
 
-            for (time, patch) in patches {
+            for (_time, patch) in patches {
                 let mut patch_bytes = patch.concat();
                 sample_sizes.push(patch_bytes.len());
                 samples.append(&mut patch_bytes);

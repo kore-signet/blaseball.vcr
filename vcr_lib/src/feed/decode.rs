@@ -26,7 +26,7 @@ fn make_tries<R: Read>(mut reader: R) -> (PatriciaMap<(u64, u64)>, PatriciaMap<V
         let position_delta = u16::from_be_bytes(bytes[8..10].try_into().unwrap());
         let start_pos = last_position + position_delta as u64;
 
-        if index.len() > 0 {
+        if !index.is_empty() {
             let idx = index.len() - 1;
             let mut a = index[idx].clone();
             a.1 .1 = start_pos;
@@ -128,9 +128,7 @@ impl FeedDatabase {
         let mut game_index = HashMap::new();
 
         for (tag, snowflakes) in player_idx {
-            if !player_index.contains_key(&tag) {
-                player_index.insert(tag, Vec::new());
-            }
+            player_index.entry(tag).or_insert_with(Vec::new);
 
             if let Some(tr) = player_index.get_mut(&tag) {
                 for s in snowflakes {
@@ -140,9 +138,7 @@ impl FeedDatabase {
         }
 
         for (tag, snowflakes) in team_idx {
-            if !team_index.contains_key(&tag) {
-                team_index.insert(tag, Vec::new());
-            }
+            team_index.entry(tag).or_insert_with(Vec::new);
 
             if let Some(tr) = team_index.get_mut(&tag) {
                 for s in snowflakes {
@@ -152,9 +148,7 @@ impl FeedDatabase {
         }
 
         for (tag, snowflakes) in game_idx {
-            if !game_index.contains_key(&tag) {
-                game_index.insert(tag, Vec::new());
-            }
+            game_index.entry(tag).or_insert_with(Vec::new);
 
             if let Some(tr) = game_index.get_mut(&tag) {
                 for s in snowflakes {
@@ -164,8 +158,8 @@ impl FeedDatabase {
         }
 
         Ok(FeedDatabase {
-            snowflakes: snowflakes,
-            times: times,
+            snowflakes,
+            times,
             reader: main_file_reader,
             player_tags: player_tags
                 .clone()
@@ -185,9 +179,9 @@ impl FeedDatabase {
             reverse_player_tags: player_tags,
             reverse_team_tags: team_tags,
             reverse_game_tags: game_tags,
-            player_index: player_index,
-            game_index: game_index,
-            team_index: team_index,
+            player_index,
+            game_index,
+            team_index,
             millis_epoch_table,
             dictionary: DecoderDictionary::copy(&dictionary),
             cache: LruCache::new(cache_size),
@@ -272,7 +266,7 @@ impl FeedDatabase {
 
             let player_tags: Vec<Uuid> = {
                 let mut player_tag_ids: Vec<u16> = Vec::new();
-                while player_tag_bytes.len() > 0 {
+                while !player_tag_bytes.is_empty() {
                     player_tag_ids.push(u16::from_be_bytes([
                         player_tag_bytes.remove(0),
                         player_tag_bytes.remove(0),
@@ -281,25 +275,25 @@ impl FeedDatabase {
 
                 player_tag_ids
                     .into_iter()
-                    .map(|id| self.player_tags[&id].clone())
+                    .map(|id| self.player_tags[&id])
                     .collect()
             };
 
             let team_tags: Vec<Uuid> = {
                 let mut team_tag_ids: Vec<u8> = Vec::new();
-                while team_tag_bytes.len() > 0 {
+                while !team_tag_bytes.is_empty() {
                     team_tag_ids.push(u8::from_be_bytes([team_tag_bytes.remove(0)]));
                 }
 
                 team_tag_ids
                     .into_iter()
-                    .map(|id| self.team_tags[&id].clone())
+                    .map(|id| self.team_tags[&id])
                     .collect()
             };
 
             let game_tags: Vec<Uuid> = {
                 let mut game_tag_ids: Vec<u16> = Vec::new();
-                while game_tag_bytes.len() > 0 {
+                while !game_tag_bytes.is_empty() {
                     game_tag_ids.push(u16::from_be_bytes([
                         game_tag_bytes.remove(0),
                         game_tag_bytes.remove(0),
@@ -308,27 +302,27 @@ impl FeedDatabase {
 
                 game_tag_ids
                     .into_iter()
-                    .map(|id| self.game_tags[&id].clone())
+                    .map(|id| self.game_tags[&id])
                     .collect()
             };
 
             let metadata: JSONValue = rmp_serde::from_read_ref(&metadata_bytes)?;
 
             let ev = FeedEvent {
-                id: id,
+                id,
                 category: i8::from_be_bytes(category),
                 created: Utc.timestamp_millis(timestamp),
                 day: i16::from_be_bytes(day),
-                season: season,
+                season,
                 nuts: 0,
-                phase: phase,
+                phase,
                 player_tags: Some(player_tags),
                 team_tags: Some(team_tags),
                 game_tags: Some(game_tags),
                 etype: i16::from_be_bytes(etype),
                 tournament: -1,
                 description: String::from_utf8(description_bytes).unwrap(),
-                metadata: metadata,
+                metadata,
             };
 
             self.cache.put(snowflake.clone(), ev.clone());
@@ -456,7 +450,7 @@ impl FeedDatabase {
         let ids = self
             .snowflakes
             .iter_prefix(&[season.to_be_bytes(), phase.to_be_bytes()].concat())
-            .map(|(k, _)| k.clone())
+            .map(|(k, _)| k)
             .take(count)
             .collect::<Vec<Vec<u8>>>();
 
@@ -490,7 +484,7 @@ impl FeedDatabase {
 
         let mut ids = Vec::new();
 
-        while ids.len() < 1 {
+        while ids.is_empty() {
             ids.extend(
                 (match tag_type {
                     TagType::Game => self.game_index[&tag].iter(),
@@ -510,7 +504,7 @@ impl FeedDatabase {
             );
         }
 
-        ids.sort_by_key(|(t, _)| t.clone());
+        ids.sort_by_key(|(t, _)| *t);
         ids.reverse();
 
         Ok(ids
@@ -526,7 +520,7 @@ impl FeedDatabase {
             })
             .collect::<VCRResult<Vec<Option<FeedEvent>>>>()?
             .into_iter()
-            .filter_map(|s| s)
+            .flatten()
             .take(count)
             .collect::<Vec<FeedEvent>>())
     }

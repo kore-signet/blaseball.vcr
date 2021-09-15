@@ -1,7 +1,7 @@
 use blaseball_vcr::feed::{CompactedFeedEvent, FeedEvent};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use uuid::Uuid;
 //
 fn main() {
@@ -17,13 +17,12 @@ fn main() {
     let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
 
     let f = File::open("feed.json").unwrap();
-    let mut reader = BufReader::new(f);
+    let reader = BufReader::new(f);
 
     for l in reader.lines() {
         let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
         let compact_player_tags: Vec<u16> = event
-            .player_tags
-            .unwrap_or(Vec::new())
+            .player_tags.unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = player_tag_table.get(id) {
@@ -37,8 +36,7 @@ fn main() {
             .collect();
 
         let compact_game_tags: Vec<u16> = event
-            .game_tags
-            .unwrap_or(Vec::new())
+            .game_tags.unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = game_tag_table.get(id) {
@@ -52,8 +50,7 @@ fn main() {
             .collect();
 
         let compact_team_tags: Vec<u8> = event
-            .team_tags
-            .unwrap_or(Vec::new())
+            .team_tags.unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = team_tag_table.get(id) {

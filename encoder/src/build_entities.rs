@@ -178,8 +178,8 @@ pub async fn main() -> VCRResult<()> {
                 EntityData {
                     data_offset: entity_start_pos,
                     patches: offsets,
-                    path_map: path_map,
-                    checkpoint_every: checkpoint_every,
+                    path_map,
+                    checkpoint_every,
                     base: baseval,
                 },
             );

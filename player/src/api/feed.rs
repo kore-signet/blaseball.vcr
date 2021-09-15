@@ -22,7 +22,7 @@ pub fn feed(
 
     let time = start
         .map(|s| s.parse::<DateTime<Utc>>().unwrap())
-        .unwrap_or(time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)));
+        .unwrap_or_else(|| time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)));
 
     let category: i8 = category.unwrap_or(-3);
 

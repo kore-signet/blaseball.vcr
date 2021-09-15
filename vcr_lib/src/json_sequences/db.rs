@@ -83,7 +83,7 @@ impl Database {
                 .copied()
                 .take_while(|x| x.0 <= until)
                 .collect();
-            let latest_check_idx = patches_until.len().checked_sub(1).unwrap_or(0);
+            let latest_check_idx = patches_until.len().saturating_sub(1);
 
             let closest_checkpoint =
                 latest_check_idx - (latest_check_idx % metadata.checkpoint_every as usize);
@@ -263,7 +263,7 @@ impl Database {
             .binary_search_by_key(&at, |(t, _, _)| *t)
         {
             Ok(idx) => idx,
-            Err(idx) => idx.checked_sub(1).unwrap_or(0),
+            Err(idx) => idx.saturating_sub(1),
         };
 
         if patch_idx > 0 {
@@ -330,7 +330,7 @@ impl Database {
                 entity_value = v.clone();
             }
             Patch::Normal(p) => {
-                patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                patch_json(&mut entity_value, p).map_err(VCRError::JSONPatchError)?;
             }
         }
 
@@ -403,7 +403,7 @@ impl Database {
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
         while page.remaining_data.len() < count {
-            if page.remaining_ids.len() > 0 {
+            if !page.remaining_ids.is_empty() {
                 page.remaining_data.append(&mut match page.kind {
                     ChronV2EndpointKind::Versions(before, after) => {
                         self.get_entity_versions(&page.remaining_ids.pop().unwrap(), before, after)?
@@ -507,8 +507,8 @@ impl MultiDatabase {
         }
 
         Ok(MultiDatabase {
-            dbs: dbs,
-            game_index: game_index,
+            dbs,
+            game_index,
         })
     }
 
@@ -632,7 +632,7 @@ impl MultiDatabase {
                 game_id: game.to_owned(),
                 start_time: *start_time,
                 end_time: *end_time,
-                data: db.get_first_entity(&game)?.data,
+                data: db.get_first_entity(game)?.data,
             });
         }
 
@@ -652,7 +652,7 @@ impl MultiDatabase {
                 game_id: game.to_owned(),
                 start_time: *start_time,
                 end_time: *end_time,
-                data: db.get_entity(&game, at)?.data,
+                data: db.get_entity(game, at)?.data,
             });
         }
 
@@ -684,7 +684,7 @@ impl MultiDatabase {
         let round_ids: Vec<String> = playoffs["rounds"]
             .as_array()
             .unwrap_or(&Vec::new())
-            .into_iter()
+            .iter()
             .map(|x| x.as_str().unwrap().to_owned())
             .collect();
         let all_rounds: Vec<JSONValue> = self
@@ -707,7 +707,7 @@ impl MultiDatabase {
         let main_matchup_ids: Vec<String> = round["matchups"]
             .as_array()
             .unwrap_or(&Vec::new())
-            .into_iter()
+            .iter()
             .map(|x| x.as_str().unwrap().to_owned())
             .collect();
         let main_matchups: Vec<JSONValue> = self
@@ -720,7 +720,7 @@ impl MultiDatabase {
         let tomorrow_matchup_ids: Vec<String> = tomorrow_round["matchups"]
             .as_array()
             .unwrap_or(&Vec::new())
-            .into_iter()
+            .iter()
             .map(|x| x.as_str().unwrap().to_owned())
             .collect();
         let tomorrow_matchups: Vec<JSONValue> = self
@@ -736,7 +736,7 @@ impl MultiDatabase {
                 x["matchups"]
                     .as_array()
                     .unwrap_or(&Vec::new())
-                    .into_iter()
+                    .iter()
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
@@ -835,7 +835,7 @@ impl MultiDatabase {
                 x["subleagues"]
                     .as_array()
                     .unwrap_or(&Vec::new())
-                    .into_iter()
+                    .iter()
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
@@ -866,7 +866,7 @@ impl MultiDatabase {
                 x["divisions"]
                     .as_array()
                     .unwrap_or(&Vec::new())
-                    .into_iter()
+                    .iter()
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
@@ -970,25 +970,23 @@ impl MultiDatabase {
                     at,
                 )?,
             )
-        } else {
-            if let Some(playoff_ids) = sim.data["playoffs"].as_array() {
-                let mut playoffs: Vec<JSONValue> = Vec::new();
-                for id in playoff_ids {
-                    playoffs.push(self.playoffs(id.as_str().unwrap(), None, at)?);
-                }
-                ("postseasons", json!(playoffs))
-            } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
-                (
-                    "postseason",
-                    self.playoffs(
-                        playoff_id,
-                        sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()),
-                        at,
-                    )?,
-                )
-            } else {
-                ("postseason", json!({}))
+        } else if let Some(playoff_ids) = sim.data["playoffs"].as_array() {
+            let mut playoffs: Vec<JSONValue> = Vec::new();
+            for id in playoff_ids {
+                playoffs.push(self.playoffs(id.as_str().unwrap(), None, at)?);
             }
+            ("postseasons", json!(playoffs))
+        } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
+            (
+                "postseason",
+                self.playoffs(
+                    playoff_id,
+                    sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()),
+                    at,
+                )?,
+            )
+        } else {
+            ("postseason", json!({}))
         };
 
         // println!("---------------\n");

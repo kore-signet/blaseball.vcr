@@ -38,8 +38,7 @@ pub fn encode(
                 };
 
                 let diff: Vec<Vec<u8>> = if mem::discriminant(&obj) != mem::discriminant(&base) {
-                    let mut bytes: Vec<u8> = Vec::new();
-                    bytes.push(6_u8.to_be());
+                    let mut bytes: Vec<u8> = vec![6_u8.to_be()];
                     let mut val_bytes = rmp_serde::to_vec(&obj).unwrap();
                     bytes.extend((val_bytes.len() as u16).to_be_bytes());
                     bytes.append(&mut val_bytes);
@@ -81,9 +80,7 @@ pub fn encode(
                                 },
                             };
 
-                            let mut bytes: Vec<u8> = Vec::new();
-
-                            bytes.push(op.op_code.to_be());
+                            let mut bytes: Vec<u8> = vec![op.op_code.to_be()];
 
                             for path in &op.paths {
                                 if !paths.contains_key(path) {
@@ -115,6 +112,6 @@ pub fn encode(
             .into_iter()
             .map(|(k, v)| (v, k))
             .collect::<HashMap<u16, String>>(),
-        base.clone(),
+        base,
     )
 }

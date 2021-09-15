@@ -176,12 +176,12 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
     .unwrap();
     blahaj.abort();
 
-    println!("");
+    println!();
 
     let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading site assets"));
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
     blahaj.abort();
-    println!("");
+    println!();
 
     if let Some(feed_config) = config.feed {
         let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading feed data"));
@@ -197,7 +197,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
             .unwrap(),
         );
         blahaj.abort();
-        println!("");
+        println!();
         rocket = rocket
             .manage(feed_db)
             .mount("/vcr", routes![player::feed::feed]);

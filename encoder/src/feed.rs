@@ -51,8 +51,7 @@ fn main() {
                 let snowflake_id = event.generate_id(millis_epoch.copied());
                 let compact_player_tags: Vec<u16> = event
                     .player_tags
-                    .clone()
-                    .unwrap_or(Vec::new())
+                    .clone().unwrap_or_default()
                     .iter()
                     .map(|id| {
                         if let Some(n) = player_tag_table.get(id) {
@@ -68,8 +67,7 @@ fn main() {
 
                 let compact_game_tags: Vec<u16> = event
                     .game_tags
-                    .clone()
-                    .unwrap_or(Vec::new())
+                    .clone().unwrap_or_default()
                     .iter()
                     .map(|id| {
                         if let Some(n) = game_tag_table.get(id) {
@@ -85,8 +83,7 @@ fn main() {
 
                 let compact_team_tags: Vec<u8> = event
                     .team_tags
-                    .clone()
-                    .unwrap_or(Vec::new())
+                    .clone().unwrap_or_default()
                     .iter()
                     .map(|id| {
                         if let Some(n) = team_tag_table.get(id) {
@@ -101,19 +98,19 @@ fn main() {
                     .collect();
 
                 for t in &compact_team_tags {
-                    if let Some(ids) = team_tag_idx.get_mut(&t) {
+                    if let Some(ids) = team_tag_idx.get_mut(t) {
                         ids.push(snowflake_id.clone());
                     }
                 }
 
                 for t in &compact_player_tags {
-                    if let Some(ids) = player_tag_idx.get_mut(&t) {
+                    if let Some(ids) = player_tag_idx.get_mut(t) {
                         ids.push(snowflake_id.clone());
                     }
                 }
 
                 for t in &compact_game_tags {
-                    if let Some(ids) = game_tag_idx.get_mut(&t) {
+                    if let Some(ids) = game_tag_idx.get_mut(t) {
                         ids.push(snowflake_id.clone());
                     }
                 }

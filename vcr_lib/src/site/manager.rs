@@ -64,8 +64,8 @@ impl ResourceManager {
         }
 
         Ok(ResourceManager {
-            headers: headers,
-            resources: resources,
+            headers,
+            resources,
         })
     }
 
@@ -86,8 +86,8 @@ impl ResourceManager {
         }
 
         Ok(ResourceManager {
-            headers: headers,
-            resources: resources,
+            headers,
+            resources,
         })
     }
 
@@ -122,7 +122,7 @@ impl ResourceManager {
                     .paths
                     .iter()
                     .map(|(time, path, idx)| SiteUpdate {
-                        timestamp: time.clone(),
+                        timestamp: *time,
                         path: path.to_owned(),
                         hash: resources.deltas[*idx as usize].2.clone(),
                         download_url: format!(
