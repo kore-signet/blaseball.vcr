@@ -364,14 +364,10 @@ impl FeedDatabase {
                     })
                     .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>()
                     .into_iter()
-                    .map(|(t, v)| (t, self.read_event(&v).unwrap(), v))
-                    .filter_map(|(t, e, v)| {
-                        if category == -3 || e.category == category {
-                            Some((t, e, v))
-                        } else {
-                            None
-                        }
-                    }),
+                    .map(|(t, v)| self.read_event(&v).map(|e| (t, e, v)))
+                    .collect::<VCRResult<Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)>>>()?
+                    .into_iter()
+                    .filter(|(_, e, _)| category == -3 || e.category == category),
             );
 
             prefix.pop();
@@ -418,14 +414,10 @@ impl FeedDatabase {
                     })
                     .collect::<Vec<(DateTime<Utc>, Vec<u8>)>>()
                     .into_iter()
-                    .map(|(t, v)| (t, self.read_event(&v).unwrap(), v)) // so, not unwrapping here means collecting twice. personally i'm ok trading that off for now, though it might not be worth it.
-                    .filter_map(|(t, e, v)| {
-                        if category == -3 || e.category == category {
-                            Some((t, e, v))
-                        } else {
-                            None
-                        }
-                    }),
+                    .map(|(t, v)| self.read_event(&v).map(|e| (t, e, v)))
+                    .collect::<VCRResult<Vec<(DateTime<Utc>, FeedEvent, Vec<u8>)>>>()?
+                    .into_iter()
+                    .filter(|(_, e, _)| category == -3 || e.category == category),
             );
 
             prefix.pop();

@@ -22,7 +22,8 @@ fn main() {
     for l in reader.lines() {
         let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
         let compact_player_tags: Vec<u16> = event
-            .player_tags.unwrap_or_default()
+            .player_tags
+            .unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = player_tag_table.get(id) {
@@ -36,7 +37,8 @@ fn main() {
             .collect();
 
         let compact_game_tags: Vec<u16> = event
-            .game_tags.unwrap_or_default()
+            .game_tags
+            .unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = game_tag_table.get(id) {
@@ -50,7 +52,8 @@ fn main() {
             .collect();
 
         let compact_team_tags: Vec<u8> = event
-            .team_tags.unwrap_or_default()
+            .team_tags
+            .unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = team_tag_table.get(id) {

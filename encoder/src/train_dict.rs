@@ -7,7 +7,7 @@ use serde_json::Value as JSONValue;
 
 use std::env;
 use std::fs::File;
-use std::io::{Write};
+use std::io::Write;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -506,10 +506,7 @@ impl MultiDatabase {
             );
         }
 
-        Ok(MultiDatabase {
-            dbs,
-            game_index,
-        })
+        Ok(MultiDatabase { dbs, game_index })
     }
 
     pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {

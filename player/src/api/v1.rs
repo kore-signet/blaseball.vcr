@@ -56,14 +56,10 @@ pub fn games(
         }))
     } else if let Some(req) = req {
         let before = req.before.as_ref().map_or(chrono::MAX_DATETIME, |d| {
-            DateTime::parse_from_rfc3339(d)
-                .unwrap()
-                .with_timezone(&Utc)
+            DateTime::parse_from_rfc3339(d).unwrap().with_timezone(&Utc)
         });
         let after = req.after.as_ref().map_or(Utc.timestamp(0, 0), |d| {
-            DateTime::parse_from_rfc3339(d)
-                .unwrap()
-                .with_timezone(&Utc)
+            DateTime::parse_from_rfc3339(d).unwrap().with_timezone(&Utc)
         });
         let weathers = req.weather.as_ref().map(|w| {
             w.split(',')
@@ -222,14 +218,10 @@ pub fn game_updates(
             games.split(',').map(|v| v.to_owned()).collect()
         } else {
             let before = req.before.as_ref().map_or(chrono::MAX_DATETIME, |d| {
-                DateTime::parse_from_rfc3339(d)
-                    .unwrap()
-                    .with_timezone(&Utc)
+                DateTime::parse_from_rfc3339(d).unwrap().with_timezone(&Utc)
             });
             let after = req.after.as_ref().map_or(Utc.timestamp(0, 0), |d| {
-                DateTime::parse_from_rfc3339(d)
-                    .unwrap()
-                    .with_timezone(&Utc)
+                DateTime::parse_from_rfc3339(d).unwrap().with_timezone(&Utc)
             });
 
             db.game_index

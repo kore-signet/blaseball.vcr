@@ -63,10 +63,7 @@ impl ResourceManager {
             headers.insert(r_type.to_owned(), header);
         }
 
-        Ok(ResourceManager {
-            headers,
-            resources,
-        })
+        Ok(ResourceManager { headers, resources })
     }
 
     pub fn from_files(files: Vec<(&str, &str, &str)>) -> VCRResult<ResourceManager> {
@@ -85,10 +82,7 @@ impl ResourceManager {
             headers.insert(r_type.to_owned(), header);
         }
 
-        Ok(ResourceManager {
-            headers,
-            resources,
-        })
+        Ok(ResourceManager { headers, resources })
     }
 
     pub fn get_resource(&self, name: &str, delta_idx: u16) -> VCRResult<Vec<u8>> {
