@@ -43,15 +43,14 @@ impl Database {
         dict_path: Option<P>,
         cache_size: usize,
     ) -> VCRResult<Database> {
-        let entities_lookup_f = File::open(entities_lookup_path).map_err(VCRError::IOError)?;
-        let decompressor =
-            zstd::stream::Decoder::new(entities_lookup_f).map_err(VCRError::IOError)?;
-        let db_f = File::open(db_path).map_err(VCRError::IOError)?;
+        let entities_lookup_f = File::open(entities_lookup_path)?;
+        let decompressor = zstd::stream::Decoder::new(entities_lookup_f)?;
+        let db_f = File::open(db_path)?;
 
         let compression_dict = if let Some(dict_f_path) = dict_path {
-            let mut dict_f = File::open(dict_f_path).map_err(VCRError::IOError)?;
+            let mut dict_f = File::open(dict_f_path)?;
             let mut dict = Vec::new();
-            dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
+            dict_f.read_to_end(&mut dict)?;
             Some(DecoderDictionary::copy(&dict))
         } else {
             None
@@ -59,7 +58,7 @@ impl Database {
 
         Ok(Database {
             reader: BufReader::new(db_f),
-            entities: rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?,
+            entities: rmp_serde::from_read(decompressor)?,
             dictionary: compression_dict,
             entity_cache: LruCache::new(cache_size),
         })
@@ -99,29 +98,23 @@ impl Database {
         };
 
         for (time, patch_start, patch_end) in patch_list {
-            self.reader
-                .seek(SeekFrom::Start(patch_start))
-                .map_err(VCRError::IOError)?;
+            self.reader.seek(SeekFrom::Start(patch_start))?;
 
             let mut compressed_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
-            self.reader
-                .read_exact(&mut compressed_bytes)
-                .map_err(VCRError::IOError)?;
+            self.reader.read_exact(&mut compressed_bytes)?;
 
             let mut e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
                 let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
                     Cursor::new(compressed_bytes),
                     compress_dict,
-                )
-                .map_err(VCRError::IOError)?;
+                )?;
                 let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
-                decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
+                decoder.read_to_end(&mut res)?;
                 res
             } else {
-                let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))
-                    .map_err(VCRError::IOError)?;
+                let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))?;
                 let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
-                decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
+                decoder.read_to_end(&mut res)?;
                 res
             };
 
@@ -134,9 +127,7 @@ impl Database {
                 if op_code == 6 {
                     let value_length = u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]);
                     let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
-                    result = Patch::ReplaceRoot(
-                        rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?,
-                    );
+                    result = Patch::ReplaceRoot(rmp_serde::from_read_ref(&val_bytes)?);
                     break;
                 } else {
                     let paths = if op_code == 3 || op_code == 4 {
@@ -161,7 +152,7 @@ impl Database {
 
                     let value: Option<JSONValue> = if value_length > 0 {
                         let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
-                        Some(rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?)
+                        Some(rmp_serde::from_read_ref(&val_bytes)?)
                     } else {
                         None
                     };
@@ -229,7 +220,7 @@ impl Database {
                     entity_value = v.clone();
                 }
                 Patch::Normal(p) => {
-                    patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                    patch_json(&mut entity_value, &p)?;
                 }
             }
 
@@ -289,7 +280,7 @@ impl Database {
                     entity_value = v.clone();
                 }
                 Patch::Normal(p) => {
-                    patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                    patch_json(&mut entity_value, &p)?;
                 }
             }
             last_time = time;
@@ -330,7 +321,7 @@ impl Database {
                 entity_value = v.clone();
             }
             Patch::Normal(p) => {
-                patch_json(&mut entity_value, p).map_err(VCRError::JSONPatchError)?;
+                patch_json(&mut entity_value, p)?;
             }
         }
 
@@ -436,11 +427,9 @@ impl MultiDatabase {
         dicts: HashMap<String, P>,
         cache_size: usize,
     ) -> VCRResult<MultiDatabase> {
-        let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)
-            .map_err(VCRError::IOError)?
+        let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)?
             .map(|res| res.map(|e| e.path()))
-            .collect::<Result<Vec<PathBuf>, io::Error>>()
-            .map_err(VCRError::IOError)?
+            .collect::<Result<Vec<PathBuf>, io::Error>>()?
             .into_iter()
             .filter(|path| path.is_file())
             .partition(|path| {
@@ -462,11 +451,10 @@ impl MultiDatabase {
                 .contains(".dates.riv.")
         }) {
             let game_index_path = db_paths.remove(dates_pos);
-            let game_index_f = File::open(game_index_path).map_err(VCRError::IOError)?;
-            let decompressor =
-                zstd::stream::Decoder::new(game_index_f).map_err(VCRError::IOError)?;
+            let game_index_f = File::open(game_index_path)?;
+            let decompressor = zstd::stream::Decoder::new(game_index_f)?;
 
-            rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?
+            rmp_serde::from_read(decompressor)?
         } else {
             HashMap::new()
         };
