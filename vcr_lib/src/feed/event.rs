@@ -1,4 +1,5 @@
 use super::EventDescription;
+use crate::encode_varint;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
@@ -114,12 +115,12 @@ impl CompactedFeedEvent {
                 EventDescription::Constant(s) => {
                     assert_eq!(self.description, s);
                     vec![]
-                },
+                }
                 EventDescription::ConstantVariant(possibilities) => {
                     vec![(possibilities
                         .iter()
                         .position(|&d| d == self.description)
-                        .expect(&format!("{}",self.etype)) as u8)
+                        .expect(&format!("{}", self.etype)) as u8)
                         .to_be()]
                 }
                 EventDescription::Suffix(s) => {
@@ -129,11 +130,7 @@ impl CompactedFeedEvent {
                         .unwrap()
                         .as_bytes()
                         .to_vec();
-                    [
-                        (description.len() as u16).to_be_bytes().to_vec(),
-                        description,
-                    ]
-                    .concat()
+                    [encode_varint(description.len() as u16), description].concat()
                 }
                 EventDescription::Prefix(s) => {
                     let description = self
@@ -142,19 +139,11 @@ impl CompactedFeedEvent {
                         .unwrap()
                         .as_bytes()
                         .to_vec();
-                    [
-                        (description.len() as u16).to_be_bytes().to_vec(),
-                        description,
-                    ]
-                    .concat()
+                    [encode_varint(description.len() as u16), description].concat()
                 }
                 EventDescription::Variable => {
                     let description = self.description.as_bytes().to_vec();
-                    [
-                        (description.len() as u16).to_be_bytes().to_vec(),
-                        description,
-                    ]
-                    .concat()
+                    [encode_varint(description.len() as u16), description].concat()
                 }
             }
         };
