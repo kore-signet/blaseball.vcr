@@ -1,3 +1,5 @@
+use super::EventDescription;
+use crate::encode_varint;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
@@ -41,6 +43,7 @@ pub struct CompactedFeedEvent {
     pub tournament: i8,
     #[serde(default)]
     pub metadata: JSONValue,
+    #[serde(skip)]
     pub phase: u8,
 }
 
@@ -108,12 +111,41 @@ impl CompactedFeedEvent {
         };
 
         let description_bytes = {
-            let description = self.description.as_bytes().to_vec();
-            [
-                (description.len() as u16).to_be_bytes().to_vec(),
-                description,
-            ]
-            .concat()
+            match EventDescription::from_type(self.etype) {
+                EventDescription::Constant(s) => {
+                    assert_eq!(self.description, s);
+                    vec![]
+                }
+                EventDescription::ConstantVariant(possibilities) => {
+                    vec![(possibilities
+                        .iter()
+                        .position(|&d| d == self.description)
+                        .expect(&format!("{}", self.etype)) as u8)
+                        .to_be()]
+                }
+                EventDescription::Suffix(s) => {
+                    let description = self
+                        .description
+                        .strip_suffix(s)
+                        .unwrap()
+                        .as_bytes()
+                        .to_vec();
+                    [encode_varint(description.len() as u16), description].concat()
+                }
+                EventDescription::Prefix(s) => {
+                    let description = self
+                        .description
+                        .strip_prefix(s)
+                        .unwrap()
+                        .as_bytes()
+                        .to_vec();
+                    [encode_varint(description.len() as u16), description].concat()
+                }
+                EventDescription::Variable => {
+                    let description = self.description.as_bytes().to_vec();
+                    [encode_varint(description.len() as u16), description].concat()
+                }
+            }
         };
 
         [

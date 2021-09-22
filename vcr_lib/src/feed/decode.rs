@@ -1,5 +1,5 @@
 use super::*;
-use crate::{VCRError, VCRResult};
+use crate::{decode_varint, VCRError, VCRResult};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use lru::LruCache;
 use patricia_tree::PatriciaMap;
@@ -237,11 +237,35 @@ impl FeedDatabase {
             decoder.read_exact(&mut etype)?;
             decoder.read_exact(&mut day)?;
 
-            let mut description_len_bytes: [u8; 2] = [0; 2];
-            decoder.read_exact(&mut description_len_bytes)?;
-            let description_len = u16::from_be_bytes(description_len_bytes);
-            let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
-            decoder.read_exact(&mut description_bytes)?;
+            use EventDescription::*;
+            let description = match EventDescription::from_type(i16::from_be_bytes(etype)) {
+                Constant(s) => s.to_owned(),
+                ConstantVariant(possibilities) => {
+                    let mut variant_byte: [u8; 1] = [0; 1];
+                    decoder.read_exact(&mut variant_byte)?;
+                    possibilities[u8::from_be(variant_byte[0]) as usize].to_owned()
+                }
+                Suffix(sfx) => {
+                    let description_len = decode_varint!(decoder);
+                    let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
+                    decoder.read_exact(&mut description_bytes)?;
+
+                    String::from_utf8(description_bytes).unwrap() + sfx
+                }
+                Prefix(pfx) => {
+                    let description_len = decode_varint!(decoder);
+                    let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
+                    decoder.read_exact(&mut description_bytes)?;
+
+                    pfx.to_owned() + &String::from_utf8(description_bytes).unwrap()
+                }
+                Variable => {
+                    let description_len = decode_varint!(decoder);
+                    let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
+                    decoder.read_exact(&mut description_bytes)?;
+                    String::from_utf8(description_bytes).unwrap()
+                }
+            };
 
             let mut player_tag_len_bytes: [u8; 1] = [0; 1];
             decoder.read_exact(&mut player_tag_len_bytes)?;
@@ -321,7 +345,7 @@ impl FeedDatabase {
                 game_tags: Some(game_tags),
                 etype: i16::from_be_bytes(etype),
                 tournament: -1,
-                description: String::from_utf8(description_bytes).unwrap(),
+                description,
                 metadata,
             };
 

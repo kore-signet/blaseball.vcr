@@ -7,3 +7,5 @@ tapes.tar.bz2
 tapes.tar.gz
 AppDir
 appimage-builder-cache
+dev/
+voyager_tapes/
