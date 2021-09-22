@@ -70,6 +70,7 @@ fn main() {
             id: event.id,
             category: event.category,
             day: event.day,
+            created: event.created,
             description: event.description,
             player_tags: compact_player_tags,
             game_tags: compact_game_tags,
@@ -78,6 +79,7 @@ fn main() {
             tournament: event.tournament,
             metadata: event.metadata,
             phase: event.phase,
+            season: event.season,
         }
         .encode();
         feed_sample_lens.push(ev_bytes.len());
@@ -90,7 +92,7 @@ fn main() {
     // println!("{:?}", zstd::encode_all(Cursor::new(a), 22).unwrap().len());
     //     //
     println!("making dict");
-    let dict = zstd::dict::from_continuous(&feed_samples, &feed_sample_lens, 112640).unwrap();
+    let dict = zstd::dict::from_continuous(&feed_samples, &feed_sample_lens, 400_000).unwrap();
     let mut feed_dict_f = File::create("feed.dict").unwrap();
     feed_dict_f.write_all(&dict).unwrap();
 }

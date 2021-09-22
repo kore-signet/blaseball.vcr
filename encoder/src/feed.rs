@@ -1,5 +1,5 @@
-use blaseball_vcr::feed::{CompactedFeedEvent, FeedEvent};
-use chrono::{Duration, DurationRound};
+use blaseball_vcr::feed::{CompactedFeedEvent, EventIndex, FeedEvent, MetaIndex};
+use chrono::{DateTime, Duration, DurationRound, Utc};
 use crossbeam::channel::bounded;
 use std::collections::HashMap;
 use std::fs::File;
@@ -18,13 +18,14 @@ fn main() {
     crossbeam::scope(|s| {
         // Producer thread
         s.spawn(|_| {
-            let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
-            let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
-            let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
-            let mut millis_epoch_table: HashMap<(i8, u8), u32> = HashMap::new();
-            let mut player_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
-            let mut game_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
-            let mut team_tag_idx: HashMap<u8, Vec<Vec<u8>>> = HashMap::new();
+            let mut indexes: MetaIndex = Default::default();
+            // let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
+            // let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
+            // let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
+            // let mut millis_epoch_table: HashMap<(i8, u8), u32> = HashMap::new();
+            // let mut player_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+            // let mut game_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+            // let mut team_tag_idx: HashMap<u8, Vec<Vec<u8>>> = HashMap::new();
 
             let f = File::open("feed.json").unwrap();
             let reader = BufReader::new(f);
@@ -32,35 +33,36 @@ fn main() {
             for l in reader.lines() {
                 let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
 
-                let millis_epoch = if event.season >= 11 && [3, 5, 13].contains(&event.phase) {
-                    Some(
-                        millis_epoch_table
-                            .entry((event.season, event.phase))
-                            .or_insert(
-                                event
-                                    .created
-                                    .duration_trunc(Duration::hours(1))
-                                    .unwrap()
-                                    .timestamp() as u32,
-                            ),
-                    )
-                } else {
-                    None
-                };
+                // let millis_epoch = if event.season >= 11 && [3, 5, 13].contains(&event.phase) {
+                //     Some(
+                //         millis_epoch_table
+                //             .entry((event.season, event.phase))
+                //             .or_insert(
+                //                 event
+                //                     .created
+                //                     .duration_trunc(Duration::hours(1))
+                //                     .unwrap()
+                //                     .timestamp() as u32,
+                //             ),
+                //     )
+                // } else {
+                //     None
+                // };
 
-                let snowflake_id = event.generate_id(millis_epoch.copied());
+                // let snowflake_id = event.generate_id(millis_epoch.copied());
+
                 let compact_player_tags: Vec<u16> = event
                     .player_tags
                     .clone()
                     .unwrap_or_default()
                     .iter()
                     .map(|id| {
-                        if let Some(n) = player_tag_table.get(id) {
+                        if let Some(n) = indexes.reverse_player_tags.get(id) {
                             *n
                         } else {
-                            let n = player_tag_table.len() as u16;
-                            player_tag_table.insert(*id, n);
-                            player_tag_idx.insert(n, Vec::new());
+                            let n = indexes.reverse_player_tags.len() as u16;
+                            indexes.reverse_player_tags.insert(*id, n);
+                            indexes.player_tags.insert(n, *id);
                             n
                         }
                     })
@@ -72,12 +74,12 @@ fn main() {
                     .unwrap_or_default()
                     .iter()
                     .map(|id| {
-                        if let Some(n) = game_tag_table.get(id) {
+                        if let Some(n) = indexes.reverse_game_tags.get(id) {
                             *n
                         } else {
-                            let n = game_tag_table.len() as u16;
-                            game_tag_table.insert(*id, n);
-                            game_tag_idx.insert(n, Vec::new());
+                            let n = indexes.reverse_game_tags.len() as u16;
+                            indexes.reverse_game_tags.insert(*id, n);
+                            indexes.game_tags.insert(n, *id);
                             n
                         }
                     })
@@ -89,41 +91,23 @@ fn main() {
                     .unwrap_or_default()
                     .iter()
                     .map(|id| {
-                        if let Some(n) = team_tag_table.get(id) {
+                        if let Some(n) = indexes.reverse_team_tags.get(id) {
                             *n
                         } else {
-                            let n = team_tag_table.len() as u8;
-                            team_tag_table.insert(*id, n);
-                            team_tag_idx.insert(n, Vec::new());
+                            let n = indexes.reverse_team_tags.len() as u8;
+                            indexes.reverse_team_tags.insert(*id, n);
+                            indexes.team_tags.insert(n, *id);
                             n
                         }
                     })
                     .collect();
 
-                for t in &compact_team_tags {
-                    if let Some(ids) = team_tag_idx.get_mut(t) {
-                        ids.push(snowflake_id.clone());
-                    }
-                }
-
-                for t in &compact_player_tags {
-                    if let Some(ids) = player_tag_idx.get_mut(t) {
-                        ids.push(snowflake_id.clone());
-                    }
-                }
-
-                for t in &compact_game_tags {
-                    if let Some(ids) = game_tag_idx.get_mut(t) {
-                        ids.push(snowflake_id.clone());
-                    }
-                }
-
-                snd1.send((
-                    snowflake_id,
+                snd1.send(
                     (CompactedFeedEvent {
                         id: event.id,
                         category: event.category,
                         day: event.day,
+                        created: event.created,
                         description: event.description,
                         player_tags: compact_player_tags,
                         game_tags: compact_game_tags,
@@ -132,35 +116,15 @@ fn main() {
                         tournament: event.tournament,
                         metadata: event.metadata,
                         phase: event.phase,
-                    })
-                    .encode(),
-                ))
+                        season: event.season,
+                    }),
+                )
                 .unwrap();
             }
 
             let mut f = File::create("./tapes/feed/id_lookup.bin").unwrap();
-            f.write_all(
-                &rmp_serde::to_vec(&(
-                    team_tag_table,
-                    player_tag_table,
-                    game_tag_table,
-                    millis_epoch_table,
-                ))
-                .unwrap(),
-            )
-            .unwrap();
+            f.write_all(&rmp_serde::to_vec(&indexes).unwrap()).unwrap();
 
-            let mut tagf = File::create("./tapes/feed/tag_lookup.bin.zstd").unwrap();
-            tagf.write_all(
-                &zstd::encode_all(
-                    Cursor::new(
-                        rmp_serde::to_vec(&(team_tag_idx, player_tag_idx, game_tag_idx)).unwrap(),
-                    ),
-                    22,
-                )
-                .unwrap(),
-            )
-            .unwrap();
             // Close the channel - this is necessary to exit
             // the for-loop in the worker
             drop(snd1);
@@ -174,9 +138,9 @@ fn main() {
             s.spawn(move |_| {
                 let mut feed_compressor = zstd::block::Compressor::with_dict(zstd_dict);
                 // Receive until channel closes
-                for (snowflake_id, bytes) in recvr.iter() {
-                    let compressed_bytes = feed_compressor.compress(&bytes, 19).unwrap();
-                    sendr.send((snowflake_id, compressed_bytes)).unwrap();
+                for event in recvr.iter() {
+                    let compressed_bytes = feed_compressor.compress(&event.encode(), 1).unwrap();
+                    sendr.send((event, compressed_bytes)).unwrap();
                 }
             });
         }
@@ -184,38 +148,83 @@ fn main() {
         // exit the for-loop
         drop(snd2);
 
+        let mut game_tag_idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
+        let mut player_tag_idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
+        let mut team_tag_idx: HashMap<u8, Vec<(u32, (u32, u16))>> = HashMap::new();
+        let mut phase_idx: HashMap<(i8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
+
         // Sink
-        let mut position_index: Vec<(Vec<u8>, u16)> = Vec::new();
         let out_f = File::create("./tapes/feed/feed.riv").unwrap();
         let mut out = BufWriter::new(out_f);
-        let mut last_position = out.stream_position().unwrap();
 
-        for (i, (id, bytes)) in rcv2.iter().enumerate() {
+        let id_out_f = File::create("./tapes/feed/feed.fp").unwrap();
+        let mut id_out = zstd::Encoder::new(id_out_f, 21).unwrap();
+
+        let mut last_position = out.stream_position().unwrap() as u32;
+
+        for (i, (event, bytes)) in rcv2.iter().enumerate() {
             println!("#{}", i);
-            let start_pos = out.stream_position().unwrap();
-            position_index.push((id, (start_pos - last_position) as u16));
+            let start_pos = out.stream_position().unwrap() as u32;
             out.write_all(&bytes).unwrap();
+            let end_pos = out.stream_position().unwrap() as u32;
+
+            let length = (end_pos - start_pos) as u16;
+
+            if event.season >= 11 && [3, 5, 13].contains(&event.phase) {
+                phase_idx
+                    .entry((event.season, event.phase))
+                    .or_insert_with(Vec::new)
+                    .push((event.created.timestamp_millis() as i64, (start_pos, length)));
+            }
+
+            for game_tag in event.game_tags {
+                game_tag_idx
+                    .entry(game_tag)
+                    .or_insert_with(Vec::new)
+                    .push((event.created.timestamp() as u32, (start_pos, length)));
+            }
+
+            for player_tag in event.player_tags {
+                player_tag_idx
+                    .entry(player_tag)
+                    .or_insert_with(Vec::new)
+                    .push((event.created.timestamp() as u32, (start_pos, length)));
+            }
+
+            for team_tag in event.team_tags {
+                team_tag_idx
+                    .entry(team_tag)
+                    .or_insert_with(Vec::new)
+                    .push((event.created.timestamp() as u32, (start_pos, length)));
+            }
+
+            id_out
+                .write_all(&((start_pos - last_position) as u16).to_be_bytes())
+                .unwrap();
+            id_out
+                .write_all(&(event.created.timestamp() as u32).to_be_bytes())
+                .unwrap();
+
             last_position = start_pos;
         }
 
         out.flush().unwrap();
+        id_out.finish().unwrap();
 
-        let mut trie_f = File::create("./tapes/feed/feed.fp").unwrap();
-        trie_f
-            .write_all(
-                &zstd::encode_all(
-                    Cursor::new(
-                        position_index
-                            .into_iter()
-                            .map(|(b, i)| [b, i.to_be_bytes().to_vec()].concat())
-                            .flatten()
-                            .collect::<Vec<u8>>(),
-                    ),
-                    22,
-                )
-                .unwrap(),
-            )
-            .unwrap();
+        let idx_f = File::create("./tapes/feed/tag_indexes.fp").unwrap();
+        let mut idx_out = zstd::Encoder::new(idx_f, 21).unwrap();
+        rmp_serde::encode::write(
+            &mut idx_out,
+            &EventIndex {
+                player_index: player_tag_idx,
+                game_index: game_tag_idx,
+                team_index: team_tag_idx,
+                phase_index: phase_idx,
+            },
+        )
+        .unwrap();
+
+        idx_out.finish().unwrap();
     })
     .unwrap();
 }

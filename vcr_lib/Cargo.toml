@@ -6,7 +6,6 @@ edition = "2018"
 [dependencies]
 json-patch = "0.2.6"
 rmp-serde = "0.15.5"
-xdelta3 = "0.1.5"
 zstd = "0.9"
 crossbeam = "0.8.1"
 lru = "0.6.6"
@@ -34,3 +33,6 @@ features = ["derive"]
 [dependencies.serde_json]
 version = "1.0.64"
 features = ["preserve_order"]
+
+[dependencies.xdelta3]
+git = "https://github.com/alisww/xdelta3-rs.git"

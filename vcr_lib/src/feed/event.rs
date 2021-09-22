@@ -31,6 +31,7 @@ pub struct FeedEvent {
 #[serde(rename_all = "camelCase")]
 pub struct CompactedFeedEvent {
     pub id: Uuid,
+    pub created: DateTime<Utc>,
     pub category: i8,
     pub day: i16,
     pub description: String,
@@ -43,7 +44,7 @@ pub struct CompactedFeedEvent {
     pub tournament: i8,
     #[serde(default)]
     pub metadata: JSONValue,
-    #[serde(skip)]
+    pub season: i8,
     pub phase: u8,
 }
 
@@ -149,14 +150,16 @@ impl CompactedFeedEvent {
         };
 
         [
+            self.category.to_be_bytes().to_vec(),
+            self.etype.to_be_bytes().to_vec(),
+            self.day.to_be_bytes().to_vec(),
+            self.season.to_be_bytes().to_vec(),
+            self.phase.to_be_bytes().to_vec(),
             if self.phase == 13 {
                 self.id.as_bytes().to_vec()
             } else {
                 vec![]
             },
-            self.category.to_be_bytes().to_vec(),
-            self.etype.to_be_bytes().to_vec(),
-            self.day.to_be_bytes().to_vec(),
             description_bytes,
             player_tag_bytes,
             team_tag_bytes,
