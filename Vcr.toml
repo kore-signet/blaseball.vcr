@@ -13,5 +13,5 @@ index = "./tapes/feed/feed.fp"
 path = "./tapes/feed/feed.riv"
 dict = "./zstd-dictionaries/feed.dict"
 id_table = "./tapes/feed/id_lookup.bin"
-tag_table = "./tapes/feed/tag_lookup.bin.zstd"
+tag_table = "./tapes/feed/tag_indexes.fp"
 cache_size = 50
