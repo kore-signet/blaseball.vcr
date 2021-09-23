@@ -264,10 +264,8 @@ name = "blaseball_vcr"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "crossbeam",
  "json-patch",
  "lru",
- "patricia_tree",
  "reqwest",
  "rmp-serde",
  "rocket",
@@ -608,7 +606,6 @@ dependencies = [
  "crossbeam",
  "json-patch",
  "progress_bar",
- "qp-trie",
  "reqwest",
  "rmp-serde",
  "serde",
@@ -1009,9 +1006,9 @@ checksum = "3094308123a0e9fd59659ce45e22de9f53fc1d2ac6e1feb9fef988e4f76cad77"
 
 [[package]]
 name = "instant"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bee0328b1209d157ef001c94dd85b4f8f64139adb0eac2659f4b08382b2f474d"
+checksum = "716d3d89f35ac6a34fd0eed635395f4c3b76fa889338a4632e5231a8684216bd"
 dependencies = [
  "cfg-if 1.0.0",
 ]
@@ -1245,12 +1242,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "new_debug_unreachable"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
-
-[[package]]
 name = "nom"
 version = "5.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1392,15 +1383,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877630b3de15c0b64cc52f659345724fbf6bdad9bd9566699fc53688f3c34a34"
 
 [[package]]
-name = "patricia_tree"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52c4b8ef84caee22395fa083b7d8ee9351e71cdf69a46c832528acdcac402117"
-dependencies = [
- "bitflags",
-]
-
-[[package]]
 name = "pear"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1514,17 +1496,6 @@ name = "progress_bar"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59fd305ac950550fa06771dc93b43670190dd1befc73b1367f5d4246bf48c2dc"
-
-[[package]]
-name = "qp-trie"
-version = "0.7.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65c28ae173e3e75d238fc7f558664fd6700d49a3a5a465d61671227e042dc747"
-dependencies = [
- "new_debug_unreachable",
- "serde",
- "unreachable",
-]
 
 [[package]]
 name = "quick-error"
@@ -2483,15 +2454,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 
 [[package]]
-name = "unreachable"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "382810877fe448991dfc7f0dd6e3ae5d58088fd0ea5e35189655f84e6814fa56"
-dependencies = [
- "void",
-]
-
-[[package]]
 name = "url"
 version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2529,12 +2491,6 @@ name = "version_check"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
-
-[[package]]
-name = "void"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "want"

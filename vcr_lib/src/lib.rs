@@ -10,7 +10,7 @@ pub use json_sequences::*;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
-use std::io::Read;
+
 
 pub type VCRResult<T> = Result<T, VCRError>;
 

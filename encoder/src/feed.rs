@@ -1,13 +1,13 @@
 use blaseball_vcr::{
-    feed::{CompactedFeedEvent, EventIndex, FeedEvent, MetaIndex},
+    feed::{CompactedFeedEvent, FeedEvent, MetaIndex},
     utils::encode_varint,
 };
-use chrono::{DateTime, Duration, DurationRound, Utc};
+
 use crossbeam::channel::bounded;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
-use uuid::Uuid;
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
+
 
 fn main() {
     let (snd1, rcv1) = bounded(1);
@@ -81,7 +81,7 @@ fn main() {
                     .collect();
 
                 snd1.send(
-                    (CompactedFeedEvent {
+                    CompactedFeedEvent {
                         id: event.id,
                         category: event.category,
                         day: event.day,
@@ -95,7 +95,7 @@ fn main() {
                         metadata: event.metadata,
                         phase: event.phase,
                         season: event.season,
-                    }),
+                    },
                 )
                 .unwrap();
             }

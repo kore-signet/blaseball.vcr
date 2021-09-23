@@ -5,7 +5,7 @@ pub use decode::*;
 pub use desc::*;
 pub use event::*;
 
-use chrono::{DateTime, Utc};
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

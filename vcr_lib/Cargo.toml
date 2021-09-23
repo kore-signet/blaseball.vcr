@@ -7,9 +7,7 @@ edition = "2018"
 json-patch = "0.2.6"
 rmp-serde = "0.15.5"
 zstd = "0.9"
-crossbeam = "0.8.1"
 lru = "0.6.6"
-patricia_tree = "0.3.1"
 
 [dependencies.reqwest]
 version = "0.11.4"

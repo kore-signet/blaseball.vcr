@@ -1,8 +1,8 @@
 use super::*;
-use crate::{utils::*, VCRError, VCRResult};
-use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
+use crate::{VCRError, VCRResult};
+use chrono::{DateTime, TimeZone, Utc};
 use lru::LruCache;
-use patricia_tree::PatriciaMap;
+
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -27,7 +27,7 @@ fn make_offset_table<R: Read>(mut reader: R) -> Vec<(DateTime<Utc>, (u32, u16))>
 
         if !index.is_empty() {
             let idx = index.len() - 1;
-            let mut a = index[idx].clone();
+            let mut a = index[idx];
             a.1 .1 = (start_pos as u32 - a.1 .0) as u16;
             index[idx] = a;
         }
@@ -84,7 +84,7 @@ impl FeedDatabase {
                 let klen: u64 = read_u32!(cursor) as u64;
                 let start_pos = cursor.position();
 
-                let mut entry = idx
+                let entry = idx
                     .entry(key)
                     .or_insert_with(|| Vec::with_capacity(klen as usize));
 
@@ -111,7 +111,7 @@ impl FeedDatabase {
                 let klen: u64 = read_u32!(cursor) as u64;
                 let start_pos = cursor.position();
 
-                let mut entry = idx
+                let entry = idx
                     .entry(key)
                     .or_insert_with(|| Vec::with_capacity(klen as usize));
 
@@ -138,7 +138,7 @@ impl FeedDatabase {
                 let klen: u64 = read_u32!(cursor) as u64;
                 let start_pos = cursor.position();
 
-                let mut entry = idx
+                let entry = idx
                     .entry(key)
                     .or_insert_with(|| Vec::with_capacity(klen as usize));
 
@@ -165,7 +165,7 @@ impl FeedDatabase {
                 let klen: u64 = read_u32!(cursor) as u64;
                 let start_pos = cursor.position();
 
-                let mut entry = idx
+                let entry = idx
                     .entry(key)
                     .or_insert_with(|| Vec::with_capacity(klen as usize));
 
@@ -367,7 +367,7 @@ impl FeedDatabase {
             day: i16::from_be_bytes(day),
             season: i8::from_be_bytes(season),
             nuts: 0,
-            phase: phase,
+            phase,
             player_tags: Some(player_tags),
             team_tags: Some(team_tags),
             game_tags: Some(game_tags),

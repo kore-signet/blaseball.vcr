@@ -19,9 +19,6 @@ path = "../vcr_lib"
 version = "0.8.2"
 features = ["serde"]
 
-[dependencies.qp-trie]
-version = "0.7.6"
-features = ["serde"]
 
 [dependencies.tokio]
 version = "1"
