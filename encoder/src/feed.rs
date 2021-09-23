@@ -1,4 +1,7 @@
-use blaseball_vcr::feed::{CompactedFeedEvent, EventIndex, FeedEvent, MetaIndex};
+use blaseball_vcr::{
+    feed::{CompactedFeedEvent, EventIndex, FeedEvent, MetaIndex},
+    utils::encode_varint,
+};
 use chrono::{DateTime, Duration, DurationRound, Utc};
 use crossbeam::channel::bounded;
 use std::collections::HashMap;
@@ -9,7 +12,7 @@ use uuid::Uuid;
 fn main() {
     let (snd1, rcv1) = bounded(1);
     let (snd2, rcv2) = bounded(1);
-    let n_workers = 4;
+    let n_workers = 6;
 
     let mut feed_dict: Vec<u8> = Vec::new();
     let mut dict_f = File::open("zstd-dictionaries/feed.dict").unwrap();
@@ -19,37 +22,12 @@ fn main() {
         // Producer thread
         s.spawn(|_| {
             let mut indexes: MetaIndex = Default::default();
-            // let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
-            // let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
-            // let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
-            // let mut millis_epoch_table: HashMap<(i8, u8), u32> = HashMap::new();
-            // let mut player_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
-            // let mut game_tag_idx: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
-            // let mut team_tag_idx: HashMap<u8, Vec<Vec<u8>>> = HashMap::new();
 
             let f = File::open("feed.json").unwrap();
             let reader = BufReader::new(f);
 
             for l in reader.lines() {
                 let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
-
-                // let millis_epoch = if event.season >= 11 && [3, 5, 13].contains(&event.phase) {
-                //     Some(
-                //         millis_epoch_table
-                //             .entry((event.season, event.phase))
-                //             .or_insert(
-                //                 event
-                //                     .created
-                //                     .duration_trunc(Duration::hours(1))
-                //                     .unwrap()
-                //                     .timestamp() as u32,
-                //             ),
-                //     )
-                // } else {
-                //     None
-                // };
-
-                // let snowflake_id = event.generate_id(millis_epoch.copied());
 
                 let compact_player_tags: Vec<u16> = event
                     .player_tags
@@ -159,6 +137,7 @@ fn main() {
 
         let id_out_f = File::create("./tapes/feed/feed.fp").unwrap();
         let mut id_out = zstd::Encoder::new(id_out_f, 21).unwrap();
+        id_out.long_distance_matching(true).unwrap();
 
         let mut last_position = out.stream_position().unwrap() as u32;
 
@@ -213,16 +192,128 @@ fn main() {
 
         let idx_f = File::create("./tapes/feed/tag_indexes.fp").unwrap();
         let mut idx_out = zstd::Encoder::new(idx_f, 21).unwrap();
-        rmp_serde::encode::write(
-            &mut idx_out,
-            &EventIndex {
-                player_index: player_tag_idx,
-                game_index: game_tag_idx,
-                team_index: team_tag_idx,
-                phase_index: phase_idx,
-            },
-        )
-        .unwrap();
+        idx_out.long_distance_matching(true).unwrap();
+
+        let game_tag_idx_bytes = game_tag_idx
+            .into_iter()
+            .map(|(k, v)| {
+                let v_bytes = v
+                    .into_iter()
+                    .map(|(time, (offset, length))| {
+                        vec![
+                            time.to_be_bytes().to_vec(),
+                            offset.to_be_bytes().to_vec(),
+                            encode_varint(length),
+                        ]
+                        .concat()
+                    })
+                    .flatten()
+                    .collect::<Vec<u8>>();
+                vec![
+                    k.to_be_bytes().to_vec(),
+                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
+                    v_bytes,
+                ]
+                .concat()
+            })
+            .flatten()
+            .collect::<Vec<u8>>();
+
+        let player_tag_idx_bytes = player_tag_idx
+            .into_iter()
+            .map(|(k, v)| {
+                let v_bytes = v
+                    .into_iter()
+                    .map(|(time, (offset, length))| {
+                        vec![
+                            time.to_be_bytes().to_vec(),
+                            offset.to_be_bytes().to_vec(),
+                            encode_varint(length),
+                        ]
+                        .concat()
+                    })
+                    .flatten()
+                    .collect::<Vec<u8>>();
+                vec![
+                    k.to_be_bytes().to_vec(),
+                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
+                    v_bytes,
+                ]
+                .concat()
+            })
+            .flatten()
+            .collect::<Vec<u8>>();
+
+        let team_tag_idx_bytes = team_tag_idx
+            .into_iter()
+            .map(|(k, v)| {
+                let v_bytes = v
+                    .into_iter()
+                    .map(|(time, (offset, length))| {
+                        vec![
+                            time.to_be_bytes().to_vec(),
+                            offset.to_be_bytes().to_vec(),
+                            encode_varint(length),
+                        ]
+                        .concat()
+                    })
+                    .flatten()
+                    .collect::<Vec<u8>>();
+                vec![
+                    k.to_be_bytes().to_vec(),
+                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
+                    v_bytes,
+                ]
+                .concat()
+            })
+            .flatten()
+            .collect::<Vec<u8>>();
+
+        let phase_idx_bytes = phase_idx
+            .into_iter()
+            .map(|(k, v)| {
+                let v_bytes = v
+                    .into_iter()
+                    .map(|(time, (offset, length))| {
+                        vec![
+                            time.to_be_bytes().to_vec(),
+                            offset.to_be_bytes().to_vec(),
+                            encode_varint(length),
+                        ]
+                        .concat()
+                    })
+                    .flatten()
+                    .collect::<Vec<u8>>();
+                vec![
+                    k.0.to_be_bytes().to_vec(),
+                    k.1.to_be_bytes().to_vec(),
+                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
+                    v_bytes,
+                ]
+                .concat()
+            })
+            .flatten()
+            .collect::<Vec<u8>>();
+
+        idx_out
+            .write_all(&(game_tag_idx_bytes.len() as u32).to_be_bytes())
+            .unwrap();
+        idx_out.write_all(&game_tag_idx_bytes).unwrap();
+
+        idx_out
+            .write_all(&(player_tag_idx_bytes.len() as u32).to_be_bytes())
+            .unwrap();
+        idx_out.write_all(&player_tag_idx_bytes).unwrap();
+
+        idx_out
+            .write_all(&(team_tag_idx_bytes.len() as u32).to_be_bytes())
+            .unwrap();
+        idx_out.write_all(&team_tag_idx_bytes).unwrap();
+
+        idx_out
+            .write_all(&(phase_idx_bytes.len() as u32).to_be_bytes())
+            .unwrap();
+        idx_out.write_all(&phase_idx_bytes).unwrap();
 
         idx_out.finish().unwrap();
     })

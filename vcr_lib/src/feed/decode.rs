@@ -1,5 +1,5 @@
 use super::*;
-use crate::{decode_varint, VCRError, VCRResult};
+use crate::{utils::*, VCRError, VCRResult};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use lru::LruCache;
 use patricia_tree::PatriciaMap;
@@ -70,7 +70,122 @@ impl FeedDatabase {
         let meta_idx: MetaIndex = rmp_serde::from_read(id_file)?;
 
         let idx_file = File::open(idx_file_path)?;
-        let event_idx: EventIndex = rmp_serde::from_read_ref(&zstd::decode_all(idx_file).unwrap())?;
+        let mut idx_decoder = zstd::Decoder::new(idx_file)?;
+
+        let game_index = {
+            let mut idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
+            let idx_len = read_u32!(idx_decoder);
+            let mut bytes: Vec<u8> = vec![0; idx_len as usize];
+            idx_decoder.read_exact(&mut bytes)?;
+            let mut cursor = Cursor::new(bytes);
+
+            while cursor.position() < idx_len as u64 {
+                let key = read_u16!(cursor);
+                let klen: u64 = read_u32!(cursor) as u64;
+                let start_pos = cursor.position();
+
+                let mut entry = idx
+                    .entry(key)
+                    .or_insert_with(|| Vec::with_capacity(klen as usize));
+
+                while (cursor.position() - start_pos) < klen {
+                    entry.push((
+                        read_u32!(cursor),
+                        (read_u32!(cursor), decode_varint!(cursor)),
+                    ));
+                }
+            }
+
+            idx
+        };
+
+        let player_index = {
+            let mut idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
+            let idx_len = read_u32!(idx_decoder);
+            let mut bytes: Vec<u8> = vec![0; idx_len as usize];
+            idx_decoder.read_exact(&mut bytes)?;
+            let mut cursor = Cursor::new(bytes);
+
+            while cursor.position() < idx_len as u64 {
+                let key = read_u16!(cursor);
+                let klen: u64 = read_u32!(cursor) as u64;
+                let start_pos = cursor.position();
+
+                let mut entry = idx
+                    .entry(key)
+                    .or_insert_with(|| Vec::with_capacity(klen as usize));
+
+                while (cursor.position() - start_pos) < klen {
+                    entry.push((
+                        read_u32!(cursor),
+                        (read_u32!(cursor), decode_varint!(cursor)),
+                    ));
+                }
+            }
+
+            idx
+        };
+
+        let team_index = {
+            let mut idx: HashMap<u8, Vec<(u32, (u32, u16))>> = HashMap::new();
+            let idx_len = read_u32!(idx_decoder);
+            let mut bytes: Vec<u8> = vec![0; idx_len as usize];
+            idx_decoder.read_exact(&mut bytes)?;
+            let mut cursor = Cursor::new(bytes);
+
+            while cursor.position() < idx_len as u64 {
+                let key = read_u8!(cursor);
+                let klen: u64 = read_u32!(cursor) as u64;
+                let start_pos = cursor.position();
+
+                let mut entry = idx
+                    .entry(key)
+                    .or_insert_with(|| Vec::with_capacity(klen as usize));
+
+                while (cursor.position() - start_pos) < klen {
+                    entry.push((
+                        read_u32!(cursor),
+                        (read_u32!(cursor), decode_varint!(cursor)),
+                    ));
+                }
+            }
+
+            idx
+        };
+
+        let phase_index = {
+            let mut idx: HashMap<(i8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
+            let idx_len = read_u32!(idx_decoder);
+            let mut bytes: Vec<u8> = vec![0; idx_len as usize];
+            idx_decoder.read_exact(&mut bytes)?;
+            let mut cursor = Cursor::new(bytes);
+
+            while cursor.position() < idx_len as u64 {
+                let key = (read_i8!(cursor), read_u8!(cursor));
+                let klen: u64 = read_u32!(cursor) as u64;
+                let start_pos = cursor.position();
+
+                let mut entry = idx
+                    .entry(key)
+                    .or_insert_with(|| Vec::with_capacity(klen as usize));
+
+                while (cursor.position() - start_pos) < klen {
+                    entry.push((
+                        read_i64!(cursor),
+                        (read_u32!(cursor), decode_varint!(cursor)),
+                    ));
+                }
+            }
+
+            idx
+        };
+
+        let event_idx: EventIndex = EventIndex {
+            player_index,
+            team_index,
+            phase_index,
+            game_index,
+        };
 
         let position_index_file = File::open(position_index_path)?;
         let position_index_decompressor = zstd::stream::Decoder::new(position_index_file)?;
@@ -318,9 +433,7 @@ impl FeedDatabase {
 
             idx -= 1;
         }
-
-        events.reverse();
-
+        
         Ok(events)
     }
 
@@ -399,6 +512,7 @@ impl FeedDatabase {
         }
 
         events.sort_by_key(|e| e.created.timestamp());
+        events.dedup();
         events.reverse();
 
         Ok(events)

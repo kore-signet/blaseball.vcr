@@ -1,11 +1,11 @@
 use super::EventDescription;
-use crate::encode_varint;
+use crate::utils::encode_varint;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FeedEvent {
     pub id: Uuid,
