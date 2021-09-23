@@ -243,19 +243,11 @@ impl FeedDatabase {
             &self.dictionary,
         )?;
 
-        let mut category: [u8; 1] = [0; 1];
-        let mut etype: [u8; 2] = [0; 2];
-        let mut day: [u8; 2] = [0; 2];
-        let mut season: [u8; 1] = [0; 1];
-        let mut phase: [u8; 1] = [0; 1];
-
-        decoder.read_exact(&mut category)?;
-        decoder.read_exact(&mut etype)?;
-        decoder.read_exact(&mut day)?;
-        decoder.read_exact(&mut season)?;
-        decoder.read_exact(&mut phase)?;
-
-        let phase = u8::from_be_bytes(phase);
+        let category: i8 = read_i8!(decoder);
+        let etype: i16 = read_i16!(decoder);
+        let day: i16 = read_i16!(decoder);
+        let season: i8 = read_i8!(decoder);
+        let phase: u8 = read_u8!(decoder);
 
         let id = if phase == 13 {
             let mut uuid: [u8; 16] = [0; 16];
@@ -266,7 +258,7 @@ impl FeedDatabase {
         };
 
         use EventDescription::*;
-        let description = match EventDescription::from_type(i16::from_be_bytes(etype)) {
+        let description = match EventDescription::from_type(etype) {
             Constant(s) => s.to_owned(),
             ConstantVariant(possibilities) => {
                 let mut variant_byte: [u8; 1] = [0; 1];
@@ -295,21 +287,15 @@ impl FeedDatabase {
             }
         };
 
-        let mut player_tag_len_bytes: [u8; 1] = [0; 1];
-        decoder.read_exact(&mut player_tag_len_bytes)?;
-        let player_tag_len = u8::from_be_bytes(player_tag_len_bytes);
+        let player_tag_len = read_u8!(decoder);
         let mut player_tag_bytes: Vec<u8> = vec![0; (player_tag_len * 2) as usize];
         decoder.read_exact(&mut player_tag_bytes)?;
 
-        let mut team_tag_len_bytes: [u8; 1] = [0; 1];
-        decoder.read_exact(&mut team_tag_len_bytes)?;
-        let team_tag_len = u8::from_be_bytes(team_tag_len_bytes);
+        let team_tag_len =  read_u8!(decoder);
         let mut team_tag_bytes: Vec<u8> = vec![0; team_tag_len as usize];
         decoder.read_exact(&mut team_tag_bytes)?;
 
-        let mut game_tag_len_bytes: [u8; 1] = [0; 1];
-        decoder.read_exact(&mut game_tag_len_bytes)?;
-        let game_tag_len = u8::from_be_bytes(game_tag_len_bytes);
+        let game_tag_len =  read_u8!(decoder);
         let mut game_tag_bytes: Vec<u8> = vec![0; (game_tag_len * 2) as usize];
         decoder.read_exact(&mut game_tag_bytes)?;
 
@@ -362,16 +348,16 @@ impl FeedDatabase {
 
         let ev = FeedEvent {
             id,
-            category: i8::from_be_bytes(category),
+            category: category,
             created: timestamp,
-            day: i16::from_be_bytes(day),
-            season: i8::from_be_bytes(season),
+            day: day,
+            season: season,
             nuts: 0,
             phase,
             player_tags: Some(player_tags),
             team_tags: Some(team_tags),
             game_tags: Some(game_tags),
-            etype: i16::from_be_bytes(etype),
+            etype: etype,
             tournament: -1,
             description,
             metadata,

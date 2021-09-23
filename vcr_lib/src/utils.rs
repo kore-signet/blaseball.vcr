@@ -50,6 +50,15 @@ macro_rules! read_u16 {
 }
 
 #[macro_export]
+macro_rules! read_i16 {
+    ($read:expr) => {{
+        let mut bytes: [u8; 2] = [0; 2];
+        $read.read_exact(&mut bytes)?;
+        i16::from_be_bytes(bytes)
+    }};
+}
+
+#[macro_export]
 macro_rules! read_u32 {
     ($read:expr) => {{
         let mut bytes: [u8; 4] = [0; 4];
