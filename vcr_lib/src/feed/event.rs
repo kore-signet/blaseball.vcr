@@ -121,7 +121,8 @@ impl CompactedFeedEvent {
                     vec![(possibilities
                         .iter()
                         .position(|&d| d == self.description)
-                        .unwrap_or_else(|| panic!("{}", self.etype)) as u8)
+                        .unwrap_or_else(|| panic!("{}", self.etype))
+                        as u8)
                         .to_be()]
                 }
                 EventDescription::Suffix(s) => {

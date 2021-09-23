@@ -76,19 +76,13 @@ pub async fn main() -> VCRResult<()> {
     let checkpoint_every = entity_types.remove(0).parse::<u32>().unwrap_or(u32::MAX);
     let dict_path = entity_types.remove(0);
 
-    let (mut table_compressor, mut patch_compressor) = if dict_path == "nodict" {
-        (
-            zstd::block::Compressor::new(),
-            zstd::block::Compressor::new(),
-        )
+    let mut patch_compressor = if dict_path == "nodict" {
+        zstd::block::Compressor::new()
     } else {
         let mut dict_f = File::open(&dict_path).map_err(VCRError::IOError)?;
         let mut dict: Vec<u8> = Vec::new();
         dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
-        (
-            zstd::block::Compressor::new(),
-            zstd::block::Compressor::with_dict(dict),
-        )
+        zstd::block::Compressor::with_dict(dict)
     };
 
     for etype in entity_types {
@@ -191,20 +185,21 @@ pub async fn main() -> VCRResult<()> {
 
         progress_bar.finalize();
 
-        let mut entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
+        let entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
             .map_err(VCRError::IOError)?;
-        entity_table_f
+        let mut entity_table_compressor = zstd::Encoder::new(entity_table_f, 21).unwrap();
+        entity_table_compressor
+            .long_distance_matching(true)
+            .unwrap();
+        entity_table_compressor
             .write_all(
-                &table_compressor
-                    .compress(
-                        &rmp_serde::to_vec(&entity_lookup_table)
-                            .map_err(VCRError::MsgPackEncError)?,
-                        22,
-                    )
+                &rmp_serde::to_vec(&entity_lookup_table)
+                    .map_err(VCRError::MsgPackEncError)
                     .unwrap(),
             )
-            .map_err(VCRError::IOError)?;
-
+            .map_err(VCRError::IOError)
+            .unwrap();
+        entity_table_compressor.finish().unwrap();
         out.get_mut().sync_all().map_err(VCRError::IOError)?;
     }
 

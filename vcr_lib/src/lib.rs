@@ -11,7 +11,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 
-
 pub type VCRResult<T> = Result<T, VCRError>;
 
 #[derive(Debug, Serialize, Deserialize)]

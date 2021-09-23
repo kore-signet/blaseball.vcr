@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
 
-
 fn main() {
     let (snd1, rcv1) = bounded(1);
     let (snd2, rcv2) = bounded(1);
@@ -80,23 +79,21 @@ fn main() {
                     })
                     .collect();
 
-                snd1.send(
-                    CompactedFeedEvent {
-                        id: event.id,
-                        category: event.category,
-                        day: event.day,
-                        created: event.created,
-                        description: event.description,
-                        player_tags: compact_player_tags,
-                        game_tags: compact_game_tags,
-                        team_tags: compact_team_tags,
-                        etype: event.etype,
-                        tournament: event.tournament,
-                        metadata: event.metadata,
-                        phase: event.phase,
-                        season: event.season,
-                    },
-                )
+                snd1.send(CompactedFeedEvent {
+                    id: event.id,
+                    category: event.category,
+                    day: event.day,
+                    created: event.created,
+                    description: event.description,
+                    player_tags: compact_player_tags,
+                    game_tags: compact_game_tags,
+                    team_tags: compact_team_tags,
+                    etype: event.etype,
+                    tournament: event.tournament,
+                    metadata: event.metadata,
+                    phase: event.phase,
+                    season: event.season,
+                })
                 .unwrap();
             }
 

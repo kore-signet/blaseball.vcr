@@ -215,7 +215,6 @@ pub fn main() -> VCRResult<()> {
         drop(snd2);
 
         let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
-        let mut table_compressor = zstd::block::Compressor::new();
 
         for (id, patches, path_map, base) in rcv2.iter() {
             let entity_start_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
@@ -249,23 +248,22 @@ pub fn main() -> VCRResult<()> {
 
         progress_bar.finalize();
 
-        let mut entity_table_f = File::create(&"./tapes/game_updates.header.riv.zstd".to_string())
+        let entity_table_f = File::create(&"./tapes/game_updates.header.riv.zstd".to_string())
             .map_err(VCRError::IOError)
             .unwrap();
-        entity_table_f
+        let mut entity_table_compressor = zstd::Encoder::new(entity_table_f, 21).unwrap();
+        entity_table_compressor
+            .long_distance_matching(true)
+            .unwrap();
+        entity_table_compressor
             .write_all(
-                &table_compressor
-                    .compress(
-                        &rmp_serde::to_vec(&entity_lookup_table)
-                            .map_err(VCRError::MsgPackEncError)
-                            .unwrap(),
-                        22,
-                    )
-                    .map_err(VCRError::IOError)
+                &rmp_serde::to_vec(&entity_lookup_table)
+                    .map_err(VCRError::MsgPackEncError)
                     .unwrap(),
             )
             .map_err(VCRError::IOError)
             .unwrap();
+        entity_table_compressor.finish().unwrap();
     })
     .unwrap();
 

@@ -291,11 +291,11 @@ impl FeedDatabase {
         let mut player_tag_bytes: Vec<u8> = vec![0; (player_tag_len * 2) as usize];
         decoder.read_exact(&mut player_tag_bytes)?;
 
-        let team_tag_len =  read_u8!(decoder);
+        let team_tag_len = read_u8!(decoder);
         let mut team_tag_bytes: Vec<u8> = vec![0; team_tag_len as usize];
         decoder.read_exact(&mut team_tag_bytes)?;
 
-        let game_tag_len =  read_u8!(decoder);
+        let game_tag_len = read_u8!(decoder);
         let mut game_tag_bytes: Vec<u8> = vec![0; (game_tag_len * 2) as usize];
         decoder.read_exact(&mut game_tag_bytes)?;
 
@@ -419,7 +419,7 @@ impl FeedDatabase {
 
             idx -= 1;
         }
-        
+
         Ok(events)
     }
 
