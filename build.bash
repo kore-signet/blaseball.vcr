@@ -15,7 +15,7 @@
 ./target/release/build_entities -1 nodict fuelprogress
 ./target/release/build_entities 100 nodict team
 ./target/release/build_entities 100 zstd-dictionaries/sim.dict sim
-./target/release/build_entities 100 season standings temporal
+./target/release/build_entities 100 nodict season standings temporal
 ./target/release/build_entities 100 nodict league subleague division tiebreakers
 ./target/release/build_entities 100 nodict tournament
 ./target/release/build_entities 100 nodict communitychestprogress

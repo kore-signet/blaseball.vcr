@@ -18,6 +18,8 @@ use std::sync::Mutex;
 
 use player::{types::*, v1, v2};
 
+use serde_json::value::RawValue;
+
 #[cfg(feature = "bundle_before")]
 use rocket::{response::content::Html, Either};
 
@@ -211,7 +213,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         rocket = rocket.attach(CORS);
     }
 
-    let cache: LruCache<String, InternalPaging> =
+    let cache: LruCache<String, InternalPaging<Box<RawValue>>> =
         LruCache::new(config.cached_page_capacity.unwrap_or(20));
 
     #[cfg(feature = "bundle_before")]

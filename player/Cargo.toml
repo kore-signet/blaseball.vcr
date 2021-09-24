@@ -7,7 +7,6 @@ edition = "2018"
 bundle_before = ["before", "open"]
 
 [dependencies]
-serde_json = "1.0.64"
 lru = "0.6.6"
 rand = "0.8.4"
 uuid = "0.8.2"
@@ -36,6 +35,10 @@ features = ["derive"]
 [dependencies.open]
 version = "2"
 optional = true
+
+[dependencies.serde_json]
+version = "1.0.64"
+features = ["preserve_order", "raw_value"]
 
 [[bin]]
 name = "player"

@@ -8,11 +8,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use serde_json::{json, Value as JSONValue};
-
+use serde_json::{json, value::RawValue, Value as JSONValue};
 use zstd::dict::DecoderDictionary;
 
 use lru::LruCache;
+
+use sha2::Digest;
 
 use json_patch::{
     patch_unsafe as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
@@ -29,11 +30,33 @@ fn clamp(input: u32, min: u32, max: u32) -> u32 {
     }
 }
 
+pub fn hash_entities(
+    e: Vec<ChroniclerEntity<JSONValue>>,
+) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
+    let mut hasher = sha2::Sha224::new();
+    e.into_iter()
+        .filter(|v| v.data != json!({}))
+        .map(|v| {
+            let mut buf = Vec::new();
+            let mut ser = serde_json::Serializer::new(&mut buf);
+            v.data.serialize(&mut ser)?;
+            hasher.update(&buf);
+            Ok(ChroniclerEntity {
+                entity_id: v.entity_id,
+                valid_from: v.valid_from,
+                valid_to: v.valid_to,
+                hash: format!("{:x}", hasher.finalize_reset()),
+                data: RawValue::from_string(String::from_utf8(buf).unwrap())?,
+            })
+        })
+        .collect()
+}
+
 pub struct Database {
     reader: BufReader<File>,
     entities: HashMap<String, EntityData>,
     dictionary: Option<DecoderDictionary<'static>>,
-    entity_cache: LruCache<(String, usize), ChroniclerEntity>,
+    entity_cache: LruCache<(String, usize), ChroniclerEntity<JSONValue>>,
 }
 
 impl Database {
@@ -204,7 +227,7 @@ impl Database {
         entity: &str,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut entity_value = self
             .entities
             .get(entity)
@@ -212,7 +235,7 @@ impl Database {
             .base
             .clone();
         let patches = self.get_entity_data(entity, before, false, 0)?;
-        let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
+        let mut results: Vec<ChroniclerEntity<JSONValue>> = Vec::with_capacity(patches.len());
 
         for (time, patch) in patches {
             match patch {
@@ -241,7 +264,7 @@ impl Database {
         Ok(results)
     }
 
-    pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
+    pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let mut entity_value = self
             .entities
             .get(entity)
@@ -305,7 +328,7 @@ impl Database {
         Ok(e)
     }
 
-    pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity> {
+    pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let mut entity_value = self
             .entities
             .get(entity)
@@ -341,7 +364,7 @@ impl Database {
         &mut self,
         entities: Vec<String>,
         at: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut results = Vec::with_capacity(entities.len());
         for e in entities {
             results.push(self.get_entity(&e, at)?);
@@ -355,7 +378,7 @@ impl Database {
         entities: Vec<String>,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut results = Vec::with_capacity(entities.len());
         for e in entities {
             results.append(&mut self.get_entity_versions(&e, before, after)?);
@@ -364,7 +387,7 @@ impl Database {
         Ok(results)
     }
 
-    pub fn all_entities(&mut self, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+    pub fn all_entities(&mut self, at: u32) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut results = Vec::with_capacity(self.entities.len());
         let keys: Vec<String> = self.entities.keys().cloned().collect();
         for entity in keys {
@@ -378,7 +401,7 @@ impl Database {
         &mut self,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut results = Vec::with_capacity(self.entities.len());
         let keys: Vec<String> = self.entities.keys().cloned().collect();
         for e in keys {
@@ -390,18 +413,18 @@ impl Database {
 
     pub fn fetch_page(
         &mut self,
-        page: &mut InternalPaging,
+        page: &mut InternalPaging<Box<RawValue>>,
         count: usize,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
         while page.remaining_data.len() < count {
             if !page.remaining_ids.is_empty() {
                 page.remaining_data.append(&mut match page.kind {
-                    ChronV2EndpointKind::Versions(before, after) => {
-                        self.get_entity_versions(&page.remaining_ids.pop().unwrap(), before, after)?
-                    }
-                    ChronV2EndpointKind::Entities(at) => {
-                        vec![self.get_entity(&page.remaining_ids.pop().unwrap(), at)?]
-                    }
+                    ChronV2EndpointKind::Versions(before, after) => self
+                        .get_entity_versions(&page.remaining_ids.pop().unwrap(), before, after)
+                        .and_then(|v| hash_entities(v))?,
+                    ChronV2EndpointKind::Entities(at) => self
+                        .get_entity(&page.remaining_ids.pop().unwrap(), at)
+                        .and_then(|v| hash_entities(vec![v]))?,
                 });
             } else {
                 break;
@@ -497,7 +520,12 @@ impl MultiDatabase {
         Ok(MultiDatabase { dbs, game_index })
     }
 
-    pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
+    pub fn get_entity(
+        &self,
+        e_type: &str,
+        entity: &str,
+        at: u32,
+    ) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let mut db = self
             .dbs
             .get(e_type)
@@ -513,7 +541,7 @@ impl MultiDatabase {
         entity: &str,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut db = self
             .dbs
             .get(e_type)
@@ -528,7 +556,7 @@ impl MultiDatabase {
         e_type: &str,
         entities: Vec<String>,
         at: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut db = self
             .dbs
             .get(e_type)
@@ -544,7 +572,7 @@ impl MultiDatabase {
         entities: Vec<String>,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut db = self
             .dbs
             .get(e_type)
@@ -554,7 +582,11 @@ impl MultiDatabase {
         db.get_entities_versions(entities, before, after)
     }
 
-    pub fn all_entities(&self, e_type: &str, at: u32) -> VCRResult<Vec<ChroniclerEntity>> {
+    pub fn all_entities(
+        &self,
+        e_type: &str,
+        at: u32,
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut db = self
             .dbs
             .get(e_type)
@@ -569,7 +601,7 @@ impl MultiDatabase {
         e_type: &str,
         before: u32,
         after: u32,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut db = self
             .dbs
             .get(e_type)
@@ -592,9 +624,9 @@ impl MultiDatabase {
     pub fn fetch_page(
         &self,
         e_type: &str,
-        page: &mut InternalPaging,
+        page: &mut InternalPaging<Box<RawValue>>,
         count: usize,
-    ) -> VCRResult<Vec<ChroniclerEntity>> {
+    ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
         let mut db = self
             .dbs
             .get(e_type)

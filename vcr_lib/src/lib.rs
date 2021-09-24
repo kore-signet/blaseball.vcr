@@ -29,17 +29,17 @@ pub struct ChroniclerV1Response<T> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChroniclerEntity {
+pub struct ChroniclerEntity<T> {
     pub entity_id: String,
     pub hash: String,
     pub valid_from: DateTime<Utc>,
     pub valid_to: Option<String>,
-    pub data: JSONValue,
+    pub data: T,
 }
 
-pub struct InternalPaging {
+pub struct InternalPaging<T> {
     pub remaining_ids: Vec<String>,
-    pub remaining_data: Vec<ChroniclerEntity>,
+    pub remaining_data: Vec<ChroniclerEntity<T>>,
     pub kind: ChronV2EndpointKind,
 }
 
@@ -54,6 +54,7 @@ pub struct GameDate {
     pub day: i32,
     pub season: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub tournament: Option<i32>,
 }
 
@@ -68,9 +69,9 @@ pub struct ChronV1Game {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct ChronV1GameUpdate {
+pub struct ChronV1GameUpdate<T> {
     pub game_id: String,
     pub timestamp: DateTime<Utc>,
     pub hash: String,
-    pub data: JSONValue,
+    pub data: T,
 }

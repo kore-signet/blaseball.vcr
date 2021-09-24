@@ -30,8 +30,8 @@ async fn paged_get(
     show_progress: bool,
     url: &str,
     mut parameters: ChroniclerParameters,
-) -> VCRResult<Vec<ChroniclerEntity>> {
-    let mut results: Vec<ChroniclerEntity> = Vec::new();
+) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
+    let mut results: Vec<ChroniclerEntity<JSONValue>> = Vec::new();
 
     let mut page = 1;
 
@@ -49,7 +49,7 @@ async fn paged_get(
             );
         }
 
-        let mut chron_response: ChroniclerResponse<ChroniclerEntity> = client
+        let mut chron_response: ChroniclerResponse<ChroniclerEntity<JSONValue>> = client
             .get(url)
             .query(&parameters)
             .send()
