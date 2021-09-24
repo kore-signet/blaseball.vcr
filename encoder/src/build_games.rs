@@ -194,7 +194,7 @@ pub fn main() -> VCRResult<()> {
                     .collect();
 
                     entity_versions.sort_by_key(|v| v.0);
-                    let (patches, path_map, base) = encode(entity_versions, u32::MAX);
+                    let (patches, path_map, base) = encode(entity_versions, u16::MAX);
                     sendr
                         .send((
                             id,
@@ -217,7 +217,6 @@ pub fn main() -> VCRResult<()> {
         let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
 
         for (id, patches, path_map, base) in rcv2.iter() {
-            let entity_start_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
             let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
             progress_bar.set_action(&id, Color::Green, Style::Bold);
 
@@ -235,7 +234,7 @@ pub fn main() -> VCRResult<()> {
                 EntityData {
                     patches: offsets,
                     path_map,
-                    checkpoint_every: u32::MAX,
+                    checkpoint_every: u16::MAX,
                     base,
                 },
             );
