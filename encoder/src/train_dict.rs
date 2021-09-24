@@ -73,7 +73,7 @@ async fn paged_get(
 pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new();
     let mut entity_types: Vec<String> = env::args().skip(1).collect();
-    let checkpoint_every = entity_types.remove(0).parse::<u32>().unwrap_or(u32::MAX);
+    let checkpoint_every = entity_types.remove(0).parse::<u16>().unwrap_or(u16::MAX);
 
     for etype in entity_types {
         let mut progress_bar = ProgressBar::new(0);
