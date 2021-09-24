@@ -99,7 +99,7 @@ pub fn games(
                         Ok(g) => {
                             let game = g.data;
                             if (req.started.is_none()
-                                || req.started.map(|v| json!(v)).as_ref() == game.get("started"))
+                                || req.started.map(|v| json!(v)).as_ref() == game.get("gameStart"))
                                 && (req.finished.is_none()
                                     || req.finished.map(|v| json!(v)).as_ref()
                                         == game.get("finalized"))
