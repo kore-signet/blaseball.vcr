@@ -212,9 +212,14 @@ impl Database {
             .base
             .clone();
         let patches = self.get_entity_data(entity, before, false, 0)?;
-        let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches.len());
+        let patches_len = patches.len();
+        let mut results: Vec<ChroniclerEntity> = Vec::with_capacity(patches_len);
 
-        for (time, patch) in patches {
+        for slice in patches.windows(2) {
+            let time = slice[0].0;
+            let next_time = slice[1].0;
+            let patch: &json_sequences::Patch = &slice[0].1;
+
             match patch {
                 Patch::ReplaceRoot(v) => {
                     entity_value = v.clone();
@@ -232,10 +237,37 @@ impl Database {
                         NaiveDateTime::from_timestamp(time as i64, 0),
                         Utc,
                     ),
-                    valid_to: None,
-                    hash: String::new(),
+                    valid_to: Some(DateTime::<Utc>::from_utc(
+                        NaiveDateTime::from_timestamp(next_time as i64, 0),
+                        Utc,
+                    ).to_rfc3339()),
+                    hash: String::from("ahh"),
                 });
             }
+        }
+
+        let (time, patch) = &patches[patches_len - 1];
+
+        match patch {
+            Patch::ReplaceRoot(v) => {
+                entity_value = v.clone();
+            }
+            Patch::Normal(p) => {
+                patch_json(&mut entity_value, &p)?;
+            }
+        }
+
+        if time > &after {
+            results.push(ChroniclerEntity {
+                data: entity_value.clone(),
+                entity_id: entity.to_owned(),
+                valid_from: DateTime::<Utc>::from_utc(
+                    NaiveDateTime::from_timestamp(*time as i64, 0),
+                    Utc,
+                ),
+                valid_to: None,
+                hash: String::from("ahh2"),
+            });
         }
 
         Ok(results)
