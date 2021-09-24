@@ -1,0 +1,8 @@
+[default.vcr]
+entities_cache_size = 100
+tapes = "./usr/share/blaseball-vcr/tapes/"
+site_assets = "./usr/share/blaseball-vcr/tapes/site_data/"
+zstd_dictionaries = "./usr/share/blaseball-vcr/zstd-dictionaries/" # this is optional; you can exclude it if your dataset doesn't require dicts.
+cors = true
+time_responses = false
+open_in_browser = false

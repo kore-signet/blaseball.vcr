@@ -2,7 +2,9 @@ use rocket::{FromForm, FromFormField};
 
 #[derive(Debug, Copy, Clone, FromFormField, PartialEq)]
 pub enum Order {
+    #[field(value = "asc")]
     Asc,
+    #[field(value = "desc")]
     Desc,
 }
 
@@ -31,7 +33,7 @@ pub struct VersionsReq {
     pub page: Option<String>,
 }
 
-#[derive(FromForm)]
+#[derive(Debug, FromForm)]
 pub struct V1GamesReq {
     pub after: Option<String>,
     pub before: Option<String>,

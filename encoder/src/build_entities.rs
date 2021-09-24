@@ -73,22 +73,16 @@ async fn paged_get(
 pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new();
     let mut entity_types: Vec<String> = env::args().skip(1).collect();
-    let checkpoint_every = entity_types.remove(0).parse::<u32>().unwrap_or(u32::MAX);
+    let checkpoint_every = entity_types.remove(0).parse::<u16>().unwrap_or(u16::MAX);
     let dict_path = entity_types.remove(0);
 
-    let (mut table_compressor, mut patch_compressor) = if dict_path == "nodict" {
-        (
-            zstd::block::Compressor::new(),
-            zstd::block::Compressor::new(),
-        )
+    let mut patch_compressor = if dict_path == "nodict" {
+        zstd::block::Compressor::new()
     } else {
         let mut dict_f = File::open(&dict_path).map_err(VCRError::IOError)?;
         let mut dict: Vec<u8> = Vec::new();
         dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
-        (
-            zstd::block::Compressor::new(),
-            zstd::block::Compressor::with_dict(dict),
-        )
+        zstd::block::Compressor::with_dict(dict)
     };
 
     for etype in entity_types {
@@ -129,8 +123,6 @@ pub async fn main() -> VCRResult<()> {
         for id in entity_ids {
             progress_bar.set_action(&id, Color::Green, Style::Bold);
 
-            let entity_start_pos = out.stream_position().map_err(VCRError::IOError)?;
-
             progress_bar.print_info(
                 "downloading",
                 &format!("entity {} of type {}", id, etype),
@@ -160,7 +152,7 @@ pub async fn main() -> VCRResult<()> {
 
             let (patches, path_map, baseval) = encode(entity_versions, checkpoint_every);
 
-            let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
+            let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
 
             for (time, patch) in patches {
                 let start_pos = out.stream_position().map_err(VCRError::IOError)?;
@@ -170,16 +162,15 @@ pub async fn main() -> VCRResult<()> {
                     .unwrap();
 
                 let end_pos = out.stream_position().map_err(VCRError::IOError)?;
-                offsets.push((time, start_pos, end_pos));
+                offsets.push((time, start_pos as u32, end_pos as u32));
             }
 
             entity_lookup_table.insert(
                 id.to_owned(),
                 EntityData {
-                    data_offset: entity_start_pos,
                     patches: offsets,
-                    path_map: path_map,
-                    checkpoint_every: checkpoint_every,
+                    path_map,
+                    checkpoint_every,
                     base: baseval,
                 },
             );
@@ -191,20 +182,21 @@ pub async fn main() -> VCRResult<()> {
 
         progress_bar.finalize();
 
-        let mut entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
+        let entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
             .map_err(VCRError::IOError)?;
-        entity_table_f
+        let mut entity_table_compressor = zstd::Encoder::new(entity_table_f, 21).unwrap();
+        entity_table_compressor
+            .long_distance_matching(true)
+            .unwrap();
+        entity_table_compressor
             .write_all(
-                &table_compressor
-                    .compress(
-                        &rmp_serde::to_vec(&entity_lookup_table)
-                            .map_err(VCRError::MsgPackEncError)?,
-                        22,
-                    )
+                &rmp_serde::to_vec(&entity_lookup_table)
+                    .map_err(VCRError::MsgPackEncError)
                     .unwrap(),
             )
-            .map_err(VCRError::IOError)?;
-
+            .map_err(VCRError::IOError)
+            .unwrap();
+        entity_table_compressor.finish().unwrap();
         out.get_mut().sync_all().map_err(VCRError::IOError)?;
     }
 

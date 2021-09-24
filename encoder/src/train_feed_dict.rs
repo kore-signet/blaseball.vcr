@@ -1,7 +1,7 @@
 use blaseball_vcr::feed::{CompactedFeedEvent, FeedEvent};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use uuid::Uuid;
 //
 fn main() {
@@ -17,13 +17,13 @@ fn main() {
     let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
 
     let f = File::open("feed.json").unwrap();
-    let mut reader = BufReader::new(f);
+    let reader = BufReader::new(f);
 
     for l in reader.lines() {
         let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
         let compact_player_tags: Vec<u16> = event
             .player_tags
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = player_tag_table.get(id) {
@@ -38,7 +38,7 @@ fn main() {
 
         let compact_game_tags: Vec<u16> = event
             .game_tags
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = game_tag_table.get(id) {
@@ -53,7 +53,7 @@ fn main() {
 
         let compact_team_tags: Vec<u8> = event
             .team_tags
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
             .iter()
             .map(|id| {
                 if let Some(n) = team_tag_table.get(id) {
@@ -70,6 +70,7 @@ fn main() {
             id: event.id,
             category: event.category,
             day: event.day,
+            created: event.created,
             description: event.description,
             player_tags: compact_player_tags,
             game_tags: compact_game_tags,
@@ -78,6 +79,7 @@ fn main() {
             tournament: event.tournament,
             metadata: event.metadata,
             phase: event.phase,
+            season: event.season,
         }
         .encode();
         feed_sample_lens.push(ev_bytes.len());
@@ -90,7 +92,7 @@ fn main() {
     // println!("{:?}", zstd::encode_all(Cursor::new(a), 22).unwrap().len());
     //     //
     println!("making dict");
-    let dict = zstd::dict::from_continuous(&feed_samples, &feed_sample_lens, 112640).unwrap();
+    let dict = zstd::dict::from_continuous(&feed_samples, &feed_sample_lens, 400_000).unwrap();
     let mut feed_dict_f = File::create("feed.dict").unwrap();
     feed_dict_f.write_all(&dict).unwrap();
 }

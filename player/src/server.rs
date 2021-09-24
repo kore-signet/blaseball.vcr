@@ -124,14 +124,16 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         cache_size: Option<usize>,
     }
 
-    println!("Please wait.....");
-
-    // traverse from the directory where we live up until we find a Vcr.toml, then chdir there.
-    if let Ok(dir) = std::env::current_exe() {
-        if let Some(new_dir) = dir.ancestors().find(|d| d.join("Vcr.toml").exists()) {
-            std::env::set_current_dir(new_dir).unwrap();
+    if let Some((_, path)) = std::env::vars().find(|(k, _)| k == "APPDIR") {
+        std::env::set_current_dir(path).unwrap();
+    } else {
+        // traverse from the directory where we live up until we find a Vcr.toml, then chdir there.
+        if let Ok(dir) = std::env::current_exe() {
+            if let Some(new_dir) = dir.ancestors().find(|d| d.join("Vcr.toml").exists()) {
+                std::env::set_current_dir(new_dir).unwrap();
+            }
         }
-    }
+    };
 
     let figment = Figment::from(rocket::Config::default())
         .merge(Toml::file("Vcr.toml").nested())
@@ -174,12 +176,12 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
     .unwrap();
     blahaj.abort();
 
-    println!("");
+    println!();
 
     let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading site assets"));
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
     blahaj.abort();
-    println!("");
+    println!();
 
     if let Some(feed_config) = config.feed {
         let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading feed data"));
@@ -195,7 +197,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
             .unwrap(),
         );
         blahaj.abort();
-        println!("");
+        println!();
         rocket = rocket
             .manage(feed_db)
             .mount("/vcr", routes![player::feed::feed]);

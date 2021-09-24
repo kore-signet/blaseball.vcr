@@ -51,8 +51,6 @@ fn paged_get<T: DeserializeOwned>(
 ) -> VCRResult<Vec<T>> {
     let mut results: Vec<T> = Vec::new();
 
-    let mut page = 1;
-
     loop {
         let mut chron_response: ChroniclerV1Response<T> =
             client.get(url).query(&parameters).send()?.json()?;
@@ -60,7 +58,6 @@ fn paged_get<T: DeserializeOwned>(
 
         if let Some(next_page) = chron_response.next_page {
             parameters.next_page = Some(next_page);
-            page += 1;
         } else {
             break;
         }
@@ -76,12 +73,12 @@ pub fn main() -> VCRResult<()> {
     crossbeam::scope(|s| {
         let client = reqwest::blocking::Client::new(); // let entity_types = vec!["team"];
         let mut args: Vec<String> = env::args().skip(1).collect();
-        let dict_path = if args.len() > 0 {
+        let dict_path = if !args.is_empty() {
             args.remove(0)
         } else {
             "nodict".to_string()
         };
-        let compress_level = (if args.len() > 0 {
+        let compress_level = (if !args.is_empty() {
             args.remove(0)
         } else {
             "22".to_string()
@@ -100,8 +97,6 @@ pub fn main() -> VCRResult<()> {
             .read_to_end(&mut dict)
             .map_err(VCRError::IOError)
             .unwrap();
-
-        let mut progress_bar = ProgressBar::new(0);
 
         let games: Vec<Game> = paged_get::<Game>(
             &client,
@@ -127,7 +122,7 @@ pub fn main() -> VCRResult<()> {
 
         let n_workers = 8;
 
-        let out_file = File::create(&format!("./tapes/game_updates.riv"))
+        let out_file = File::create(&"./tapes/game_updates.riv".to_string())
             .map_err(VCRError::IOError)
             .unwrap();
         let mut out = BufWriter::new(out_file);
@@ -155,7 +150,7 @@ pub fn main() -> VCRResult<()> {
                 snd1.send(id).unwrap();
             }
 
-            let mut date_table_f = File::create(&format!("./tapes/game_updates.dates.riv.zstd"))
+            let mut date_table_f = File::create(&"./tapes/game_updates.dates.riv.zstd".to_string())
                 .map_err(VCRError::IOError)
                 .unwrap();
             date_table_f
@@ -199,7 +194,7 @@ pub fn main() -> VCRResult<()> {
                     .collect();
 
                     entity_versions.sort_by_key(|v| v.0);
-                    let (patches, path_map, base) = encode(entity_versions, u32::MAX);
+                    let (patches, path_map, base) = encode(entity_versions, u16::MAX);
                     sendr
                         .send((
                             id,
@@ -220,11 +215,9 @@ pub fn main() -> VCRResult<()> {
         drop(snd2);
 
         let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
-        let mut table_compressor = zstd::block::Compressor::new();
 
         for (id, patches, path_map, base) in rcv2.iter() {
-            let entity_start_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
-            let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
+            let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
             progress_bar.set_action(&id, Color::Green, Style::Bold);
 
             for (time, patch) in patches {
@@ -233,17 +226,16 @@ pub fn main() -> VCRResult<()> {
                 out.write_all(&patch).unwrap();
 
                 let end_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
-                offsets.push((time, start_pos, end_pos));
+                offsets.push((time, start_pos as u32, end_pos as u32));
             }
 
             entity_lookup_table.insert(
                 id.to_owned(),
                 EntityData {
-                    data_offset: entity_start_pos,
                     patches: offsets,
-                    path_map: path_map,
-                    checkpoint_every: u32::MAX,
-                    base: base,
+                    path_map,
+                    checkpoint_every: u16::MAX,
+                    base,
                 },
             );
 
@@ -254,23 +246,22 @@ pub fn main() -> VCRResult<()> {
 
         progress_bar.finalize();
 
-        let mut entity_table_f = File::create(&format!("./tapes/game_updates.header.riv.zstd"))
+        let entity_table_f = File::create(&"./tapes/game_updates.header.riv.zstd".to_string())
             .map_err(VCRError::IOError)
             .unwrap();
-        entity_table_f
+        let mut entity_table_compressor = zstd::Encoder::new(entity_table_f, 21).unwrap();
+        entity_table_compressor
+            .long_distance_matching(true)
+            .unwrap();
+        entity_table_compressor
             .write_all(
-                &table_compressor
-                    .compress(
-                        &rmp_serde::to_vec(&entity_lookup_table)
-                            .map_err(VCRError::MsgPackEncError)
-                            .unwrap(),
-                        22,
-                    )
-                    .map_err(VCRError::IOError)
+                &rmp_serde::to_vec(&entity_lookup_table)
+                    .map_err(VCRError::MsgPackEncError)
                     .unwrap(),
             )
             .map_err(VCRError::IOError)
             .unwrap();
+        entity_table_compressor.finish().unwrap();
     })
     .unwrap();
 

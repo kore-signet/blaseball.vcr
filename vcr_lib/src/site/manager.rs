@@ -15,11 +15,9 @@ pub struct ResourceManager {
 impl ResourceManager {
     // type, header, main file
     pub fn from_folder<P: AsRef<Path>>(folder: P) -> VCRResult<ResourceManager> {
-        let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)
-            .map_err(VCRError::IOError)?
+        let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)?
             .map(|res| res.map(|e| e.path()))
-            .collect::<Result<Vec<PathBuf>, io::Error>>()
-            .map_err(VCRError::IOError)?
+            .collect::<Result<Vec<PathBuf>, io::Error>>()?
             .into_iter()
             .filter(|path| path.is_file())
             .partition(|path| {
@@ -52,21 +50,17 @@ impl ResourceManager {
         let mut resources: HashMap<String, Mutex<BufReader<File>>> = HashMap::new();
 
         for (r_type, r_header, r_file) in entries {
-            let header_f = File::open(r_header).map_err(VCRError::IOError)?;
-            let header: EncodedResource =
-                rmp_serde::from_read(header_f).map_err(VCRError::MsgPackError)?;
+            let header_f = File::open(r_header)?;
+            let header: EncodedResource = rmp_serde::from_read(header_f)?;
 
-            let main_f = File::open(r_file).map_err(VCRError::IOError)?;
+            let main_f = File::open(r_file)?;
             let reader = BufReader::new(main_f);
 
             resources.insert(r_type.to_owned(), Mutex::new(reader));
             headers.insert(r_type.to_owned(), header);
         }
 
-        Ok(ResourceManager {
-            headers: headers,
-            resources: resources,
-        })
+        Ok(ResourceManager { headers, resources })
     }
 
     pub fn from_files(files: Vec<(&str, &str, &str)>) -> VCRResult<ResourceManager> {
@@ -74,21 +68,17 @@ impl ResourceManager {
         let mut resources: HashMap<String, Mutex<BufReader<File>>> = HashMap::new();
 
         for (r_type, r_header, r_file) in files {
-            let header_f = File::open(r_header).map_err(VCRError::IOError)?;
-            let header: EncodedResource =
-                rmp_serde::from_read(header_f).map_err(VCRError::MsgPackError)?;
+            let header_f = File::open(r_header)?;
+            let header: EncodedResource = rmp_serde::from_read(header_f)?;
 
-            let main_f = File::open(r_file).map_err(VCRError::IOError)?;
+            let main_f = File::open(r_file)?;
             let reader = BufReader::new(main_f);
 
             resources.insert(r_type.to_owned(), Mutex::new(reader));
             headers.insert(r_type.to_owned(), header);
         }
 
-        Ok(ResourceManager {
-            headers: headers,
-            resources: resources,
-        })
+        Ok(ResourceManager { headers, resources })
     }
 
     pub fn get_resource(&self, name: &str, delta_idx: u16) -> VCRResult<Vec<u8>> {
@@ -99,14 +89,10 @@ impl ResourceManager {
 
         for idx in 0..delta_idx + 1 {
             let (offset, length, _) = header.deltas[idx as usize];
-            delta_file
-                .seek(SeekFrom::Start(offset))
-                .map_err(VCRError::IOError)?;
+            delta_file.seek(SeekFrom::Start(offset))?;
 
             let mut delta_buffer: Vec<u8> = vec![0; length as usize];
-            delta_file
-                .read_exact(&mut delta_buffer)
-                .map_err(VCRError::IOError)?;
+            delta_file.read_exact(&mut delta_buffer)?;
 
             res = xdelta3::decode(&delta_buffer, &res).unwrap();
         }
@@ -122,7 +108,7 @@ impl ResourceManager {
                     .paths
                     .iter()
                     .map(|(time, path, idx)| SiteUpdate {
-                        timestamp: time.clone(),
+                        timestamp: *time,
                         path: path.to_owned(),
                         hash: resources.deltas[*idx as usize].2.clone(),
                         download_url: format!(

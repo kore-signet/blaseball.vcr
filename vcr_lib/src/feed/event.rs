@@ -1,9 +1,11 @@
+use super::EventDescription;
+use crate::utils::encode_varint;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FeedEvent {
     pub id: Uuid,
@@ -29,6 +31,7 @@ pub struct FeedEvent {
 #[serde(rename_all = "camelCase")]
 pub struct CompactedFeedEvent {
     pub id: Uuid,
+    pub created: DateTime<Utc>,
     pub category: i8,
     pub day: i16,
     pub description: String,
@@ -41,6 +44,7 @@ pub struct CompactedFeedEvent {
     pub tournament: i8,
     #[serde(default)]
     pub metadata: JSONValue,
+    pub season: i8,
     pub phase: u8,
 }
 
@@ -108,23 +112,55 @@ impl CompactedFeedEvent {
         };
 
         let description_bytes = {
-            let description = self.description.as_bytes().to_vec();
-            [
-                (description.len() as u16).to_be_bytes().to_vec(),
-                description,
-            ]
-            .concat()
+            match EventDescription::from_type(self.etype) {
+                EventDescription::Constant(s) => {
+                    assert_eq!(self.description, s);
+                    vec![]
+                }
+                EventDescription::ConstantVariant(possibilities) => {
+                    vec![(possibilities
+                        .iter()
+                        .position(|&d| d == self.description)
+                        .unwrap_or_else(|| panic!("{}", self.etype))
+                        as u8)
+                        .to_be()]
+                }
+                EventDescription::Suffix(s) => {
+                    let description = self
+                        .description
+                        .strip_suffix(s)
+                        .unwrap()
+                        .as_bytes()
+                        .to_vec();
+                    [encode_varint(description.len() as u16), description].concat()
+                }
+                EventDescription::Prefix(s) => {
+                    let description = self
+                        .description
+                        .strip_prefix(s)
+                        .unwrap()
+                        .as_bytes()
+                        .to_vec();
+                    [encode_varint(description.len() as u16), description].concat()
+                }
+                EventDescription::Variable => {
+                    let description = self.description.as_bytes().to_vec();
+                    [encode_varint(description.len() as u16), description].concat()
+                }
+            }
         };
 
         [
+            self.category.to_be_bytes().to_vec(),
+            self.etype.to_be_bytes().to_vec(),
+            self.day.to_be_bytes().to_vec(),
+            self.season.to_be_bytes().to_vec(),
+            self.phase.to_be_bytes().to_vec(),
             if self.phase == 13 {
                 self.id.as_bytes().to_vec()
             } else {
                 vec![]
             },
-            self.category.to_be_bytes().to_vec(),
-            self.etype.to_be_bytes().to_vec(),
-            self.day.to_be_bytes().to_vec(),
             description_bytes,
             player_tag_bytes,
             team_tag_bytes,

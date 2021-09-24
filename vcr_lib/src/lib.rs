@@ -1,7 +1,9 @@
 mod err;
-pub mod feed;
 mod json_sequences;
 pub mod site;
+#[macro_use]
+pub mod utils;
+pub mod feed;
 pub use err::*;
 pub use json_sequences::*;
 

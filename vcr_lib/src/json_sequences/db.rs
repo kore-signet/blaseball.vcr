@@ -43,15 +43,14 @@ impl Database {
         dict_path: Option<P>,
         cache_size: usize,
     ) -> VCRResult<Database> {
-        let entities_lookup_f = File::open(entities_lookup_path).map_err(VCRError::IOError)?;
-        let decompressor =
-            zstd::stream::Decoder::new(entities_lookup_f).map_err(VCRError::IOError)?;
-        let db_f = File::open(db_path).map_err(VCRError::IOError)?;
+        let entities_lookup_f = File::open(entities_lookup_path)?;
+        let decompressor = zstd::stream::Decoder::new(entities_lookup_f)?;
+        let db_f = File::open(db_path)?;
 
         let compression_dict = if let Some(dict_f_path) = dict_path {
-            let mut dict_f = File::open(dict_f_path).map_err(VCRError::IOError)?;
+            let mut dict_f = File::open(dict_f_path)?;
             let mut dict = Vec::new();
-            dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
+            dict_f.read_to_end(&mut dict)?;
             Some(DecoderDictionary::copy(&dict))
         } else {
             None
@@ -59,7 +58,7 @@ impl Database {
 
         Ok(Database {
             reader: BufReader::new(db_f),
-            entities: rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?,
+            entities: rmp_serde::from_read(decompressor)?,
             dictionary: compression_dict,
             entity_cache: LruCache::new(cache_size),
         })
@@ -76,14 +75,14 @@ impl Database {
 
         let mut patches: Vec<(u32, Patch)> = Vec::new();
 
-        let patch_list: Vec<(u32, u64, u64)> = if skip_to_checkpoint {
-            let patches_until: Vec<(u32, u64, u64)> = metadata
+        let patch_list: Vec<(u32, u32, u32)> = if skip_to_checkpoint {
+            let patches_until: Vec<(u32, u32, u32)> = metadata
                 .patches
                 .iter()
                 .copied()
                 .take_while(|x| x.0 <= until)
                 .collect();
-            let latest_check_idx = patches_until.len().checked_sub(1).unwrap_or(0);
+            let latest_check_idx = patches_until.len().saturating_sub(1);
 
             let closest_checkpoint =
                 latest_check_idx - (latest_check_idx % metadata.checkpoint_every as usize);
@@ -99,29 +98,23 @@ impl Database {
         };
 
         for (time, patch_start, patch_end) in patch_list {
-            self.reader
-                .seek(SeekFrom::Start(patch_start))
-                .map_err(VCRError::IOError)?;
+            self.reader.seek(SeekFrom::Start(patch_start as u64))?;
 
             let mut compressed_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
-            self.reader
-                .read_exact(&mut compressed_bytes)
-                .map_err(VCRError::IOError)?;
+            self.reader.read_exact(&mut compressed_bytes)?;
 
             let mut e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
                 let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
                     Cursor::new(compressed_bytes),
                     compress_dict,
-                )
-                .map_err(VCRError::IOError)?;
+                )?;
                 let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
-                decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
+                decoder.read_to_end(&mut res)?;
                 res
             } else {
-                let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))
-                    .map_err(VCRError::IOError)?;
+                let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))?;
                 let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
-                decoder.read_to_end(&mut res).map_err(VCRError::IOError)?;
+                decoder.read_to_end(&mut res)?;
                 res
             };
 
@@ -134,9 +127,7 @@ impl Database {
                 if op_code == 6 {
                     let value_length = u16::from_be_bytes([e_bytes.remove(0), e_bytes.remove(0)]);
                     let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
-                    result = Patch::ReplaceRoot(
-                        rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?,
-                    );
+                    result = Patch::ReplaceRoot(rmp_serde::from_read_ref(&val_bytes)?);
                     break;
                 } else {
                     let paths = if op_code == 3 || op_code == 4 {
@@ -161,7 +152,7 @@ impl Database {
 
                     let value: Option<JSONValue> = if value_length > 0 {
                         let val_bytes: Vec<u8> = e_bytes.drain(..value_length as usize).collect();
-                        Some(rmp_serde::from_read_ref(&val_bytes).map_err(VCRError::MsgPackError)?)
+                        Some(rmp_serde::from_read_ref(&val_bytes)?)
                     } else {
                         None
                     };
@@ -229,7 +220,7 @@ impl Database {
                     entity_value = v.clone();
                 }
                 Patch::Normal(p) => {
-                    patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                    patch_json(&mut entity_value, &p)?;
                 }
             }
 
@@ -263,7 +254,7 @@ impl Database {
             .binary_search_by_key(&at, |(t, _, _)| *t)
         {
             Ok(idx) => idx,
-            Err(idx) => idx.checked_sub(1).unwrap_or(0),
+            Err(idx) => idx.saturating_sub(1),
         };
 
         if patch_idx > 0 {
@@ -274,7 +265,7 @@ impl Database {
 
         let mut patch_data_idx = 0;
 
-        if self.entities[entity].checkpoint_every != u32::MAX && patch_idx > 0 {
+        if self.entities[entity].checkpoint_every != u16::MAX && patch_idx > 0 {
             if let Some(val) = self.entity_cache.get(&(entity.to_owned(), patch_idx - 1)) {
                 entity_value = val.data.clone();
                 patch_data_idx = patch_idx - 1;
@@ -289,7 +280,7 @@ impl Database {
                     entity_value = v.clone();
                 }
                 Patch::Normal(p) => {
-                    patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                    patch_json(&mut entity_value, &p)?;
                 }
             }
             last_time = time;
@@ -330,7 +321,7 @@ impl Database {
                 entity_value = v.clone();
             }
             Patch::Normal(p) => {
-                patch_json(&mut entity_value, &p).map_err(VCRError::JSONPatchError)?;
+                patch_json(&mut entity_value, p)?;
             }
         }
 
@@ -403,7 +394,7 @@ impl Database {
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity>> {
         while page.remaining_data.len() < count {
-            if page.remaining_ids.len() > 0 {
+            if !page.remaining_ids.is_empty() {
                 page.remaining_data.append(&mut match page.kind {
                     ChronV2EndpointKind::Versions(before, after) => {
                         self.get_entity_versions(&page.remaining_ids.pop().unwrap(), before, after)?
@@ -436,11 +427,9 @@ impl MultiDatabase {
         dicts: HashMap<String, P>,
         cache_size: usize,
     ) -> VCRResult<MultiDatabase> {
-        let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)
-            .map_err(VCRError::IOError)?
+        let (mut header_paths, mut db_paths): (Vec<PathBuf>, Vec<PathBuf>) = read_dir(folder)?
             .map(|res| res.map(|e| e.path()))
-            .collect::<Result<Vec<PathBuf>, io::Error>>()
-            .map_err(VCRError::IOError)?
+            .collect::<Result<Vec<PathBuf>, io::Error>>()?
             .into_iter()
             .filter(|path| path.is_file())
             .partition(|path| {
@@ -462,11 +451,10 @@ impl MultiDatabase {
                 .contains(".dates.riv.")
         }) {
             let game_index_path = db_paths.remove(dates_pos);
-            let game_index_f = File::open(game_index_path).map_err(VCRError::IOError)?;
-            let decompressor =
-                zstd::stream::Decoder::new(game_index_f).map_err(VCRError::IOError)?;
+            let game_index_f = File::open(game_index_path)?;
+            let decompressor = zstd::stream::Decoder::new(game_index_f)?;
 
-            rmp_serde::from_read(decompressor).map_err(VCRError::MsgPackError)?
+            rmp_serde::from_read(decompressor)?
         } else {
             HashMap::new()
         };
@@ -506,10 +494,7 @@ impl MultiDatabase {
             );
         }
 
-        Ok(MultiDatabase {
-            dbs: dbs,
-            game_index: game_index,
-        })
+        Ok(MultiDatabase { dbs, game_index })
     }
 
     pub fn get_entity(&self, e_type: &str, entity: &str, at: u32) -> VCRResult<ChroniclerEntity> {
@@ -632,7 +617,7 @@ impl MultiDatabase {
                 game_id: game.to_owned(),
                 start_time: *start_time,
                 end_time: *end_time,
-                data: db.get_first_entity(&game)?.data,
+                data: db.get_first_entity(game)?.data,
             });
         }
 
@@ -652,7 +637,7 @@ impl MultiDatabase {
                 game_id: game.to_owned(),
                 start_time: *start_time,
                 end_time: *end_time,
-                data: db.get_entity(&game, at)?.data,
+                data: db.get_entity(game, at)?.data,
             });
         }
 
@@ -684,7 +669,7 @@ impl MultiDatabase {
         let round_ids: Vec<String> = playoffs["rounds"]
             .as_array()
             .unwrap_or(&Vec::new())
-            .into_iter()
+            .iter()
             .map(|x| x.as_str().unwrap().to_owned())
             .collect();
         let all_rounds: Vec<JSONValue> = self
@@ -707,7 +692,7 @@ impl MultiDatabase {
         let main_matchup_ids: Vec<String> = round["matchups"]
             .as_array()
             .unwrap_or(&Vec::new())
-            .into_iter()
+            .iter()
             .map(|x| x.as_str().unwrap().to_owned())
             .collect();
         let main_matchups: Vec<JSONValue> = self
@@ -720,7 +705,7 @@ impl MultiDatabase {
         let tomorrow_matchup_ids: Vec<String> = tomorrow_round["matchups"]
             .as_array()
             .unwrap_or(&Vec::new())
-            .into_iter()
+            .iter()
             .map(|x| x.as_str().unwrap().to_owned())
             .collect();
         let tomorrow_matchups: Vec<JSONValue> = self
@@ -736,7 +721,7 @@ impl MultiDatabase {
                 x["matchups"]
                     .as_array()
                     .unwrap_or(&Vec::new())
-                    .into_iter()
+                    .iter()
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
@@ -835,7 +820,7 @@ impl MultiDatabase {
                 x["subleagues"]
                     .as_array()
                     .unwrap_or(&Vec::new())
-                    .into_iter()
+                    .iter()
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
@@ -866,7 +851,7 @@ impl MultiDatabase {
                 x["divisions"]
                     .as_array()
                     .unwrap_or(&Vec::new())
-                    .into_iter()
+                    .iter()
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
@@ -970,25 +955,23 @@ impl MultiDatabase {
                     at,
                 )?,
             )
-        } else {
-            if let Some(playoff_ids) = sim.data["playoffs"].as_array() {
-                let mut playoffs: Vec<JSONValue> = Vec::new();
-                for id in playoff_ids {
-                    playoffs.push(self.playoffs(id.as_str().unwrap(), None, at)?);
-                }
-                ("postseasons", json!(playoffs))
-            } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
-                (
-                    "postseason",
-                    self.playoffs(
-                        playoff_id,
-                        sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()),
-                        at,
-                    )?,
-                )
-            } else {
-                ("postseason", json!({}))
+        } else if let Some(playoff_ids) = sim.data["playoffs"].as_array() {
+            let mut playoffs: Vec<JSONValue> = Vec::new();
+            for id in playoff_ids {
+                playoffs.push(self.playoffs(id.as_str().unwrap(), None, at)?);
             }
+            ("postseasons", json!(playoffs))
+        } else if let Some(playoff_id) = sim.data["playoffs"].as_str() {
+            (
+                "postseason",
+                self.playoffs(
+                    playoff_id,
+                    sim.data.get("playOffRound").map(|i| i.as_i64().unwrap()),
+                    at,
+                )?,
+            )
+        } else {
+            ("postseason", json!({}))
         };
 
         // println!("---------------\n");

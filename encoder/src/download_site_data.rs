@@ -12,7 +12,7 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
-use reqwest;
+
 use std::io::{Read, Seek, Write};
 
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ pub struct AssetConfig {
 
 pub fn encode_resource<W: Write + Seek>(
     steps: Vec<FileStep>,
-    replaces: &Vec<Replace>,
+    replaces: &[Replace],
     out: &mut W,
 ) -> VCRResult<EncodedResource> {
     let client = reqwest::blocking::Client::new();
@@ -103,9 +103,9 @@ pub fn encode_resource<W: Write + Seek>(
     progress_bar.finalize();
 
     Ok(EncodedResource {
-        paths: paths,
-        deltas: deltas,
-        basis: basis,
+        paths,
+        deltas,
+        basis,
     })
 }
 
