@@ -75,8 +75,8 @@ impl Database {
 
         let mut patches: Vec<(u32, Patch)> = Vec::new();
 
-        let patch_list: Vec<(u32, u64, u64)> = if skip_to_checkpoint {
-            let patches_until: Vec<(u32, u64, u64)> = metadata
+        let patch_list: Vec<(u32, u32, u32)> = if skip_to_checkpoint {
+            let patches_until: Vec<(u32, u32, u32)> = metadata
                 .patches
                 .iter()
                 .copied()
@@ -98,7 +98,7 @@ impl Database {
         };
 
         for (time, patch_start, patch_end) in patch_list {
-            self.reader.seek(SeekFrom::Start(patch_start))?;
+            self.reader.seek(SeekFrom::Start(patch_start as u64))?;
 
             let mut compressed_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
             self.reader.read_exact(&mut compressed_bytes)?;
@@ -265,7 +265,7 @@ impl Database {
 
         let mut patch_data_idx = 0;
 
-        if self.entities[entity].checkpoint_every != u32::MAX && patch_idx > 0 {
+        if self.entities[entity].checkpoint_every != u16::MAX && patch_idx > 0 {
             if let Some(val) = self.entity_cache.get(&(entity.to_owned(), patch_idx - 1)) {
                 entity_value = val.data.clone();
                 patch_data_idx = patch_idx - 1;

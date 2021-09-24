@@ -73,7 +73,7 @@ async fn paged_get(
 pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new();
     let mut entity_types: Vec<String> = env::args().skip(1).collect();
-    let checkpoint_every = entity_types.remove(0).parse::<u32>().unwrap_or(u32::MAX);
+    let checkpoint_every = entity_types.remove(0).parse::<u16>().unwrap_or(u16::MAX);
     let dict_path = entity_types.remove(0);
 
     let mut patch_compressor = if dict_path == "nodict" {
@@ -123,8 +123,6 @@ pub async fn main() -> VCRResult<()> {
         for id in entity_ids {
             progress_bar.set_action(&id, Color::Green, Style::Bold);
 
-            let entity_start_pos = out.stream_position().map_err(VCRError::IOError)?;
-
             progress_bar.print_info(
                 "downloading",
                 &format!("entity {} of type {}", id, etype),
@@ -154,7 +152,7 @@ pub async fn main() -> VCRResult<()> {
 
             let (patches, path_map, baseval) = encode(entity_versions, checkpoint_every);
 
-            let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
+            let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
 
             for (time, patch) in patches {
                 let start_pos = out.stream_position().map_err(VCRError::IOError)?;
@@ -164,13 +162,12 @@ pub async fn main() -> VCRResult<()> {
                     .unwrap();
 
                 let end_pos = out.stream_position().map_err(VCRError::IOError)?;
-                offsets.push((time, start_pos, end_pos));
+                offsets.push((time, start_pos as u32, end_pos as u32));
             }
 
             entity_lookup_table.insert(
                 id.to_owned(),
                 EntityData {
-                    data_offset: entity_start_pos,
                     patches: offsets,
                     path_map,
                     checkpoint_every,

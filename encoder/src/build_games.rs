@@ -218,7 +218,7 @@ pub fn main() -> VCRResult<()> {
 
         for (id, patches, path_map, base) in rcv2.iter() {
             let entity_start_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
-            let mut offsets: Vec<(u32, u64, u64)> = Vec::new(); // timestamp:start_position:end_position
+            let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
             progress_bar.set_action(&id, Color::Green, Style::Bold);
 
             for (time, patch) in patches {
@@ -227,13 +227,12 @@ pub fn main() -> VCRResult<()> {
                 out.write_all(&patch).unwrap();
 
                 let end_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
-                offsets.push((time, start_pos, end_pos));
+                offsets.push((time, start_pos as u32, end_pos as u32));
             }
 
             entity_lookup_table.insert(
                 id.to_owned(),
                 EntityData {
-                    data_offset: entity_start_pos,
                     patches: offsets,
                     path_map,
                     checkpoint_every: u32::MAX,

@@ -11,17 +11,16 @@ use serde_json::{json, Value as JSONValue};
 
 use json_patch::Patch as JSONPatch;
 
-fn default_checkpoint() -> u32 {
-    u32::MAX
+fn default_checkpoint() -> u16 {
+    u16::MAX
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EntityData {
-    pub data_offset: u64,
-    pub patches: Vec<(u32, u64, u64)>, // timestamp, offset, end of patch
+    pub patches: Vec<(u32, u32, u32)>, // timestamp, offset, end of patch
     pub path_map: HashMap<u16, String>, // path_id:path
     #[serde(default = "default_checkpoint")]
-    pub checkpoint_every: u32,
+    pub checkpoint_every: u16,
     #[serde(default = "default_base")]
     pub base: JSONValue,
 }

@@ -13,7 +13,7 @@ struct Op {
 
 pub fn encode(
     entity: Vec<(u32, JSONValue)>,
-    checkpoint_every: u32,
+    checkpoint_every: u16,
 ) -> (Vec<EntityPatch>, HashMap<u16, String>, JSONValue) {
     let base = match entity[0].1 {
         JSONValue::Null => json!(null),
@@ -31,7 +31,7 @@ pub fn encode(
             .into_iter()
             .enumerate()
             .map(|(iter, (time, obj))| {
-                let diff_ops: Vec<PatchOperation> = if iter as u32 % checkpoint_every == 0 {
+                let diff_ops: Vec<PatchOperation> = if iter as u32 % checkpoint_every as u32 == 0 {
                     diff(&base.clone(), &obj).0
                 } else {
                     diff(&last, &obj).0
