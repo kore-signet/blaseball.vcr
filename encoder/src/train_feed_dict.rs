@@ -2,7 +2,9 @@ use blaseball_vcr::feed::{CompactedFeedEvent, FeedEvent};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
+use std::convert::TryInto;
 use uuid::Uuid;
+
 //
 fn main() {
     //     // let mut feed_dict: Vec<u8> = Vec::new();
@@ -21,6 +23,9 @@ fn main() {
 
     for l in reader.lines() {
         let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
+        if event.season == 0 {
+            continue;
+        }
         let compact_player_tags: Vec<u16> = event
             .player_tags
             .unwrap_or_default()
@@ -69,7 +74,7 @@ fn main() {
         let mut ev_bytes = CompactedFeedEvent {
             id: event.id,
             category: event.category,
-            day: event.day,
+            day: event.day.try_into().unwrap_or(255),
             created: event.created,
             description: event.description,
             player_tags: compact_player_tags,

@@ -154,14 +154,16 @@ impl FeedDatabase {
         };
 
         let phase_index = {
-            let mut idx: HashMap<(i8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
+            let mut idx: HashMap<(u8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
             let idx_len = read_u32!(idx_decoder);
             let mut bytes: Vec<u8> = vec![0; idx_len as usize];
             idx_decoder.read_exact(&mut bytes)?;
             let mut cursor = Cursor::new(bytes);
 
             while cursor.position() < idx_len as u64 {
-                let key = (read_i8!(cursor), read_u8!(cursor));
+                let season_phase: u8 = read_u8!(cursor);
+                let key = ((season_phase & 0xF) + 10,(season_phase >> 4) & 0xF);
+
                 let klen: u64 = read_u32!(cursor) as u64;
                 let start_pos = cursor.position();
 
@@ -245,9 +247,18 @@ impl FeedDatabase {
 
         let category: i8 = read_i8!(decoder);
         let etype: i16 = read_i16!(decoder);
-        let day: i16 = read_i16!(decoder);
-        let season: i8 = read_i8!(decoder);
-        let phase: u8 = read_u8!(decoder);
+        let day: i16 = {
+            let d = read_u8!(decoder);
+            if d == 255 {
+                1522
+            } else {
+                d.into()
+            }
+        };
+
+        let season_phase: u8 = read_u8!(decoder);
+        let season: u8 = (season_phase & 0xF) + 10;
+        let phase: u8 = (season_phase >> 4) & 0xF;
 
         let id = if phase == 13 {
             let mut uuid: [u8; 16] = [0; 16];
@@ -425,7 +436,7 @@ impl FeedDatabase {
 
     pub fn events_by_phase(
         &mut self,
-        season: i8,
+        season: u8,
         phase: u8,
         count: usize,
     ) -> VCRResult<Vec<FeedEvent>> {
