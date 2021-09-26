@@ -5,7 +5,6 @@ use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
 use serde::Serialize;
 use serde_json::Value as JSONValue;
-use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, Write};
@@ -108,8 +107,6 @@ pub async fn main() -> VCRResult<()> {
         .map(|e| e.entity_id)
         .collect();
 
-        let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
-
         println!("| found {} entities", entity_ids.len());
         let mut progress_bar = ProgressBar::new(entity_ids.len());
         progress_bar.set_action(
@@ -171,7 +168,7 @@ pub async fn main() -> VCRResult<()> {
             for (time, patch) in patches {
                 let start_pos = out.stream_position().map_err(VCRError::IOError)? as u32;
                 header_encoder
-                    .write_patch(time, (start_pos - last_position))
+                    .write_patch(time, start_pos - last_position)
                     .unwrap();
 
                 let patch_bytes = patch.concat();

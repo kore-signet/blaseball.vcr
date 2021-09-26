@@ -421,7 +421,7 @@ impl Database {
                 page.remaining_data.append(&mut match page.kind {
                     ChronV2EndpointKind::Versions(before, after) => self
                         .get_entity_versions(&page.remaining_ids.pop().unwrap(), before, after)
-                        .and_then(|v| hash_entities(v))?,
+                        .and_then(hash_entities)?,
                     ChronV2EndpointKind::Entities(at) => self
                         .get_entity(&page.remaining_ids.pop().unwrap(), at)
                         .and_then(|v| hash_entities(vec![v]))?,

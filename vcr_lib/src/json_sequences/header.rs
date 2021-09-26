@@ -147,7 +147,7 @@ pub fn decode_header<R: Read>(mut reader: R) -> VCRResult<HashMap<String, Entity
                 patches: offsets,
                 checkpoint_every,
                 base: base_val,
-                path_map: path_map,
+                path_map,
             },
         );
     }

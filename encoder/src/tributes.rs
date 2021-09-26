@@ -49,7 +49,7 @@ pub fn main() {
                     let id = Uuid::parse_str(i["playerId"].as_str().unwrap()).unwrap();
                     seen_ids.push(id);
                     let l = (ids.len() as u16) + 1;
-                    let idx = ids.entry(id.clone()).or_insert((l, false));
+                    let idx = ids.entry(id).or_insert((l, false));
                     let n = i["peanuts"].as_u64().unwrap();
 
                     if let Some(x) = vals.get_mut(&id) {
@@ -69,7 +69,7 @@ pub fn main() {
                     let id = Uuid::parse_str(i["teamId"].as_str().unwrap()).unwrap();
                     seen_ids.push(id);
                     let l = (ids.len() as u16) + 1;
-                    let idx = ids.entry(id.clone()).or_insert((l, true));
+                    let idx = ids.entry(id).or_insert((l, true));
                     let n = i["peanuts"].as_u64().unwrap();
 
                     if let Some(x) = vals.get_mut(&id) {
@@ -90,7 +90,7 @@ pub fn main() {
                     seen_ids.push(id);
 
                     let l = (ids.len() as u16) + 1;
-                    let idx = ids.entry(id.clone()).or_insert((l, false));
+                    let idx = ids.entry(id).or_insert((l, false));
                     let n = i["peanuts"].as_u64().unwrap();
 
                     if let Some(x) = vals.get_mut(&id) {
@@ -110,7 +110,7 @@ pub fn main() {
             let removed = last_seen
                 .iter()
                 .filter(|i| !seen_ids.contains(i))
-                .map(|i| *i)
+                .copied()
                 .collect::<Vec<Uuid>>();
             last_seen = seen_ids;
 
