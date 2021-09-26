@@ -154,7 +154,9 @@ impl CompactedFeedEvent {
             self.category.to_be_bytes().to_vec(),
             self.etype.to_be_bytes().to_vec(),
             self.day.to_be_bytes().to_vec(),
-            ((self.season - 10) | (self.phase << 4)).to_be_bytes().to_vec(),
+            ((self.season - 10) | (self.phase << 4))
+                .to_be_bytes()
+                .to_vec(),
             if self.phase == 13 {
                 self.id.as_bytes().to_vec()
             } else {

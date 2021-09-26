@@ -441,6 +441,7 @@ impl Database {
 pub struct MultiDatabase {
     pub dbs: HashMap<String, Mutex<Database>>, // entity_type:db
     pub game_index: HashMap<GameDate, Vec<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>>,
+    pub tributes: Mutex<TributesDatabase>,
 }
 
 impl MultiDatabase {
@@ -457,7 +458,7 @@ impl MultiDatabase {
             .filter(|path| path.is_file())
             .partition(|path| {
                 if let Some(name) = path.file_name() {
-                    name.to_str().unwrap().contains(".header.riv.")
+                    name.to_str().unwrap().contains(".header.riv")
                 } else {
                     false
                 }
@@ -502,22 +503,31 @@ impl MultiDatabase {
             .collect();
 
         let mut dbs: HashMap<String, Mutex<Database>> = HashMap::new();
+        let mut tributes: Option<TributesDatabase> = None;
 
         for (e_type, lookup_file, main_file) in entries {
-            dbs.insert(
-                e_type.clone(),
-                Mutex::new(Database::from_files(
-                    lookup_file,
-                    main_file,
-                    dicts
-                        .get(&e_type)
-                        .map(|p| PathBuf::from(p.as_ref().as_os_str())),
-                    cache_size,
-                )?),
-            );
+            if e_type == "tributes" {
+                tributes = Some(TributesDatabase::from_files(lookup_file, main_file)?);
+            } else {
+                dbs.insert(
+                    e_type.clone(),
+                    Mutex::new(Database::from_files(
+                        lookup_file,
+                        main_file,
+                        dicts
+                            .get(&e_type)
+                            .map(|p| PathBuf::from(p.as_ref().as_os_str())),
+                        cache_size,
+                    )?),
+                );
+            }
         }
 
-        Ok(MultiDatabase { dbs, game_index })
+        Ok(MultiDatabase {
+            dbs,
+            game_index,
+            tributes: Mutex::new(tributes.unwrap()),
+        })
     }
 
     pub fn get_entity(
@@ -526,13 +536,18 @@ impl MultiDatabase {
         entity: &str,
         at: u32,
     ) -> VCRResult<ChroniclerEntity<JSONValue>> {
-        let mut db = self
-            .dbs
-            .get(e_type)
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        db.get_entity(entity, at)
+        if e_type == "tributes" {
+            let mut db = self.tributes.lock().unwrap();
+            db.get_entity(at)
+        } else {
+            let mut db = self
+                .dbs
+                .get(e_type)
+                .ok_or(VCRError::EntityTypeNotFound)?
+                .lock()
+                .unwrap();
+            db.get_entity(entity, at)
+        }
     }
 
     pub fn get_entity_versions(
@@ -542,13 +557,18 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut db = self
-            .dbs
-            .get(e_type)
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        db.get_entity_versions(entity, before, after)
+        if e_type == "tributes" {
+            let mut db = self.tributes.lock().unwrap();
+            db.get_versions(before, after)
+        } else {
+            let mut db = self
+                .dbs
+                .get(e_type)
+                .ok_or(VCRError::EntityTypeNotFound)?
+                .lock()
+                .unwrap();
+            db.get_entity_versions(entity, before, after)
+        }
     }
 
     pub fn get_entities(
@@ -557,13 +577,18 @@ impl MultiDatabase {
         entities: Vec<String>,
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut db = self
-            .dbs
-            .get(e_type)
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        db.get_entities(entities, at)
+        if e_type == "tributes" {
+            let mut db = self.tributes.lock().unwrap();
+            db.get_entity(at).map(|v| vec![v])
+        } else {
+            let mut db = self
+                .dbs
+                .get(e_type)
+                .ok_or(VCRError::EntityTypeNotFound)?
+                .lock()
+                .unwrap();
+            db.get_entities(entities, at)
+        }
     }
 
     pub fn get_entities_versions(
@@ -573,13 +598,18 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut db = self
-            .dbs
-            .get(e_type)
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        db.get_entities_versions(entities, before, after)
+        if e_type == "tributes" {
+            let mut db = self.tributes.lock().unwrap();
+            db.get_versions(before, after)
+        } else {
+            let mut db = self
+                .dbs
+                .get(e_type)
+                .ok_or(VCRError::EntityTypeNotFound)?
+                .lock()
+                .unwrap();
+            db.get_entities_versions(entities, before, after)
+        }
     }
 
     pub fn all_entities(
@@ -612,13 +642,17 @@ impl MultiDatabase {
     }
 
     pub fn all_ids(&self, e_type: &str) -> VCRResult<Vec<String>> {
-        let db = self
-            .dbs
-            .get(e_type)
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        Ok(db.entities.keys().map(|x| x.to_owned()).collect())
+        if e_type == "tributes" {
+            Ok(vec!["00000000-0000-0000-0000-000000000000".to_owned()])
+        } else {
+            let db = self
+                .dbs
+                .get(e_type)
+                .ok_or(VCRError::EntityTypeNotFound)?
+                .lock()
+                .unwrap();
+            Ok(db.entities.keys().map(|x| x.to_owned()).collect())
+        }
     }
 
     pub fn fetch_page(
@@ -627,13 +661,18 @@ impl MultiDatabase {
         page: &mut InternalPaging<Box<RawValue>>,
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
-        let mut db = self
-            .dbs
-            .get(e_type)
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        db.fetch_page(page, count)
+        if e_type == "tributes" {
+            let mut db = self.tributes.lock().unwrap();
+            db.fetch_page(page, count)
+        } else {
+            let mut db = self
+                .dbs
+                .get(e_type)
+                .ok_or(VCRError::EntityTypeNotFound)?
+                .lock()
+                .unwrap();
+            db.fetch_page(page, count)
+        }
     }
 
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {

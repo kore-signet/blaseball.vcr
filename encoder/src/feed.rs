@@ -5,9 +5,9 @@ use blaseball_vcr::{
 
 use crossbeam::channel::bounded;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
-use std::convert::TryInto;
 
 fn main() {
     let (snd1, rcv1) = bounded(1);

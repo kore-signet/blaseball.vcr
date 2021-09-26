@@ -162,7 +162,7 @@ impl FeedDatabase {
 
             while cursor.position() < idx_len as u64 {
                 let season_phase: u8 = read_u8!(cursor);
-                let key = ((season_phase & 0xF) + 10,(season_phase >> 4) & 0xF);
+                let key = ((season_phase & 0xF) + 10, (season_phase >> 4) & 0xF);
 
                 let klen: u64 = read_u32!(cursor) as u64;
                 let start_pos = cursor.position();

@@ -1,8 +1,8 @@
 use blaseball_vcr::feed::{CompactedFeedEvent, FeedEvent};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-use std::convert::TryInto;
 use uuid::Uuid;
 
 //
