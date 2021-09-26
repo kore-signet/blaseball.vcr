@@ -14,7 +14,7 @@ pub fn feed(
     start: Option<String>,
     limit: Option<usize>,
     phase: Option<u8>,
-    season: Option<i8>,
+    season: Option<u8>,
     category: Option<i8>,
     db: &State<Mutex<FeedDatabase>>,
 ) -> VCRResult<RocketJson<Vec<FeedEvent>>> {

@@ -5,6 +5,7 @@ use blaseball_vcr::{
 
 use crossbeam::channel::bounded;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
 
@@ -27,6 +28,9 @@ fn main() {
 
             for l in reader.lines() {
                 let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
+                if event.season == 0 {
+                    continue;
+                }
 
                 let compact_player_tags: Vec<u16> = event
                     .player_tags
@@ -82,7 +86,7 @@ fn main() {
                 snd1.send(CompactedFeedEvent {
                     id: event.id,
                     category: event.category,
-                    day: event.day,
+                    day: event.day.try_into().unwrap_or(255),
                     created: event.created,
                     description: event.description,
                     player_tags: compact_player_tags,
@@ -126,7 +130,7 @@ fn main() {
         let mut game_tag_idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
         let mut player_tag_idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
         let mut team_tag_idx: HashMap<u8, Vec<(u32, (u32, u16))>> = HashMap::new();
-        let mut phase_idx: HashMap<(i8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
+        let mut phase_idx: HashMap<(u8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
 
         // Sink
         let out_f = File::create("./tapes/feed/feed.riv").unwrap();
@@ -282,8 +286,7 @@ fn main() {
                     .flatten()
                     .collect::<Vec<u8>>();
                 vec![
-                    k.0.to_be_bytes().to_vec(),
-                    k.1.to_be_bytes().to_vec(),
+                    ((k.0 - 10) | (k.1 << 4)).to_be_bytes().to_vec(),
                     (v_bytes.len() as u32).to_be_bytes().to_vec(),
                     v_bytes,
                 ]

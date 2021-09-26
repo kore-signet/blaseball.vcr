@@ -11,6 +11,8 @@ progress_bar = "0.1.3"
 zstd = "0.9"
 crossbeam = "0.8.1"
 toml = "0.5.8"
+integer-encoding = "3.0.2"
+itertools = "0.10"
 
 [dependencies.blaseball_vcr]
 path = "../vcr_lib"
@@ -62,3 +64,7 @@ path = "src/train_dict.rs"
 [[bin]]
 name = "train_feed_dict"
 path = "src/train_feed_dict.rs"
+
+[[bin]]
+name = "tributes"
+path = "src/tributes.rs"
