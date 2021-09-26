@@ -1,9 +1,11 @@
 mod db;
+mod header;
 mod tributes;
 
 pub mod encoder;
 
 pub use db::*;
+pub use header::*;
 pub use tributes::*;
 
 use serde::{Deserialize, Serialize};

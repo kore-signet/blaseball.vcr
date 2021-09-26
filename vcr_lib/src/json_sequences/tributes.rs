@@ -23,8 +23,6 @@ impl TributesDatabase {
         header_path: P,
         db_path: P,
     ) -> VCRResult<TributesDatabase> {
-        println!("{:?}", header_path);
-        println!("{:?}", db_path);
         let header_f = File::open(header_path)?;
         let mut header_reader = BufReader::new(header_f);
 

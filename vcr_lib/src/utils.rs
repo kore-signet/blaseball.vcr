@@ -1,3 +1,5 @@
+use std::io;
+
 pub fn encode_varint(i: u16) -> Vec<u8> {
     if i >= 255 {
         vec![255_u8.to_be_bytes().to_vec(), i.to_be_bytes().to_vec()].concat()
@@ -74,4 +76,11 @@ macro_rules! read_i64 {
         $read.read_exact(&mut bytes)?;
         i64::from_be_bytes(bytes)
     }};
+}
+
+pub fn is_eof<T>(err: &io::Result<T>) -> bool {
+    match err {
+        Ok(_) => false,
+        Err(e) => e.kind() == io::ErrorKind::UnexpectedEof,
+    }
 }

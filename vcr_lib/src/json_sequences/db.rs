@@ -81,7 +81,7 @@ impl Database {
 
         Ok(Database {
             reader: BufReader::new(db_f),
-            entities: rmp_serde::from_read(decompressor)?,
+            entities: decode_header(decompressor)?,
             dictionary: compression_dict,
             entity_cache: LruCache::new(cache_size),
         })
@@ -120,10 +120,10 @@ impl Database {
                 .collect()
         };
 
-        for (time, patch_start, patch_end) in patch_list {
+        for (time, patch_start, patch_len) in patch_list {
             self.reader.seek(SeekFrom::Start(patch_start as u64))?;
 
-            let mut compressed_bytes: Vec<u8> = vec![0; (patch_end - patch_start) as usize];
+            let mut compressed_bytes: Vec<u8> = vec![0; patch_len as usize];
             self.reader.read_exact(&mut compressed_bytes)?;
 
             let mut e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
@@ -131,12 +131,12 @@ impl Database {
                     Cursor::new(compressed_bytes),
                     compress_dict,
                 )?;
-                let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
+                let mut res = Vec::with_capacity((patch_len) as usize * 10);
                 decoder.read_to_end(&mut res)?;
                 res
             } else {
                 let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))?;
-                let mut res = Vec::with_capacity((patch_end - patch_start) as usize * 10);
+                let mut res = Vec::with_capacity((patch_len) as usize * 10);
                 decoder.read_to_end(&mut res)?;
                 res
             };
