@@ -12,7 +12,6 @@ zstd = "0.9"
 crossbeam = "0.8.1"
 toml = "0.5.8"
 integer-encoding = "3.0.2"
-itertools = "0.10"
 
 [dependencies.blaseball_vcr]
 path = "../vcr_lib"

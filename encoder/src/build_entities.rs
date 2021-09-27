@@ -1,13 +1,14 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
+use integer_encoding::VarIntWriter;
 use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
 use serde::Serialize;
 use serde_json::Value as JSONValue;
-use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, Write};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,8 +107,6 @@ pub async fn main() -> VCRResult<()> {
         .map(|e| e.entity_id)
         .collect();
 
-        let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
-
         println!("| found {} entities", entity_ids.len());
         let mut progress_bar = ProgressBar::new(entity_ids.len());
         progress_bar.set_action(
@@ -119,6 +118,10 @@ pub async fn main() -> VCRResult<()> {
         let out_file =
             File::create(&format!("./tapes/{}.riv", etype)).map_err(VCRError::IOError)?;
         let mut out = BufWriter::new(out_file);
+
+        let entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
+            .map_err(VCRError::IOError)?;
+        let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
 
         for id in entity_ids {
             progress_bar.set_action(&id, Color::Green, Style::Bold);
@@ -152,28 +155,40 @@ pub async fn main() -> VCRResult<()> {
 
             let (patches, path_map, baseval) = encode(entity_versions, checkpoint_every);
 
-            let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
+            let mut last_position = out.stream_position().unwrap() as u32;
+            let mut header_encoder = HeaderEncoder::new(
+                baseval,
+                checkpoint_every,
+                path_map,
+                last_position,
+                Vec::new(),
+            )
+            .unwrap();
 
             for (time, patch) in patches {
-                let start_pos = out.stream_position().map_err(VCRError::IOError)?;
-
-                let patch_bytes = patch.concat();
-                out.write_all(&patch_compressor.compress(&patch_bytes, 22).unwrap())
+                let start_pos = out.stream_position().map_err(VCRError::IOError)? as u32;
+                header_encoder
+                    .write_patch(time, start_pos - last_position)
                     .unwrap();
 
-                let end_pos = out.stream_position().map_err(VCRError::IOError)?;
-                offsets.push((time, start_pos as u32, end_pos as u32));
+                let patch_bytes = patch.concat();
+                out.write_all(&patch_compressor.compress(&patch_bytes, 1).unwrap())
+                    .unwrap();
+
+                last_position = start_pos;
             }
 
-            entity_lookup_table.insert(
-                id.to_owned(),
-                EntityData {
-                    patches: offsets,
-                    path_map,
-                    checkpoint_every,
-                    base: baseval,
-                },
-            );
+            let header = header_encoder.release();
+            entity_table_writer
+                .write_varint(header.len() as u32)
+                .unwrap();
+            entity_table_writer
+                .write_varint(out.stream_position().unwrap() as u32)
+                .unwrap();
+            entity_table_writer
+                .write_all(Uuid::parse_str(&id).unwrap().as_bytes())
+                .unwrap();
+            entity_table_writer.write_all(&header).unwrap();
 
             progress_bar.inc();
 
@@ -181,22 +196,8 @@ pub async fn main() -> VCRResult<()> {
         }
 
         progress_bar.finalize();
+        entity_table_writer.finish().unwrap();
 
-        let entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
-            .map_err(VCRError::IOError)?;
-        let mut entity_table_compressor = zstd::Encoder::new(entity_table_f, 21).unwrap();
-        entity_table_compressor
-            .long_distance_matching(true)
-            .unwrap();
-        entity_table_compressor
-            .write_all(
-                &rmp_serde::to_vec(&entity_lookup_table)
-                    .map_err(VCRError::MsgPackEncError)
-                    .unwrap(),
-            )
-            .map_err(VCRError::IOError)
-            .unwrap();
-        entity_table_compressor.finish().unwrap();
         out.get_mut().sync_all().map_err(VCRError::IOError)?;
     }
 

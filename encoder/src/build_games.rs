@@ -4,6 +4,7 @@ use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
 use chrono::{DateTime, Utc};
 use crossbeam::channel::bounded;
+use integer_encoding::VarIntWriter;
 use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, Write};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -214,30 +216,38 @@ pub fn main() -> VCRResult<()> {
 
         drop(snd2);
 
-        let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
+        let entity_table_f = File::create("./tapes/game_updates.header.riv.zstd").unwrap();
+        let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
+        entity_table_writer.long_distance_matching(true).unwrap();
 
         for (id, patches, path_map, base) in rcv2.iter() {
-            let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
             progress_bar.set_action(&id, Color::Green, Style::Bold);
 
+            let mut last_position = out.stream_position().unwrap() as u32;
+            let mut header_encoder =
+                HeaderEncoder::new(base, u16::MAX, path_map, last_position, Vec::new()).unwrap();
+
             for (time, patch) in patches {
-                let start_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
+                let start_pos = out.stream_position().map_err(VCRError::IOError).unwrap() as u32;
+                header_encoder
+                    .write_patch(time, start_pos - last_position)
+                    .unwrap();
 
                 out.write_all(&patch).unwrap();
-
-                let end_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
-                offsets.push((time, start_pos as u32, end_pos as u32));
+                last_position = start_pos;
             }
 
-            entity_lookup_table.insert(
-                id.to_owned(),
-                EntityData {
-                    patches: offsets,
-                    path_map,
-                    checkpoint_every: u16::MAX,
-                    base,
-                },
-            );
+            let header = header_encoder.release();
+            entity_table_writer
+                .write_varint(header.len() as u32)
+                .unwrap();
+            entity_table_writer
+                .write_varint(out.stream_position().unwrap() as u32)
+                .unwrap();
+            entity_table_writer
+                .write_all(Uuid::parse_str(&id).unwrap().as_bytes())
+                .unwrap();
+            entity_table_writer.write_all(&header).unwrap();
 
             progress_bar.inc();
 
@@ -246,22 +256,7 @@ pub fn main() -> VCRResult<()> {
 
         progress_bar.finalize();
 
-        let entity_table_f = File::create(&"./tapes/game_updates.header.riv.zstd".to_string())
-            .map_err(VCRError::IOError)
-            .unwrap();
-        let mut entity_table_compressor = zstd::Encoder::new(entity_table_f, 21).unwrap();
-        entity_table_compressor
-            .long_distance_matching(true)
-            .unwrap();
-        entity_table_compressor
-            .write_all(
-                &rmp_serde::to_vec(&entity_lookup_table)
-                    .map_err(VCRError::MsgPackEncError)
-                    .unwrap(),
-            )
-            .map_err(VCRError::IOError)
-            .unwrap();
-        entity_table_compressor.finish().unwrap();
+        entity_table_writer.finish().unwrap();
     })
     .unwrap();
 

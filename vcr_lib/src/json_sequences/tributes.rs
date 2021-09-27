@@ -23,8 +23,6 @@ impl TributesDatabase {
         header_path: P,
         db_path: P,
     ) -> VCRResult<TributesDatabase> {
-        println!("{:?}", header_path);
-        println!("{:?}", db_path);
         let header_f = File::open(header_path)?;
         let mut header_reader = BufReader::new(header_f);
 
@@ -276,9 +274,9 @@ impl TributesDatabase {
 
         if page.remaining_data.len() < count {
             page.remaining_data = match page.kind {
-                ChronV2EndpointKind::Versions(before, after) => self
-                    .get_versions(before, after)
-                    .and_then(|v| hash_entities(v))?,
+                ChronV2EndpointKind::Versions(before, after) => {
+                    self.get_versions(before, after).and_then(hash_entities)?
+                }
                 ChronV2EndpointKind::Entities(at) => {
                     self.get_entity(at).and_then(|v| hash_entities(vec![v]))?
                 }

@@ -635,7 +635,6 @@ dependencies = [
  "chrono",
  "crossbeam",
  "integer-encoding",
- "itertools",
  "json-patch",
  "progress_bar",
  "reqwest",
