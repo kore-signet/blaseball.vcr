@@ -1,13 +1,14 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
+use clap::clap_app;
 use integer_encoding::VarIntWriter;
 use progress_bar::color::{Color, Style};
 use progress_bar::progress_bar::ProgressBar;
 use serde::Serialize;
 use serde_json::Value as JSONValue;
-use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, Write};
+use std::path::Path;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
@@ -73,17 +74,39 @@ async fn paged_get(
 #[tokio::main]
 pub async fn main() -> VCRResult<()> {
     let client = reqwest::Client::new();
-    let mut entity_types: Vec<String> = env::args().skip(1).collect();
-    let checkpoint_every = entity_types.remove(0).parse::<u16>().unwrap_or(u16::MAX);
-    let dict_path = entity_types.remove(0);
 
-    let mut patch_compressor = if dict_path == "nodict" {
-        zstd::block::Compressor::new()
-    } else {
+    let matches = clap_app!(build_entities =>
+        (version: "1.0")
+        (author: "allie signet <allie@sibr.dev>")
+        (about: "blaseball.vcr general purpose encoder")
+        (@arg ZSTD_DICT: -d --dict [FILE] "set zstd dictionary to use")
+        (@arg COMPRESSION_LEVEL: -l --level [LEVEL] "set compression level")
+        (@arg CHECKPOINTS: -c --checkpoints [CHECKPOINTS] "make a checkpoint every n entities")
+        (@arg OUTPUT_FOLDER: -o --output [FOLDER] "set output folder for resulting tapes")
+        (@arg ENTITIES: <TYPE> ... "entity types to encode")
+    )
+    .get_matches();
+
+    let compression_level = matches
+        .value_of("COMPRESSION_LEVEL")
+        .map(|v| v.parse::<i32>().unwrap())
+        .unwrap_or(19);
+
+    let checkpoint_every = matches
+        .value_of("CHECKPOINTS")
+        .map(|v| v.parse::<u16>().unwrap())
+        .unwrap_or(u16::MAX);
+
+    let base_path = Path::new(matches.value_of("OUTPUT_FOLDER").unwrap_or("./tapes"));
+    let entity_types: Vec<&str> = matches.values_of("ENTITIES").unwrap().collect();
+
+    let mut patch_compressor = if let Some(dict_path) = matches.value_of("ZSTD_DICT") {
         let mut dict_f = File::open(&dict_path).map_err(VCRError::IOError)?;
         let mut dict: Vec<u8> = Vec::new();
         dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
         zstd::block::Compressor::with_dict(dict)
+    } else {
+        zstd::block::Compressor::new()
     };
 
     for etype in entity_types {
@@ -116,10 +139,10 @@ pub async fn main() -> VCRResult<()> {
         );
 
         let out_file =
-            File::create(&format!("./tapes/{}.riv", etype)).map_err(VCRError::IOError)?;
+            File::create(base_path.join(&format!("{}.riv", etype))).map_err(VCRError::IOError)?;
         let mut out = BufWriter::new(out_file);
 
-        let entity_table_f = File::create(&format!("./tapes/{}.header.riv.zstd", etype))
+        let entity_table_f = File::create(base_path.join(&format!("{}.header.riv.zstd", etype)))
             .map_err(VCRError::IOError)?;
         let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
 
@@ -172,8 +195,12 @@ pub async fn main() -> VCRResult<()> {
                     .unwrap();
 
                 let patch_bytes = patch.concat();
-                out.write_all(&patch_compressor.compress(&patch_bytes, 1).unwrap())
-                    .unwrap();
+                out.write_all(
+                    &patch_compressor
+                        .compress(&patch_bytes, compression_level)
+                        .unwrap(),
+                )
+                .unwrap();
 
                 last_position = start_pos;
             }

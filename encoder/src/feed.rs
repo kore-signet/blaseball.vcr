@@ -3,27 +3,63 @@ use blaseball_vcr::{
     utils::encode_varint,
 };
 
+use clap::clap_app;
 use crossbeam::channel::bounded;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
+use std::path::Path;
 
 fn main() {
     let (snd1, rcv1) = bounded(1);
     let (snd2, rcv2) = bounded(1);
-    let n_workers = 6;
 
-    let mut feed_dict: Vec<u8> = Vec::new();
-    let mut dict_f = File::open("zstd-dictionaries/feed.dict").unwrap();
-    dict_f.read_to_end(&mut feed_dict).unwrap();
+    let matches = clap_app!(encode_feed =>
+        (version: "1.0")
+        (author: "allie signet <allie@sibr.dev>")
+        (about: "blaseball.vcr feed encoder")
+        (@arg ZSTD_DICT: -d --dict [FILE] "set zstd dictionary to use")
+        (@arg COMPRESSION_LEVEL: -l --level [LEVEL] "set compression level")
+        (@arg THREADS: -t --threads [THREADS] "set amount of threads to use")
+        (@arg INPUT: <FILE> "input feed dump in NDJSON format")
+        (@arg OUT: <FOLDER> "output folder")
+    )
+    .get_matches();
+
+    let compression_level = matches
+        .value_of("COMPRESSION_LEVEL")
+        .unwrap_or("19")
+        .parse::<i32>()
+        .unwrap();
+    let n_workers = matches
+        .value_of("THREADS")
+        .unwrap_or("2")
+        .parse::<i32>()
+        .unwrap();
+
+    let base_path = Path::new(matches.value_of("OUT").unwrap());
+    let input_path = matches.value_of("INPUT").unwrap();
+    let main_path = base_path.join("feed.riv").to_path_buf();
+    let id_path = base_path.join("feed.fp").to_path_buf();
+    let lookup_path = base_path.join("id_lookup.bin").to_path_buf();
+    let tag_indexes_path = base_path.join("tag_indexes.fp").to_path_buf();
+
+    let feed_dict: Option<Vec<u8>> = if let Some(dict_path) = matches.value_of("ZSTD_DICT") {
+        let mut feed_dict: Vec<u8> = Vec::new();
+        let mut dict_f = File::open(dict_path).unwrap();
+        dict_f.read_to_end(&mut feed_dict).unwrap();
+        Some(feed_dict)
+    } else {
+        None
+    };
 
     crossbeam::scope(|s| {
         // Producer thread
         s.spawn(|_| {
             let mut indexes: MetaIndex = Default::default();
 
-            let f = File::open("feed.json").unwrap();
+            let f = File::open(input_path).unwrap();
             let reader = BufReader::new(f);
 
             for l in reader.lines() {
@@ -101,7 +137,7 @@ fn main() {
                 .unwrap();
             }
 
-            let mut f = File::create("./tapes/feed/id_lookup.bin").unwrap();
+            let mut f = File::create(lookup_path).unwrap();
             f.write_all(&rmp_serde::to_vec(&indexes).unwrap()).unwrap();
 
             // Close the channel - this is necessary to exit
@@ -115,10 +151,16 @@ fn main() {
             let zstd_dict = feed_dict.clone();
             // Spawn workers in separate threads
             s.spawn(move |_| {
-                let mut feed_compressor = zstd::block::Compressor::with_dict(zstd_dict);
+                let mut feed_compressor = if let Some(dict) = zstd_dict {
+                    zstd::block::Compressor::with_dict(dict)
+                } else {
+                    zstd::block::Compressor::new()
+                };
                 // Receive until channel closes
                 for event in recvr.iter() {
-                    let compressed_bytes = feed_compressor.compress(&event.encode(), 1).unwrap();
+                    let compressed_bytes = feed_compressor
+                        .compress(&event.encode(), compression_level)
+                        .unwrap();
                     sendr.send((event, compressed_bytes)).unwrap();
                 }
             });
@@ -133,10 +175,10 @@ fn main() {
         let mut phase_idx: HashMap<(u8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
 
         // Sink
-        let out_f = File::create("./tapes/feed/feed.riv").unwrap();
+        let out_f = File::create(main_path).unwrap();
         let mut out = BufWriter::new(out_f);
 
-        let id_out_f = File::create("./tapes/feed/feed.fp").unwrap();
+        let id_out_f = File::create(id_path).unwrap();
         let mut id_out = zstd::Encoder::new(id_out_f, 21).unwrap();
         id_out.long_distance_matching(true).unwrap();
 
@@ -191,7 +233,7 @@ fn main() {
         out.flush().unwrap();
         id_out.finish().unwrap();
 
-        let idx_f = File::create("./tapes/feed/tag_indexes.fp").unwrap();
+        let idx_f = File::create(tag_indexes_path).unwrap();
         let mut idx_out = zstd::Encoder::new(idx_f, 21).unwrap();
         idx_out.long_distance_matching(true).unwrap();
 

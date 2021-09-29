@@ -45,8 +45,6 @@ impl TributesDatabase {
             ids
         };
 
-        println!("reading times");
-
         let mut times: Vec<(u32, u32, u16)> = Vec::new();
 
         loop {
