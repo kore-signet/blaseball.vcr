@@ -1,7 +1,7 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
 use clap::clap_app;
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use integer_encoding::VarIntWriter;
 use serde::Serialize;
 use serde_json::Value as JSONValue;
@@ -28,12 +28,13 @@ struct ChroniclerParameters {
 async fn paged_get(
     client: &reqwest::Client,
     url: &str,
+    mpb: &MultiProgress,
     mut parameters: ChroniclerParameters,
 ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
     let mut results: Vec<ChroniclerEntity<JSONValue>> = Vec::new();
 
     let mut page = 1;
-    let spinny = ProgressBar::new_spinner();
+    let spinny = mpb.add(ProgressBar::new_spinner());
     spinny.enable_steady_tick(120);
     spinny.set_style(ProgressStyle::default_spinner().template("{spinner:.blue} {msg}"));
     loop {
@@ -54,7 +55,7 @@ async fn paged_get(
             break;
         }
     }
-    spinny.finish_and_clear();
+    mpb.remove(&spinny);
 
     Ok(results)
 }
@@ -99,10 +100,13 @@ pub async fn main() -> VCRResult<()> {
     };
 
     for etype in entity_types {
-        println!("-> Fetching list of entities of type {}", etype);
+        let bars = MultiProgress::new();
+        bars.set_alignment(MultiProgressAlignment::Top);
+
         let entity_ids: Vec<String> = paged_get(
             &client,
             "https://api.sibr.dev/chronicler/v2/entities",
+            &bars,
             ChroniclerParameters {
                 next_page: None,
                 entity_type: etype.to_owned(),
@@ -118,6 +122,13 @@ pub async fn main() -> VCRResult<()> {
 
         println!("| found {} entities", entity_ids.len());
 
+        let bar_style = ProgressStyle::default_bar()
+            .template("{msg:.bold} - {pos}/{len} {wide_bar:40.green/white}");
+
+        let entity_id_bar = bars.add(ProgressBar::new(entity_ids.len() as u64));
+        entity_id_bar.set_style(bar_style.clone());
+        entity_id_bar.set_message("encoding entities");
+
         let out_file =
             File::create(base_path.join(&format!("{}.riv", etype))).map_err(VCRError::IOError)?;
         let mut out = BufWriter::new(out_file);
@@ -126,13 +137,7 @@ pub async fn main() -> VCRResult<()> {
             .map_err(VCRError::IOError)?;
         let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
 
-        let bars = MultiProgress::new();
-        let bar_style = ProgressStyle::default_bar()
-            .template("{msg:.bold} - {pos}/{len} {wide_bar:40.green/white}");
 
-        let entity_id_bar = bars.add(ProgressBar::new(entity_ids.len() as u64));
-        entity_id_bar.set_style(bar_style.clone());
-        entity_id_bar.set_message("encoding entities");
 
         for id in entity_id_bar.wrap_iter(entity_ids.into_iter()) {
             entity_id_bar.tick();
@@ -141,6 +146,7 @@ pub async fn main() -> VCRResult<()> {
             let mut entity_versions: Vec<(u32, JSONValue)> = paged_get(
                 &client,
                 "https://api.sibr.dev/chronicler/v2/versions",
+                &bars,
                 ChroniclerParameters {
                     next_page: None,
                     entity_type: etype.to_owned(),
