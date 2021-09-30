@@ -417,6 +417,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "console"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3993e6445baa160675931ec041a5e03ca84b9c6e32a056150d3aa2bdda0a1f45"
+dependencies = [
+ "encode_unicode",
+ "lazy_static",
+ "libc",
+ "terminal_size",
+ "winapi",
+]
+
+[[package]]
 name = "const_fn"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -659,6 +672,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "encode_unicode"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
+
+[[package]]
 name = "encoder"
 version = "0.1.0"
 dependencies = [
@@ -666,9 +685,9 @@ dependencies = [
  "chrono",
  "clap 3.0.0-beta.4",
  "crossbeam",
+ "indicatif",
  "integer-encoding",
  "json-patch",
- "progress_bar",
  "reqwest",
  "rmp-serde",
  "serde",
@@ -1081,6 +1100,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "indicatif"
+version = "0.17.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "500f7e5a63596852b9bf7583fe86f9ad08e0df9b4eb58d12e9729071cb4952ca"
+dependencies = [
+ "console",
+ "lazy_static",
+ "number_prefix",
+ "regex",
+]
+
+[[package]]
 name = "inlinable_string"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1391,6 +1422,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "number_prefix"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
+
+[[package]]
 name = "once_cell"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1614,12 +1651,6 @@ dependencies = [
  "version_check",
  "yansi",
 ]
-
-[[package]]
-name = "progress_bar"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59fd305ac950550fa06771dc93b43670190dd1befc73b1367f5d4246bf48c2dc"
 
 [[package]]
 name = "quick-error"
@@ -2321,6 +2352,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "terminal_size"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "633c1a546cee861a1a6d0dc69ebeca693bf4296661ba7852b9d21d159e0506df"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2442,9 +2483,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bad447894d469f905c43bffb355333bcc9eaaaf736d2815214e962714cad02d"
+checksum = "154794c8f499c2619acd19e839294703e9e32e7630ef5f46ea80d4ef0fbee5eb"
 dependencies = [
  "proc-macro2",
  "quote",

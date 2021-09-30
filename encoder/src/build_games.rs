@@ -5,9 +5,8 @@ use blaseball_vcr::*;
 use chrono::{DateTime, Utc};
 use clap::clap_app;
 use crossbeam::channel::bounded;
+use indicatif::{ProgressBar, ProgressStyle};
 use integer_encoding::VarIntWriter;
-use progress_bar::color::{Color, Style};
-use progress_bar::progress_bar::ProgressBar;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
@@ -130,11 +129,10 @@ pub fn main() -> VCRResult<()> {
         .collect();
 
         println!("| found {} entities", games.len());
-        let mut progress_bar = ProgressBar::new(games.len());
-        progress_bar.set_action(
-            "Loading & encoding entity versions",
-            Color::Blue,
-            Style::Bold,
+        let progress_bar = ProgressBar::new(games.len() as u64);
+        progress_bar.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg:.bold} {pos:>7}/{len:7} \n{percent:.bold}% {bar:70.green/white}"),
         );
 
         let out_file = File::create(main_path).unwrap();
@@ -224,8 +222,8 @@ pub fn main() -> VCRResult<()> {
         let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
         entity_table_writer.long_distance_matching(true).unwrap();
 
-        for (id, patches, path_map, base) in rcv2.iter() {
-            progress_bar.set_action(&id, Color::Green, Style::Bold);
+        for (id, patches, path_map, base) in progress_bar.wrap_iter(rcv2.iter()) {
+            progress_bar.set_message(format!("encoding game {}", id));
 
             let mut last_position = out.stream_position().unwrap() as u32;
             let mut header_encoder =
@@ -253,12 +251,10 @@ pub fn main() -> VCRResult<()> {
                 .unwrap();
             entity_table_writer.write_all(&header).unwrap();
 
-            progress_bar.inc();
-
             out.flush().map_err(VCRError::IOError).unwrap();
         }
 
-        progress_bar.finalize();
+        progress_bar.finish_with_message("done!");
 
         entity_table_writer.finish().unwrap();
     })

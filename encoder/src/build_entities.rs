@@ -1,9 +1,8 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
 use clap::clap_app;
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use integer_encoding::VarIntWriter;
-use progress_bar::color::{Color, Style};
-use progress_bar::progress_bar::ProgressBar;
 use serde::Serialize;
 use serde_json::Value as JSONValue;
 use std::fs::File;
@@ -28,29 +27,17 @@ struct ChroniclerParameters {
 
 async fn paged_get(
     client: &reqwest::Client,
-    progress: &mut ProgressBar,
-    show_progress: bool,
     url: &str,
     mut parameters: ChroniclerParameters,
 ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
     let mut results: Vec<ChroniclerEntity<JSONValue>> = Vec::new();
 
     let mut page = 1;
-
+    let spinny = ProgressBar::new_spinner();
+    spinny.enable_steady_tick(120);
+    spinny.set_style(ProgressStyle::default_spinner().template("{spinner:.blue} {msg}"));
     loop {
-        if show_progress {
-            progress.print_info(
-                "fetching",
-                &format!(
-                    "page #{} - {} total entities",
-                    page,
-                    page * parameters.count
-                ),
-                Color::Red,
-                Style::Italic,
-            );
-        }
-
+        spinny.set_message(format!("downloading entities - page {}", page));
         let mut chron_response: ChroniclerResponse<ChroniclerEntity<JSONValue>> = client
             .get(url)
             .query(&parameters)
@@ -67,6 +54,7 @@ async fn paged_get(
             break;
         }
     }
+    spinny.finish_and_clear();
 
     Ok(results)
 }
@@ -83,6 +71,7 @@ pub async fn main() -> VCRResult<()> {
         (@arg COMPRESSION_LEVEL: -l --level [LEVEL] "set compression level")
         (@arg CHECKPOINTS: -c --checkpoints [CHECKPOINTS] "make a checkpoint every n entities")
         (@arg OUTPUT_FOLDER: -o --output [FOLDER] "set output folder for resulting tapes")
+        (@arg WHEE: --whee "show extra progress bars for patch compression")
         (@arg ENTITIES: <TYPE> ... "entity types to encode")
     )
     .get_matches();
@@ -110,12 +99,9 @@ pub async fn main() -> VCRResult<()> {
     };
 
     for etype in entity_types {
-        let mut progress_bar = ProgressBar::new(0);
         println!("-> Fetching list of entities of type {}", etype);
         let entity_ids: Vec<String> = paged_get(
             &client,
-            &mut progress_bar,
-            false,
             "https://api.sibr.dev/chronicler/v2/entities",
             ChroniclerParameters {
                 next_page: None,
@@ -131,12 +117,6 @@ pub async fn main() -> VCRResult<()> {
         .collect();
 
         println!("| found {} entities", entity_ids.len());
-        let mut progress_bar = ProgressBar::new(entity_ids.len());
-        progress_bar.set_action(
-            "Loading & encoding entity versions",
-            Color::Blue,
-            Style::Bold,
-        );
 
         let out_file =
             File::create(base_path.join(&format!("{}.riv", etype))).map_err(VCRError::IOError)?;
@@ -146,20 +126,20 @@ pub async fn main() -> VCRResult<()> {
             .map_err(VCRError::IOError)?;
         let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
 
-        for id in entity_ids {
-            progress_bar.set_action(&id, Color::Green, Style::Bold);
+        let bars = MultiProgress::new();
+        let bar_style = ProgressStyle::default_bar()
+            .template("{msg:.bold} - {pos}/{len} {wide_bar:40.green/white}");
 
-            progress_bar.print_info(
-                "downloading",
-                &format!("entity {} of type {}", id, etype),
-                Color::Green,
-                Style::Italic,
-            );
+        let entity_id_bar = bars.add(ProgressBar::new(entity_ids.len() as u64));
+        entity_id_bar.set_style(bar_style.clone());
+        entity_id_bar.set_message("encoding entities");
+
+        for id in entity_id_bar.wrap_iter(entity_ids.into_iter()) {
+            entity_id_bar.tick();
+            entity_id_bar.set_message(format!("encoding {}", id));
 
             let mut entity_versions: Vec<(u32, JSONValue)> = paged_get(
                 &client,
-                &mut progress_bar,
-                true,
                 "https://api.sibr.dev/chronicler/v2/versions",
                 ChroniclerParameters {
                     next_page: None,
@@ -188,7 +168,20 @@ pub async fn main() -> VCRResult<()> {
             )
             .unwrap();
 
-            for (time, patch) in patches {
+            let compression_bar = bars.add(ProgressBar::new(patches.len() as u64));
+            if !matches.is_present("WHEE") {
+                compression_bar.set_draw_target(ProgressDrawTarget::hidden());
+            }
+
+            compression_bar.set_style(
+                ProgressStyle::default_bar()
+                    .template("{msg:.bold} {pos:>7}/{len:7} [{bar:40.blue/cyan}]")
+                    .progress_chars("##-"),
+            );
+
+            compression_bar.set_message("[compressing patches]");
+
+            for (time, patch) in compression_bar.wrap_iter(patches.into_iter()) {
                 let start_pos = out.stream_position().map_err(VCRError::IOError)? as u32;
                 header_encoder
                     .write_patch(time, start_pos - last_position)
@@ -205,6 +198,8 @@ pub async fn main() -> VCRResult<()> {
                 last_position = start_pos;
             }
 
+            compression_bar.finish_and_clear();
+
             let header = header_encoder.release();
             entity_table_writer
                 .write_varint(header.len() as u32)
@@ -217,12 +212,10 @@ pub async fn main() -> VCRResult<()> {
                 .unwrap();
             entity_table_writer.write_all(&header).unwrap();
 
-            progress_bar.inc();
-
             out.flush().map_err(VCRError::IOError)?;
         }
 
-        progress_bar.finalize();
+        entity_id_bar.finish_with_message("done!");
         entity_table_writer.finish().unwrap();
 
         out.get_mut().sync_all().map_err(VCRError::IOError)?;
