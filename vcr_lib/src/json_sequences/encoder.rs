@@ -1,6 +1,7 @@
 use json_patch::{diff, PatchOperation, PatchOperation::*};
 use serde_json::{json, Value as JSONValue};
 use std::collections::HashMap;
+use std::iter;
 use std::mem;
 
 type EntityPatch = (u32, Vec<Vec<u8>>);
@@ -23,6 +24,8 @@ pub fn encode(
         JSONValue::Array(_) => json!([]),
         JSONValue::Object(_) => json!({}),
     };
+
+    let end_value = entity.last().cloned();
 
     let mut last = base.clone();
     let mut paths: HashMap<String, u16> = HashMap::new();
@@ -107,6 +110,10 @@ pub fn encode(
 
                 (time, diff)
             })
+            .chain(
+                iter::once(end_value)
+                    .filter_map(|v| v.map(|x| (x.0, vec![rmp_serde::to_vec(&x.1).unwrap()]))),
+            )
             .collect::<Vec<EntityPatch>>(),
         paths
             .into_iter()
