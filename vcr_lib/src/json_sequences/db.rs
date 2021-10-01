@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use memmap2::{Mmap, MmapOptions};
 use serde_json::{json, value::RawValue, Value as JSONValue};
+use std::time::Instant;
 use zstd::dict::DecoderDictionary;
 
 use lru::LruCache;
@@ -53,7 +55,7 @@ pub fn hash_entities(
 }
 
 pub struct Database {
-    reader: BufReader<File>,
+    reader: Mmap,
     entities: HashMap<String, EntityData>,
     dictionary: Option<DecoderDictionary<'static>>,
     entity_cache: LruCache<(String, usize), ChroniclerEntity<JSONValue>>,
@@ -80,7 +82,7 @@ impl Database {
         };
 
         Ok(Database {
-            reader: BufReader::new(db_f),
+            reader: unsafe { MmapOptions::new().populate().map(&db_f)? },
             entities: decode_header(decompressor)?,
             dictionary: compression_dict,
             entity_cache: LruCache::new(cache_size),
@@ -95,7 +97,6 @@ impl Database {
         from_index: usize,
     ) -> VCRResult<Vec<(u32, Patch)>> {
         let metadata = &self.entities.get(entity).ok_or(VCRError::EntityNotFound)?;
-
         let mut patches: Vec<(u32, Patch)> = Vec::new();
 
         let patch_list: Vec<(u32, u32, u32)> = if skip_to_checkpoint {
@@ -121,21 +122,18 @@ impl Database {
         };
 
         for (time, patch_start, patch_len) in patch_list {
-            self.reader.seek(SeekFrom::Start(patch_start as u64))?;
-
-            let mut compressed_bytes: Vec<u8> = vec![0; patch_len as usize];
-            self.reader.read_exact(&mut compressed_bytes)?;
-
             let mut e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
                 let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
-                    Cursor::new(compressed_bytes),
+                    &self.reader[(patch_start as usize)..(patch_start + patch_len) as usize],
                     compress_dict,
                 )?;
                 let mut res = Vec::with_capacity((patch_len) as usize * 10);
                 decoder.read_to_end(&mut res)?;
                 res
             } else {
-                let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))?;
+                let mut decoder = zstd::stream::Decoder::new(
+                    &self.reader[(patch_start as usize)..(patch_start + patch_len) as usize],
+                )?;
                 let mut res = Vec::with_capacity((patch_len) as usize * 10);
                 decoder.read_to_end(&mut res)?;
                 res
