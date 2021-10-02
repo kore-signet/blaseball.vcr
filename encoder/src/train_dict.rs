@@ -123,7 +123,6 @@ pub async fn main() -> VCRResult<()> {
                 sample_sizes.push(patch_bytes.len());
                 samples.append(&mut patch_bytes);
             }
-
         }
 
         entity_id_bar.set_message("training dictionary");

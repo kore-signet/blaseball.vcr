@@ -1,7 +1,9 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
 use clap::clap_app;
-use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{
+    MultiProgress, MultiProgressAlignment, ProgressBar, ProgressDrawTarget, ProgressStyle,
+};
 use integer_encoding::VarIntWriter;
 use serde::Serialize;
 use serde_json::Value as JSONValue;
@@ -136,8 +138,6 @@ pub async fn main() -> VCRResult<()> {
         let entity_table_f = File::create(base_path.join(&format!("{}.header.riv.zstd", etype)))
             .map_err(VCRError::IOError)?;
         let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
-
-
 
         for id in entity_id_bar.wrap_iter(entity_ids.into_iter()) {
             entity_id_bar.tick();
