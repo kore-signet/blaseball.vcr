@@ -50,7 +50,7 @@ fn paged_get<T: DeserializeOwned>(
     client: &reqwest::blocking::Client,
     url: &str,
     mut parameters: ChroniclerGameParameters,
-) -> VCRResult<Vec<T>> {
+) -> anyhow::Result<Vec<T>> {
     let mut results: Vec<T> = Vec::new();
 
     loop {

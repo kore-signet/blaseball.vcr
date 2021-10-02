@@ -28,7 +28,7 @@ pub enum VCRError {
     #[error(transparent)]
     UTF8Error(#[from] std::string::FromUtf8Error),
     #[error(transparent)]
-    Other(#[from] anyhow::Error)
+    Other(#[from] anyhow::Error),
 }
 
 use rocket::{

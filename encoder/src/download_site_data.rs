@@ -1,6 +1,6 @@
 use blaseball_vcr::{
     site::{chron, chron::*, *},
-    ChroniclerV1Response, VCRError, VCRResult,
+    ChroniclerV1Response, VCRError,
 };
 
 use reqwest::blocking;
@@ -33,7 +33,7 @@ pub fn encode_resource<W: Write + Seek>(
     steps: Vec<FileStep>,
     replaces: &[Replace],
     out: &mut W,
-) -> VCRResult<EncodedResource> {
+) -> anyhow::Result<EncodedResource> {
     let client = reqwest::blocking::Client::new();
 
     let mut basis: Vec<u8> = Vec::new();
@@ -42,11 +42,8 @@ pub fn encode_resource<W: Write + Seek>(
             "https://api.sibr.dev/chronicler/v1{}",
             &steps[0].download_url
         ))
-        .send()
-        .map_err(VCRError::ReqwestError)?;
-    basis_response
-        .copy_to(&mut basis)
-        .map_err(VCRError::ReqwestError)?;
+        .send()?;
+    basis_response.copy_to(&mut basis)?;
 
     let mut last: Vec<u8> = basis.clone();
 
@@ -68,10 +65,8 @@ pub fn encode_resource<W: Write + Seek>(
                     "https://api.sibr.dev/chronicler/v1{}",
                     &step.download_url
                 ))
-                .send()
-                .map_err(VCRError::ReqwestError)?
-                .text()
-                .map_err(VCRError::ReqwestError)?;
+                .send()?
+                .text()?;
             for r in replaces {
                 basis = basis.replace(&r.replace, &r.with);
             }
@@ -105,12 +100,9 @@ pub fn encode_resource<W: Write + Seek>(
 }
 
 // usage: download_site_data <out folder> <optional toml file with replaces>
-fn main() -> VCRResult<()> {
+fn main() -> anyhow::Result<()> {
     let chron_res: ChroniclerV1Response<chron::SiteUpdate> =
-        blocking::get("https://api.sibr.dev/chronicler/v1/site/updates")
-            .map_err(VCRError::ReqwestError)?
-            .json()
-            .map_err(VCRError::ReqwestError)?;
+        blocking::get("https://api.sibr.dev/chronicler/v1/site/updates")?.json()?;
     let all_steps = chron::updates_to_steps(chron_res.data);
     let args: Vec<String> = env::args().collect();
 

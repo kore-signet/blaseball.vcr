@@ -27,7 +27,7 @@ async fn paged_get(
     client: &reqwest::Client,
     url: &str,
     mut parameters: ChroniclerParameters,
-) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
+) -> anyhow::Result<Vec<ChroniclerEntity<JSONValue>>> {
     let mut results: Vec<ChroniclerEntity<JSONValue>> = Vec::new();
 
     let mut page = 1;
@@ -58,7 +58,7 @@ async fn paged_get(
 }
 
 #[tokio::main]
-pub async fn main() -> VCRResult<()> {
+pub async fn main() -> anyhow::Result<()> {
     let client = reqwest::Client::new();
     let mut entity_types: Vec<String> = env::args().skip(1).collect();
     let checkpoint_every = entity_types.remove(0).parse::<u16>().unwrap_or(u16::MAX);
