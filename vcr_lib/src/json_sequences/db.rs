@@ -89,6 +89,33 @@ impl Database {
         })
     }
 
+    pub fn get_last_version(&mut self, entity: &str) -> VCRResult<(u32, JSONValue)> {
+        let metadata = &self.entities.get(entity).ok_or(VCRError::EntityNotFound)?;
+        let (time, patch_start, patch_len) =
+            *metadata.patches.last().ok_or(VCRError::InvalidPatchData)?;
+        self.reader.seek(SeekFrom::Start(patch_start as u64))?;
+
+        let mut compressed_bytes: Vec<u8> = vec![0; patch_len as usize];
+        self.reader.read_exact(&mut compressed_bytes)?;
+
+        let e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
+            let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
+                Cursor::new(compressed_bytes),
+                compress_dict,
+            )?;
+            let mut res = Vec::with_capacity((patch_len) as usize * 10);
+            decoder.read_to_end(&mut res)?;
+            res
+        } else {
+            let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))?;
+            let mut res = Vec::with_capacity((patch_len) as usize * 10);
+            decoder.read_to_end(&mut res)?;
+            res
+        };
+
+        Ok((time, rmp_serde::from_read_ref(&e_bytes)?))
+    }
+
     pub fn get_entity_data(
         &mut self,
         entity: &str,
@@ -102,6 +129,9 @@ impl Database {
         let patch_list: Vec<(u32, u32, u32)> = if skip_to_checkpoint {
             let patches_until: Vec<(u32, u32, u32)> = metadata
                 .patches
+                .split_last()
+                .unwrap()
+                .1
                 .iter()
                 .copied()
                 .take_while(|x| x.0 <= until)
@@ -114,6 +144,9 @@ impl Database {
         } else {
             metadata
                 .patches
+                .split_last()
+                .unwrap()
+                .1
                 .iter()
                 .skip(from_index)
                 .copied()
@@ -263,13 +296,6 @@ impl Database {
     }
 
     pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
-        let mut entity_value = self
-            .entities
-            .get(entity)
-            .ok_or(VCRError::EntityNotFound)?
-            .base
-            .clone();
-
         let patch_idx = match self.entities[entity]
             .patches
             .binary_search_by_key(&at, |(t, _, _)| *t)
@@ -281,8 +307,27 @@ impl Database {
         if patch_idx > 0 {
             if let Some(val) = self.entity_cache.get(&(entity.to_owned(), patch_idx)) {
                 return Ok(val.clone());
+            } else if patch_idx == self.entities[entity].patches.len() - 1 {
+                let (time, data) = self.get_last_version(entity)?;
+                return Ok(ChroniclerEntity {
+                    data: data,
+                    entity_id: entity.to_owned(),
+                    valid_from: DateTime::<Utc>::from_utc(
+                        NaiveDateTime::from_timestamp(time as i64, 0),
+                        Utc,
+                    ),
+                    valid_to: None,
+                    hash: String::new(),
+                });
             }
         }
+
+        let mut entity_value = self
+            .entities
+            .get(entity)
+            .ok_or(VCRError::EntityNotFound)?
+            .base
+            .clone();
 
         let mut patch_data_idx = 0;
 
