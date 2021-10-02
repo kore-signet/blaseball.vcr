@@ -263,13 +263,13 @@ dependencies = [
 name = "blaseball_vcr"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "integer-encoding",
  "json-patch",
  "lru",
  "memmap2",
  "moka",
- "reqwest",
  "rmp-serde",
  "rocket",
  "serde",
@@ -3093,7 +3093,7 @@ checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 [[package]]
 name = "xdelta3"
 version = "0.1.5"
-source = "git+https://github.com/alisww/xdelta3-rs.git#d178b3b26b10ee686605a64ceb76e05b360916cf"
+source = "git+https://github.com/alisww/xdelta3-rs.git#735812313f2f7eb89d1d3200e5a0626a8697ca69"
 dependencies = [
  "bindgen",
  "cc",
