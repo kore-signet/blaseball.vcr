@@ -16,8 +16,6 @@ pub enum VCRError {
     #[error("invalid op code in patch bytecode")]
     InvalidOpCode,
     #[error(transparent)]
-    ReqwestError(#[from] reqwest::Error),
-    #[error(transparent)]
     MsgPackEncError(#[from] rmp_serde::encode::Error),
     #[error(transparent)]
     MsgPackDecError(#[from] rmp_serde::decode::Error),
@@ -29,6 +27,8 @@ pub enum VCRError {
     SerdeJSONError(#[from] serde_json::Error),
     #[error(transparent)]
     UTF8Error(#[from] std::string::FromUtf8Error),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error)
 }
 
 use rocket::{
