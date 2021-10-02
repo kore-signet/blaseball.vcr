@@ -99,9 +99,9 @@ pub fn main() -> VCRResult<()> {
             .parse::<i32>()
             .unwrap();
         let base_path = Path::new(matches.value_of("OUT").unwrap());
-        let main_path = base_path.join("game_updates.riv").to_path_buf();
-        let date_table_path = base_path.join("game_updates.dates.riv.zstd").to_path_buf();
-        let header_path = base_path.join("game_updates.header.riv.zstd").to_path_buf();
+        let main_path = base_path.join("game_updates.riv");
+        let date_table_path = base_path.join("game_updates.dates.riv.zstd");
+        let header_path = base_path.join("game_updates.header.riv.zstd");
 
         println!(
             "Set zstd dictionary to {} and compression level to {}",

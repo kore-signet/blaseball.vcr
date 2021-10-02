@@ -4,8 +4,6 @@ use rocket::{get, serde::json::Json as RocketJson, State};
 use serde_json::Value as JSONValue;
 use uuid::Uuid;
 
-use std::sync::Mutex;
-
 #[get("/feed/<kind>?<id>&<time>&<start>&<category>&<limit>&<phase>&<season>")]
 pub fn feed(
     kind: &str,
@@ -16,10 +14,8 @@ pub fn feed(
     phase: Option<u8>,
     season: Option<u8>,
     category: Option<i8>,
-    db: &State<Mutex<FeedDatabase>>,
+    feed: &State<FeedDatabase>,
 ) -> VCRResult<RocketJson<Vec<FeedEvent>>> {
-    let mut feed = db.lock().unwrap();
-
     let time = start
         .map(|s| s.parse::<DateTime<Utc>>().unwrap())
         .unwrap_or_else(|| time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)));

@@ -187,17 +187,15 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
 
     if let Some(feed_config) = config.feed {
         let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading feed data"));
-        let feed_db = Mutex::new(
-            FeedDatabase::from_files(
-                feed_config.index,
-                feed_config.path,
-                feed_config.dict,
-                feed_config.id_table,
-                feed_config.tag_table,
-                feed_config.cache_size.unwrap_or(50),
-            )
-            .unwrap(),
-        );
+        let feed_db = FeedDatabase::from_files(
+            feed_config.index,
+            feed_config.path,
+            feed_config.dict,
+            feed_config.id_table,
+            feed_config.tag_table,
+            feed_config.cache_size.unwrap_or(50),
+        )
+        .unwrap();
         blahaj.abort();
         println!();
         rocket = rocket

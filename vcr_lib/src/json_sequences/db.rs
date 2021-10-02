@@ -3,17 +3,16 @@ use crate::*;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, File};
-use std::io::{self, prelude::*, BufReader, Cursor, SeekFrom};
+use std::io::{self, prelude::*};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use memmap2::{Mmap, MmapOptions};
 use serde_json::{json, value::RawValue, Value as JSONValue};
-use std::time::Instant;
 use zstd::dict::DecoderDictionary;
 
-use lru::LruCache;
+use moka::sync::Cache;
 
 use sha2::Digest;
 
@@ -58,7 +57,7 @@ pub struct Database {
     reader: Mmap,
     entities: HashMap<String, EntityData>,
     dictionary: Option<DecoderDictionary<'static>>,
-    entity_cache: LruCache<(String, usize), ChroniclerEntity<JSONValue>>,
+    entity_cache: Cache<(String, usize), ChroniclerEntity<JSONValue>>,
 }
 
 impl Database {
@@ -85,29 +84,26 @@ impl Database {
             reader: unsafe { MmapOptions::new().populate().map(&db_f)? },
             entities: decode_header(decompressor)?,
             dictionary: compression_dict,
-            entity_cache: LruCache::new(cache_size),
+            entity_cache: Cache::new(cache_size),
         })
     }
 
-    pub fn get_last_version(&mut self, entity: &str) -> VCRResult<(u32, JSONValue)> {
+    pub fn get_last_version(&self, entity: &str) -> VCRResult<(u32, JSONValue)> {
         let metadata = &self.entities.get(entity).ok_or(VCRError::EntityNotFound)?;
         let (time, patch_start, patch_len) =
             *metadata.patches.last().ok_or(VCRError::InvalidPatchData)?;
-        self.reader.seek(SeekFrom::Start(patch_start as u64))?;
-
-        let mut compressed_bytes: Vec<u8> = vec![0; patch_len as usize];
-        self.reader.read_exact(&mut compressed_bytes)?;
-
         let e_bytes: Vec<u8> = if let Some(compress_dict) = &self.dictionary {
             let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
-                Cursor::new(compressed_bytes),
+                &self.reader[(patch_start as usize)..(patch_start + patch_len) as usize],
                 compress_dict,
             )?;
             let mut res = Vec::with_capacity((patch_len) as usize * 10);
             decoder.read_to_end(&mut res)?;
             res
         } else {
-            let mut decoder = zstd::stream::Decoder::new(Cursor::new(compressed_bytes))?;
+            let mut decoder = zstd::stream::Decoder::new(
+                &self.reader[(patch_start as usize)..(patch_start + patch_len) as usize],
+            )?;
             let mut res = Vec::with_capacity((patch_len) as usize * 10);
             decoder.read_to_end(&mut res)?;
             res
@@ -117,7 +113,7 @@ impl Database {
     }
 
     pub fn get_entity_data(
-        &mut self,
+        &self,
         entity: &str,
         until: u32,
         skip_to_checkpoint: bool,
@@ -254,7 +250,7 @@ impl Database {
     }
 
     pub fn get_entity_versions(
-        &mut self,
+        &self,
         entity: &str,
         before: u32,
         after: u32,
@@ -295,7 +291,7 @@ impl Database {
         Ok(results)
     }
 
-    pub fn get_entity(&mut self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
+    pub fn get_entity(&self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let patch_idx = match self.entities[entity]
             .patches
             .binary_search_by_key(&at, |(t, _, _)| *t)
@@ -306,7 +302,7 @@ impl Database {
 
         if patch_idx > 0 {
             if let Some(val) = self.entity_cache.get(&(entity.to_owned(), patch_idx)) {
-                return Ok(val.clone());
+                return Ok(val);
             } else if patch_idx == self.entities[entity].patches.len() - 1 {
                 let (time, data) = self.get_last_version(entity)?;
                 return Ok(ChroniclerEntity {
@@ -333,7 +329,7 @@ impl Database {
 
         if self.entities[entity].checkpoint_every != u16::MAX && patch_idx > 0 {
             if let Some(val) = self.entity_cache.get(&(entity.to_owned(), patch_idx - 1)) {
-                entity_value = val.data.clone();
+                entity_value = val.data;
                 patch_data_idx = patch_idx - 1;
             }
         }
@@ -365,13 +361,13 @@ impl Database {
 
         if patch_idx != 0 {
             self.entity_cache
-                .put((entity.to_owned(), patch_idx), e.clone());
+                .insert((entity.to_owned(), patch_idx), e.clone());
         }
 
         Ok(e)
     }
 
-    pub fn get_first_entity(&mut self, entity: &str) -> VCRResult<ChroniclerEntity<JSONValue>> {
+    pub fn get_first_entity(&self, entity: &str) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let mut entity_value = self
             .entities
             .get(entity)
@@ -404,7 +400,7 @@ impl Database {
     }
 
     pub fn get_entities(
-        &mut self,
+        &self,
         entities: Vec<String>,
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
@@ -417,7 +413,7 @@ impl Database {
     }
 
     pub fn get_entities_versions(
-        &mut self,
+        &self,
         entities: Vec<String>,
         before: u32,
         after: u32,
@@ -430,7 +426,7 @@ impl Database {
         Ok(results)
     }
 
-    pub fn all_entities(&mut self, at: u32) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
+    pub fn all_entities(&self, at: u32) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         let mut results = Vec::with_capacity(self.entities.len());
         let keys: Vec<String> = self.entities.keys().cloned().collect();
         for entity in keys {
@@ -441,7 +437,7 @@ impl Database {
     }
 
     pub fn all_entities_versions(
-        &mut self,
+        &self,
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
@@ -455,7 +451,7 @@ impl Database {
     }
 
     pub fn fetch_page(
-        &mut self,
+        &self,
         page: &mut InternalPaging<Box<RawValue>>,
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
@@ -482,7 +478,7 @@ impl Database {
 }
 
 pub struct MultiDatabase {
-    pub dbs: HashMap<String, Mutex<Database>>, // entity_type:db
+    pub dbs: HashMap<String, Database>, // entity_type:db
     pub game_index: HashMap<GameDate, Vec<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>>,
     pub tributes: Mutex<TributesDatabase>,
 }
@@ -545,7 +541,7 @@ impl MultiDatabase {
             })
             .collect();
 
-        let mut dbs: HashMap<String, Mutex<Database>> = HashMap::new();
+        let mut dbs: HashMap<String, Database> = HashMap::new();
         let mut tributes: Option<TributesDatabase> = None;
 
         for (e_type, lookup_file, main_file) in entries {
@@ -554,14 +550,14 @@ impl MultiDatabase {
             } else {
                 dbs.insert(
                     e_type.clone(),
-                    Mutex::new(Database::from_files(
+                    Database::from_files(
                         lookup_file,
                         main_file,
                         dicts
                             .get(&e_type)
                             .map(|p| PathBuf::from(p.as_ref().as_os_str())),
                         cache_size,
-                    )?),
+                    )?,
                 );
             }
         }
@@ -583,13 +579,10 @@ impl MultiDatabase {
             let mut db = self.tributes.lock().unwrap();
             db.get_entity(at)
         } else {
-            let mut db = self
-                .dbs
+            self.dbs
                 .get(e_type)
                 .ok_or(VCRError::EntityTypeNotFound)?
-                .lock()
-                .unwrap();
-            db.get_entity(entity, at)
+                .get_entity(entity, at)
         }
     }
 
@@ -604,13 +597,10 @@ impl MultiDatabase {
             let mut db = self.tributes.lock().unwrap();
             db.get_versions(before, after)
         } else {
-            let mut db = self
-                .dbs
+            self.dbs
                 .get(e_type)
                 .ok_or(VCRError::EntityTypeNotFound)?
-                .lock()
-                .unwrap();
-            db.get_entity_versions(entity, before, after)
+                .get_entity_versions(entity, before, after)
         }
     }
 
@@ -624,13 +614,10 @@ impl MultiDatabase {
             let mut db = self.tributes.lock().unwrap();
             db.get_entity(at).map(|v| vec![v])
         } else {
-            let mut db = self
-                .dbs
+            self.dbs
                 .get(e_type)
                 .ok_or(VCRError::EntityTypeNotFound)?
-                .lock()
-                .unwrap();
-            db.get_entities(entities, at)
+                .get_entities(entities, at)
         }
     }
 
@@ -645,13 +632,10 @@ impl MultiDatabase {
             let mut db = self.tributes.lock().unwrap();
             db.get_versions(before, after)
         } else {
-            let mut db = self
-                .dbs
+            self.dbs
                 .get(e_type)
                 .ok_or(VCRError::EntityTypeNotFound)?
-                .lock()
-                .unwrap();
-            db.get_entities_versions(entities, before, after)
+                .get_entities_versions(entities, before, after)
         }
     }
 
@@ -660,13 +644,10 @@ impl MultiDatabase {
         e_type: &str,
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut db = self
-            .dbs
+        self.dbs
             .get(e_type)
             .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        db.all_entities(at)
+            .all_entities(at)
     }
 
     pub fn all_entities_versions(
@@ -675,25 +656,17 @@ impl MultiDatabase {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut db = self
-            .dbs
+        self.dbs
             .get(e_type)
             .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
-        db.all_entities_versions(before, after)
+            .all_entities_versions(before, after)
     }
 
     pub fn all_ids(&self, e_type: &str) -> VCRResult<Vec<String>> {
         if e_type == "tributes" {
             Ok(vec!["00000000-0000-0000-0000-000000000000".to_owned()])
         } else {
-            let db = self
-                .dbs
-                .get(e_type)
-                .ok_or(VCRError::EntityTypeNotFound)?
-                .lock()
-                .unwrap();
+            let db = self.dbs.get(e_type).ok_or(VCRError::EntityTypeNotFound)?;
             Ok(db.entities.keys().map(|x| x.to_owned()).collect())
         }
     }
@@ -708,23 +681,18 @@ impl MultiDatabase {
             let mut db = self.tributes.lock().unwrap();
             db.fetch_page(page, count)
         } else {
-            let mut db = self
-                .dbs
+            self.dbs
                 .get(e_type)
                 .ok_or(VCRError::EntityTypeNotFound)?
-                .lock()
-                .unwrap();
-            db.fetch_page(page, count)
+                .fetch_page(page, count)
         }
     }
 
     pub fn games_by_date(&self, date: &GameDate) -> VCRResult<Vec<ChronV1Game>> {
-        let mut db = self
+        let db = self
             .dbs
             .get("game_updates")
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
+            .ok_or(VCRError::EntityTypeNotFound)?;
         let mut results = Vec::new();
         for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
             results.push(ChronV1Game {
@@ -739,12 +707,10 @@ impl MultiDatabase {
     }
 
     pub fn games_by_date_and_time(&self, date: &GameDate, at: u32) -> VCRResult<Vec<ChronV1Game>> {
-        let mut db = self
+        let db = self
             .dbs
             .get("game_updates")
-            .ok_or(VCRError::EntityTypeNotFound)?
-            .lock()
-            .unwrap();
+            .ok_or(VCRError::EntityTypeNotFound)?;
         let mut results = Vec::new();
         for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
             results.push(ChronV1Game {
