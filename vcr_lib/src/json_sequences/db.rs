@@ -16,6 +16,8 @@ use moka::sync::Cache;
 
 use sha2::Digest;
 
+use rayon::prelude::*;
+
 use json_patch::{
     patch_unsafe as patch_json, AddOperation, CopyOperation, MoveOperation, Patch as JSONPatch,
     PatchOperation, PatchOperation::*, RemoveOperation, ReplaceOperation, TestOperation,
@@ -404,12 +406,10 @@ impl Database {
         entities: Vec<String>,
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut results = Vec::with_capacity(entities.len());
-        for e in entities {
-            results.push(self.get_entity(&e, at)?);
-        }
-
-        Ok(results)
+        entities
+            .par_iter()
+            .map(|e| self.get_entity(e, at))
+            .collect()
     }
 
     pub fn get_entities_versions(
@@ -418,22 +418,18 @@ impl Database {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut results = Vec::with_capacity(entities.len());
-        for e in entities {
-            results.append(&mut self.get_entity_versions(&e, before, after)?);
-        }
-
-        Ok(results)
+        Ok(entities
+            .par_iter()
+            .map(|e| self.get_entity_versions(e, before, after))
+            .collect::<VCRResult<Vec<Vec<ChroniclerEntity<JSONValue>>>>>()?
+            .concat())
     }
 
     pub fn all_entities(&self, at: u32) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut results = Vec::with_capacity(self.entities.len());
-        let keys: Vec<String> = self.entities.keys().cloned().collect();
-        for entity in keys {
-            results.push(self.get_entity(&entity, at)?);
-        }
-
-        Ok(results)
+        self.entities
+            .par_iter()
+            .map(|(e, _)| self.get_entity(e, at))
+            .collect()
     }
 
     pub fn all_entities_versions(
@@ -441,13 +437,12 @@ impl Database {
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
-        let mut results = Vec::with_capacity(self.entities.len());
-        let keys: Vec<String> = self.entities.keys().cloned().collect();
-        for e in keys {
-            results.append(&mut self.get_entity_versions(&e, before, after)?);
-        }
-
-        Ok(results)
+        Ok(self
+            .entities
+            .par_iter()
+            .map(|(e, _)| self.get_entity_versions(e, before, after))
+            .collect::<VCRResult<Vec<Vec<ChroniclerEntity<JSONValue>>>>>()?
+            .concat())
     }
 
     pub fn fetch_page(

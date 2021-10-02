@@ -3,6 +3,7 @@ use crate::{VCRError, VCRResult};
 use chrono::{DateTime, TimeZone, Utc};
 use memmap2::{Mmap, MmapOptions};
 use moka::sync::Cache;
+use rayon::prelude::*;
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -436,7 +437,7 @@ impl FeedDatabase {
             .copied()
             .collect::<Vec<(i64, (u32, u16))>>();
 
-        ids.iter()
+        ids.par_iter()
             .map(|(time, (offset, len))| {
                 self.read_event(*offset, *len, Utc.timestamp_millis(*time))
             })
