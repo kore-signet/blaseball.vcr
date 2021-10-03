@@ -10,7 +10,7 @@ cargo build --release
 
 mkdir -p tapes/site_data
 ./build.bash
-./target/release/build_games <zstd dictionary or 'nodict'> <compression level>
+./target/release/build_games -d zstd-dictionaries/game_updates.dict -l <compression level> -t <number of threads to use> tapes
 ```
 (note that this may take a while)
 
