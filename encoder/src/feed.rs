@@ -5,9 +5,10 @@ use blaseball_vcr::{
 
 use clap::clap_app;
 use crossbeam::channel::bounded;
+use indicatif::{BinaryBytes, MultiProgress, MultiProgressAlignment, ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
 use std::path::Path;
 
@@ -175,7 +176,7 @@ fn main() {
         let mut phase_idx: HashMap<(u8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
 
         // Sink
-        let out_f = File::create(main_path).unwrap();
+        let out_f = File::create(&main_path).unwrap();
         let mut out = BufWriter::new(out_f);
 
         let id_out_f = File::create(id_path).unwrap();
@@ -184,8 +185,28 @@ fn main() {
 
         let mut last_position = out.stream_position().unwrap() as u32;
 
+        let bars = MultiProgress::new();
+        bars.set_alignment(MultiProgressAlignment::Top);
+
+        let spinner_style = ProgressStyle::default_spinner()
+            .template("{spinner:.blue} {msg}")
+            .tick_strings(&["-", "-"]);
+
+        let feed_size_spinny = bars.add(ProgressBar::new_spinner());
+        feed_size_spinny.set_style(spinner_style.clone());
+
+        feed_size_spinny.set_message("starting feed writer");
+
+        let feed_progress_bar = bars.add(ProgressBar::new(5_110_061)); // static dataset len go brr
+        feed_progress_bar.set_style(
+            ProgressStyle::default_bar()
+                .template("{percent}% [{bar:60.blue/cyan}] {pos:>7}/{len:7}")
+                .progress_chars("##-"),
+        );
+
         for (i, (event, bytes)) in rcv2.iter().enumerate() {
-            println!("#{}", i);
+            feed_progress_bar.tick();
+
             let start_pos = out.stream_position().unwrap() as u32;
             out.write_all(&bytes).unwrap();
             let end_pos = out.stream_position().unwrap() as u32;
@@ -228,6 +249,18 @@ fn main() {
                 .unwrap();
 
             last_position = start_pos;
+            feed_progress_bar.set_position(i as u64 + 1);
+
+            if i > 0 && i % 1000 == 0 {
+                let feed_riv_len = fs::metadata(&main_path).unwrap().len();
+                let per_event = feed_riv_len / i as u64;
+                feed_size_spinny.set_message(format!(
+                    "feed.riv @ {} - est. total @ {} (avg {} bytes per event)",
+                    BinaryBytes(feed_riv_len),
+                    BinaryBytes(per_event * 5_110_061),
+                    per_event
+                ));
+            }
         }
 
         out.flush().unwrap();
