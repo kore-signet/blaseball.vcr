@@ -15,6 +15,8 @@ pub enum VCRError {
     InvalidPageToken,
     #[error("invalid op code in patch bytecode")]
     InvalidOpCode,
+    #[error("data not indexed during tapes build")]
+    IndexMissing,
     #[error(transparent)]
     MsgPackEncError(#[from] rmp_serde::encode::Error),
     #[error(transparent)]

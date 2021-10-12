@@ -12,6 +12,34 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, Write};
 use std::path::Path;
 
+macro_rules! encode_index {
+    ($idx:expr) => {
+        $idx.into_iter()
+            .map(|(k, v)| {
+                let v_bytes = v
+                    .into_iter()
+                    .map(|(time, (offset, length))| {
+                        vec![
+                            time.to_be_bytes().to_vec(),
+                            offset.to_be_bytes().to_vec(),
+                            encode_varint(length),
+                        ]
+                        .concat()
+                    })
+                    .flatten()
+                    .collect::<Vec<u8>>();
+                vec![
+                    k.to_be_bytes().to_vec(),
+                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
+                    v_bytes,
+                ]
+                .concat()
+            })
+            .flatten()
+            .collect::<Vec<u8>>()
+    };
+}
+
 fn main() {
     let (snd1, rcv1) = bounded(1);
     let (snd2, rcv2) = bounded(1);
@@ -23,6 +51,7 @@ fn main() {
         (@arg ZSTD_DICT: -d --dict [FILE] "set zstd dictionary to use")
         (@arg COMPRESSION_LEVEL: -l --level [LEVEL] "set compression level")
         (@arg THREADS: -t --threads [THREADS] "set amount of threads to use")
+        (@arg EVENT_TYPES: --types [EVENT_TYPES] "set event types to create index for. comma separated")
         (@arg INPUT: <FILE> "input feed dump in NDJSON format")
         (@arg OUT: <FOLDER> "output folder")
     )
@@ -38,6 +67,13 @@ fn main() {
         .unwrap_or("2")
         .parse::<i32>()
         .unwrap();
+
+    let event_types_to_index: Vec<i16> = matches
+        .value_of("EVENT_TYPES")
+        .unwrap_or("")
+        .split(",")
+        .map(|s| s.parse::<i16>().unwrap())
+        .collect();
 
     let base_path = Path::new(matches.value_of("OUT").unwrap());
     let input_path = matches.value_of("INPUT").unwrap();
@@ -173,6 +209,7 @@ fn main() {
         let mut game_tag_idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
         let mut player_tag_idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
         let mut team_tag_idx: HashMap<u8, Vec<(u32, (u32, u16))>> = HashMap::new();
+        let mut etype_idx: HashMap<i16, Vec<(u32, (u32, u16))>> = HashMap::new();
         let mut phase_idx: HashMap<(u8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
 
         // Sink
@@ -218,6 +255,13 @@ fn main() {
                     .entry((event.season, event.phase))
                     .or_insert_with(Vec::new)
                     .push((event.created.timestamp_millis() as i64, (start_pos, length)));
+            }
+
+            if event_types_to_index.contains(&event.etype) {
+                etype_idx
+                    .entry(event.etype)
+                    .or_insert_with(Vec::new)
+                    .push((event.created.timestamp() as u32, (start_pos, length)));
             }
 
             for game_tag in event.game_tags {
@@ -270,80 +314,10 @@ fn main() {
         let mut idx_out = zstd::Encoder::new(idx_f, 21).unwrap();
         idx_out.long_distance_matching(true).unwrap();
 
-        let game_tag_idx_bytes = game_tag_idx
-            .into_iter()
-            .map(|(k, v)| {
-                let v_bytes = v
-                    .into_iter()
-                    .map(|(time, (offset, length))| {
-                        vec![
-                            time.to_be_bytes().to_vec(),
-                            offset.to_be_bytes().to_vec(),
-                            encode_varint(length),
-                        ]
-                        .concat()
-                    })
-                    .flatten()
-                    .collect::<Vec<u8>>();
-                vec![
-                    k.to_be_bytes().to_vec(),
-                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
-                    v_bytes,
-                ]
-                .concat()
-            })
-            .flatten()
-            .collect::<Vec<u8>>();
-
-        let player_tag_idx_bytes = player_tag_idx
-            .into_iter()
-            .map(|(k, v)| {
-                let v_bytes = v
-                    .into_iter()
-                    .map(|(time, (offset, length))| {
-                        vec![
-                            time.to_be_bytes().to_vec(),
-                            offset.to_be_bytes().to_vec(),
-                            encode_varint(length),
-                        ]
-                        .concat()
-                    })
-                    .flatten()
-                    .collect::<Vec<u8>>();
-                vec![
-                    k.to_be_bytes().to_vec(),
-                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
-                    v_bytes,
-                ]
-                .concat()
-            })
-            .flatten()
-            .collect::<Vec<u8>>();
-
-        let team_tag_idx_bytes = team_tag_idx
-            .into_iter()
-            .map(|(k, v)| {
-                let v_bytes = v
-                    .into_iter()
-                    .map(|(time, (offset, length))| {
-                        vec![
-                            time.to_be_bytes().to_vec(),
-                            offset.to_be_bytes().to_vec(),
-                            encode_varint(length),
-                        ]
-                        .concat()
-                    })
-                    .flatten()
-                    .collect::<Vec<u8>>();
-                vec![
-                    k.to_be_bytes().to_vec(),
-                    (v_bytes.len() as u32).to_be_bytes().to_vec(),
-                    v_bytes,
-                ]
-                .concat()
-            })
-            .flatten()
-            .collect::<Vec<u8>>();
+        let game_tag_idx_bytes = encode_index!(game_tag_idx);
+        let player_tag_idx_bytes = encode_index!(player_tag_idx);
+        let team_tag_idx_bytes = encode_index!(team_tag_idx);
+        let etype_idx_bytes = encode_index!(etype_idx);
 
         let phase_idx_bytes = phase_idx
             .into_iter()
@@ -386,11 +360,19 @@ fn main() {
         idx_out.write_all(&team_tag_idx_bytes).unwrap();
 
         idx_out
+            .write_all(&(etype_idx_bytes.len() as u32).to_be_bytes())
+            .unwrap();
+        idx_out.write_all(&etype_idx_bytes).unwrap();
+
+        idx_out
             .write_all(&(phase_idx_bytes.len() as u32).to_be_bytes())
             .unwrap();
         idx_out.write_all(&phase_idx_bytes).unwrap();
 
         idx_out.finish().unwrap();
+
+        feed_progress_bar.finish();
+        feed_size_spinny.finish();
     })
     .unwrap();
 }

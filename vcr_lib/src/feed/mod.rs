@@ -30,5 +30,6 @@ pub struct EventIndex {
     pub player_index: HashMap<u16, Vec<(u32, (u32, u16))>>,
     pub game_index: HashMap<u16, Vec<(u32, (u32, u16))>>,
     pub team_index: HashMap<u8, Vec<(u32, (u32, u16))>>,
+    pub etype_index: HashMap<i16, Vec<(u32, (u32, u16))>>,
     pub phase_index: HashMap<(u8, u8), Vec<(i64, (u32, u16))>>,
 }
