@@ -126,6 +126,13 @@ pub fn versions(
                 k
             };
 
+            if let Some(ord) = req.order {
+                page.remaining_data.sort_by_key(|x| x.valid_from);
+                if ord == Order::Desc {
+                    page.remaining_data.reverse();
+                }
+            }
+
             page_cache.put(key.clone(), page);
 
             ChroniclerResponse {
@@ -227,6 +234,13 @@ pub fn entities(
 
                 k
             };
+
+            if let Some(ord) = req.order {
+                page.remaining_data.sort_by_key(|x| x.valid_from);
+                if ord == Order::Desc {
+                    page.remaining_data.reverse();
+                }
+            }
 
             page_cache.put(key.clone(), page);
 
