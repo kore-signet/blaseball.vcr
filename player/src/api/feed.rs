@@ -1,39 +1,46 @@
+use crate::types::FeedReq;
 use blaseball_vcr::{feed::*, MultiDatabase, VCRError, VCRResult};
 use chrono::{DateTime, TimeZone, Utc};
 use rocket::{get, serde::json::Json as RocketJson, State};
 use serde_json::Value as JSONValue;
 use uuid::Uuid;
 
-#[get("/feed/<kind>?<id>&<time>&<start>&<category>&<limit>&<phase>&<season>")]
+use std::sync::Mutex;
+
+#[get("/feed/<kind>?<req..>")]
 pub fn feed(
     kind: &str,
-    id: Option<String>,
-    time: Option<i64>,
-    start: Option<String>,
-    limit: Option<usize>,
-    phase: Option<u8>,
-    season: Option<u8>,
-    category: Option<i8>,
-    feed: &State<FeedDatabase>,
+    db: &State<Mutex<FeedDatabase>>,
+    req: FeedReq,
 ) -> VCRResult<RocketJson<Vec<FeedEvent>>> {
-    let time = start
-        .map(|s| s.parse::<DateTime<Utc>>().unwrap())
-        .unwrap_or_else(|| time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)));
+    let mut feed = db.lock().unwrap();
 
-    let category: i8 = category.unwrap_or(-3);
+    let time = req
+        .start
+        .as_ref()
+        .map(|s| s.parse::<DateTime<Utc>>().unwrap())
+        .unwrap_or_else(|| req.time.map_or(Utc::now(), |d| Utc.timestamp_millis(d)));
+
+    let category: i8 = req.category.unwrap_or(-3);
 
     match kind {
         "global" => {
-            if phase.is_some() && season.is_some() {
+            if req.phase.is_some() && req.season.is_some() {
                 Ok(RocketJson(feed.events_by_phase(
-                    season.unwrap(),
-                    phase.unwrap(),
-                    limit.unwrap_or(1000),
+                    req.season.unwrap(),
+                    req.phase.unwrap(),
+                    req.limit.unwrap_or(1000),
+                )?))
+            } else if req.etype.is_some() {
+                Ok(RocketJson(feed.events_by_type_and_time(
+                    time,
+                    req.etype.unwrap(),
+                    req.limit.unwrap_or(100),
                 )?))
             } else {
                 Ok(RocketJson(feed.events_before(
                     time,
-                    limit.unwrap_or(100),
+                    req.limit.unwrap_or(100),
                     category,
                 )?))
             }
@@ -41,28 +48,31 @@ pub fn feed(
         "player" => {
             Ok(RocketJson(feed.events_by_tag_and_time(
                 time,
-                &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
+                &Uuid::parse_str(&req.id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
                 TagType::Player,
-                limit.unwrap_or(100),
+                req.limit.unwrap_or(100),
                 category,
+                req.etype.unwrap_or(-1),
             )?))
         }
         "team" => {
             Ok(RocketJson(feed.events_by_tag_and_time(
                 time,
-                &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
+                &Uuid::parse_str(&req.id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
                 TagType::Team,
-                limit.unwrap_or(100),
+                req.limit.unwrap_or(100),
                 category,
+                req.etype.unwrap_or(-1),
             )?))
         }
         "game" => {
             Ok(RocketJson(feed.events_by_tag_and_time(
                 time,
-                &Uuid::parse_str(&id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
+                &Uuid::parse_str(&req.id.ok_or(VCRError::EntityNotFound)?).unwrap(), // wrong sort of error. oop. also do n't unwrap
                 TagType::Game,
-                limit.unwrap_or(100),
+                req.limit.unwrap_or(100),
                 category,
+                req.etype.unwrap_or(-1),
             )?))
         }
         _ => Err(VCRError::EntityTypeNotFound),

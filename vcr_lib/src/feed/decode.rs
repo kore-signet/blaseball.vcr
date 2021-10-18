@@ -154,6 +154,33 @@ impl FeedDatabase {
             idx
         };
 
+        let etype_index = {
+            let mut idx: HashMap<i16, Vec<(u32, (u32, u16))>> = HashMap::new();
+            let idx_len = read_u32!(idx_decoder);
+            let mut bytes: Vec<u8> = vec![0; idx_len as usize];
+            idx_decoder.read_exact(&mut bytes)?;
+            let mut cursor = Cursor::new(bytes);
+
+            while cursor.position() < idx_len as u64 {
+                let key = read_i16!(cursor);
+                let klen: u64 = read_u32!(cursor) as u64;
+                let start_pos = cursor.position();
+
+                let entry = idx
+                    .entry(key)
+                    .or_insert_with(|| Vec::with_capacity(klen as usize));
+
+                while (cursor.position() - start_pos) < klen {
+                    entry.push((
+                        read_u32!(cursor),
+                        (read_u32!(cursor), decode_varint!(cursor)),
+                    ));
+                }
+            }
+
+            idx
+        };
+
         let phase_index = {
             let mut idx: HashMap<(u8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
             let idx_len = read_u32!(idx_decoder);
@@ -187,6 +214,7 @@ impl FeedDatabase {
             player_index,
             team_index,
             phase_index,
+            etype_index,
             game_index,
         };
 
@@ -444,6 +472,41 @@ impl FeedDatabase {
             .collect::<VCRResult<Vec<FeedEvent>>>()
     }
 
+    pub fn events_by_type_and_time(
+        &mut self,
+        timestamp: DateTime<Utc>,
+        etype: i16,
+        count: usize,
+    ) -> VCRResult<Vec<FeedEvent>> {
+        if !self.event_index.etype_index.contains_key(&etype) {
+            return Err(VCRError::IndexMissing);
+        }
+
+        let len = self.event_index.etype_index[&etype].len();
+
+        let mut idx = 0;
+
+        let mut events = Vec::with_capacity(count);
+        while idx < len && events.len() < count {
+            // AaaaaaaaaaaaaAAAAAAAAAAAAAAaaaAAAAAAAAAAAAaaAAAAAA
+            let (time, (offset, length)) = self.event_index.etype_index[&etype][idx];
+
+            let time = Utc.timestamp(time as i64, 0);
+            if time <= timestamp {
+                let e = self.read_event(offset, length, time)?;
+                events.push(e);
+            }
+
+            idx += 1;
+        }
+
+        events.sort_by_key(|e| e.created.timestamp());
+        events.dedup();
+        events.reverse();
+
+        Ok(events)
+    }
+
     pub fn events_by_tag_and_time(
         &self,
         timestamp: DateTime<Utc>,
@@ -451,6 +514,7 @@ impl FeedDatabase {
         tag_type: TagType,
         count: usize,
         category: i8,
+        etype: i16,
     ) -> VCRResult<Vec<FeedEvent>> {
         let tag: u16 = match tag_type {
             TagType::Game => *self
@@ -470,6 +534,10 @@ impl FeedDatabase {
                 .ok_or(VCRError::EntityNotFound)? as u16,
         };
 
+        if etype != -1 && !self.event_index.etype_index.contains_key(&etype) {
+            return Err(VCRError::IndexMissing);
+        }
+
         let len = match tag_type {
             TagType::Game => self.event_index.game_index[&tag].len(),
             TagType::Team => self.event_index.team_index[&(tag as u8)].len(),
@@ -487,12 +555,15 @@ impl FeedDatabase {
                 TagType::Player => self.event_index.player_index[&tag][idx],
             };
 
-            let time = Utc.timestamp(time as i64, 0);
-
-            if time <= timestamp {
-                let e = self.read_event(offset, length, time)?;
-                if category == -3 || e.category == category {
-                    events.push(e);
+            if etype == -1
+                || self.event_index.etype_index[&etype].contains(&(time, (offset, length)))
+            {
+                let time = Utc.timestamp(time as i64, 0);
+                if time <= timestamp {
+                    let e = self.read_event(offset, length, time)?;
+                    if category == -3 || e.category == category {
+                        events.push(e);
+                    }
                 }
             }
 

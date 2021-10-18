@@ -5,7 +5,9 @@ use blaseball_vcr::*;
 use chrono::{DateTime, Utc};
 use clap::clap_app;
 use crossbeam::channel::bounded;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{
+    MultiProgress, MultiProgressAlignment, ProgressBar, ProgressDrawTarget, ProgressStyle,
+};
 use integer_encoding::VarIntWriter;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value as JSONValue;
@@ -83,6 +85,7 @@ pub fn main() -> VCRResult<()> {
             (@arg ZSTD_DICT: -d --dict [FILE] "set zstd dictionary to use")
             (@arg COMPRESSION_LEVEL: -l --level [LEVEL] "set compression level")
             (@arg THREADS: -t --threads [THREADS] "set amount of threads to use")
+            (@arg WHEE: --whee "show extra progress bars for patch compression")
             (@arg OUT: <FOLDER> "set output folder")
         )
         .get_matches();
@@ -114,6 +117,15 @@ pub fn main() -> VCRResult<()> {
         let mut dict: Vec<u8> = Vec::new();
         dict_f.read_to_end(&mut dict).unwrap();
 
+        let bars = MultiProgress::new();
+        bars.set_alignment(MultiProgressAlignment::Top);
+        bars.set_draw_target(ProgressDrawTarget::stderr_with_hz(10));
+
+        let spinny = bars.add(ProgressBar::new_spinner());
+        spinny.enable_steady_tick(120);
+        spinny.set_style(ProgressStyle::default_spinner().template("{spinner:.blue} {msg}"));
+        spinny.set_message("fetching game list..");
+
         let games: Vec<Game> = paged_get::<Game>(
             &client,
             "https://api.sibr.dev/chronicler/v1/games",
@@ -128,12 +140,16 @@ pub fn main() -> VCRResult<()> {
         .into_iter()
         .collect();
 
+        spinny.finish_and_clear();
+        bars.remove(&spinny);
+
         println!("| found {} entities", games.len());
-        let progress_bar = ProgressBar::new(games.len() as u64);
+        let progress_bar = bars.add(ProgressBar::new(games.len() as u64));
         progress_bar.set_style(
             ProgressStyle::default_bar()
                 .template("{msg:.bold} {pos:>7}/{len:7} \n{percent:.bold}% {bar:70.green/white}"),
         );
+        progress_bar.tick();
 
         let out_file = File::create(main_path).unwrap();
         let mut out = BufWriter::new(out_file);
@@ -170,9 +186,23 @@ pub fn main() -> VCRResult<()> {
             drop(snd1);
         });
 
-        for _ in 0..n_workers {
+        for threadn in 0..n_workers {
             let (sendr, recvr) = (snd2.clone(), rcv1.clone());
             let zstd_dict = dict.clone();
+            let pb = bars.add(ProgressBar::new(0));
+
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{msg:.bold} [{bar:40.blue/cyan}] {pos:>7}/{len:7} ")
+                    .progress_chars("##-"),
+            );
+
+            pb.set_message(format!("[THREAD {} - compressing]", threadn + 1));
+
+            if !matches.is_present("WHEE") {
+                pb.set_draw_target(ProgressDrawTarget::hidden());
+            }
+
             s.spawn(move |_| {
                 let mut compressor = zstd::block::Compressor::with_dict(zstd_dict);
                 let loc_client = reqwest::blocking::Client::new();
@@ -194,12 +224,14 @@ pub fn main() -> VCRResult<()> {
 
                     entity_versions.sort_by_key(|v| v.0);
                     let (patches, path_map, base) = encode(entity_versions, u16::MAX);
+                    pb.set_length(patches.len() as u64);
                     sendr
                         .send((
                             id,
                             patches
                                 .into_iter()
                                 .map(|(t, v)| {
+                                    pb.inc(1);
                                     (
                                         t,
                                         compressor
@@ -212,6 +244,7 @@ pub fn main() -> VCRResult<()> {
                             base,
                         ))
                         .unwrap();
+                    pb.set_position(0);
                 }
             });
         }
@@ -223,7 +256,7 @@ pub fn main() -> VCRResult<()> {
         entity_table_writer.long_distance_matching(true).unwrap();
 
         for (id, patches, path_map, base) in progress_bar.wrap_iter(rcv2.iter()) {
-            progress_bar.set_message(format!("encoding game {}", id));
+            progress_bar.set_message(format!("writing game {}", id));
 
             let mut last_position = out.stream_position().unwrap() as u32;
             let mut header_encoder =
