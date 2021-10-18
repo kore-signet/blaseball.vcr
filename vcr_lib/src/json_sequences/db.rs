@@ -83,7 +83,7 @@ impl Database {
         };
 
         Ok(Database {
-            reader: unsafe { MmapOptions::new().populate().map(&db_f)? },
+            reader: unsafe { MmapOptions::new().map(&db_f)? },
             entities: decode_header(decompressor)?,
             dictionary: compression_dict,
             entity_cache: Cache::new(cache_size),

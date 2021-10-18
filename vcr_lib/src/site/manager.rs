@@ -4,7 +4,7 @@ use crate::*;
 use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs::{read_dir, File};
-use std::io;
+use std::io::{self, BufReader};
 use std::path::{Path, PathBuf};
 
 pub struct ResourceManager {
@@ -51,7 +51,8 @@ impl ResourceManager {
 
         for (r_type, r_header, r_file) in entries {
             let header_f = File::open(r_header)?;
-            let header: EncodedResource = rmp_serde::from_read(header_f)?;
+            let header_r = BufReader::new(header_f);
+            let header: EncodedResource = rmp_serde::from_read(header_r)?;
 
             let main_f = File::open(r_file)?;
             let reader = unsafe { MmapOptions::new().populate().map(&main_f)? };

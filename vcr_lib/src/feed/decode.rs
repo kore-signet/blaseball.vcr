@@ -8,7 +8,7 @@ use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 use uuid::Uuid;
 use zstd::dict::DecoderDictionary;
@@ -71,7 +71,8 @@ impl FeedDatabase {
         let meta_idx: MetaIndex = rmp_serde::from_read(id_file)?;
 
         let idx_file = File::open(idx_file_path)?;
-        let mut idx_decoder = zstd::Decoder::new(idx_file)?;
+        let idx_r = BufReader::new(idx_file);
+        let mut idx_decoder = zstd::Decoder::new(idx_r)?;
 
         let game_index = {
             let mut idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
@@ -219,7 +220,8 @@ impl FeedDatabase {
         };
 
         let position_index_file = File::open(position_index_path)?;
-        let position_index_decompressor = zstd::stream::Decoder::new(position_index_file)?;
+        let position_index_reader = BufReader::new(position_index_file);
+        let position_index_decompressor = zstd::stream::Decoder::new(position_index_reader)?;
         let offset_table = make_offset_table(position_index_decompressor);
 
         let mut dictionary_file = File::open(dict_file_path)?;
@@ -227,7 +229,7 @@ impl FeedDatabase {
         dictionary_file.read_to_end(&mut dictionary)?;
 
         let main_file = File::open(db_file_path)?;
-        let main_file_reader = unsafe { MmapOptions::new().populate().map(&main_file)? };
+        let main_file_reader = unsafe { MmapOptions::new().map(&main_file)? };
 
         Ok(FeedDatabase {
             offset_table,

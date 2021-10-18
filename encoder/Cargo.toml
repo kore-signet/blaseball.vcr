@@ -11,7 +11,7 @@ zstd = "0.9"
 crossbeam = "0.8.1"
 toml = "0.5.8"
 integer-encoding = "3.0.2"
-clap = "3.0.0-beta.4"
+clap = "2.33.3"
 indicatif = "0.17.0-beta.1"
 anyhow = "1"
 
