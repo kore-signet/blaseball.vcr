@@ -1,13 +1,14 @@
 use super::*;
 use crate::{VCRError, VCRResult};
 use chrono::{DateTime, TimeZone, Utc};
-use lru::LruCache;
-
+use memmap2::{Mmap, MmapOptions};
+use moka::sync::Cache;
+use rayon::prelude::*;
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Read};
 use std::path::Path;
 use uuid::Uuid;
 use zstd::dict::DecoderDictionary;
@@ -52,9 +53,9 @@ pub struct FeedDatabase {
     offset_table: Vec<(DateTime<Utc>, (u32, u16))>,
     meta_index: MetaIndex,
     event_index: EventIndex,
-    reader: BufReader<File>,
+    reader: Mmap,
     dictionary: DecoderDictionary<'static>,
-    cache: LruCache<u32, FeedEvent>,
+    cache: Cache<u32, FeedEvent>,
 }
 
 impl FeedDatabase {
@@ -226,7 +227,7 @@ impl FeedDatabase {
         dictionary_file.read_to_end(&mut dictionary)?;
 
         let main_file = File::open(db_file_path)?;
-        let main_file_reader = BufReader::new(main_file);
+        let main_file_reader = unsafe { MmapOptions::new().populate().map(&main_file)? };
 
         Ok(FeedDatabase {
             offset_table,
@@ -234,33 +235,19 @@ impl FeedDatabase {
             event_index: event_idx,
             meta_index: meta_idx,
             dictionary: DecoderDictionary::copy(&dictionary),
-            cache: LruCache::new(cache_size),
+            cache: Cache::new(cache_size),
         })
     }
 
     pub fn read_event(
-        &mut self,
+        &self,
         offset: u32,
         len: u16,
         timestamp: DateTime<Utc>,
     ) -> VCRResult<FeedEvent> {
         if let Some(ev) = self.cache.get(&offset) {
-            return Ok(ev.clone());
+            return Ok(ev);
         }
-
-        let compressed_bytes: Vec<u8> = if len == 0 {
-            let mut bytes: Vec<u8> = Vec::new();
-            self.reader.seek(SeekFrom::Start(offset as u64))?;
-            self.reader.read_to_end(&mut bytes)?;
-            bytes
-        } else {
-            let mut bytes: Vec<u8> = vec![0; len as usize];
-
-            self.reader.seek(SeekFrom::Start(offset as u64))?;
-
-            self.reader.read_exact(&mut bytes)?;
-            bytes
-        };
 
         // let timestamp_raw = u32::from_be_bytes(snowflake[2..6].try_into().unwrap());
         // let timestamp = match self.millis_epoch_table.get(&(season, phase)) {
@@ -269,7 +256,11 @@ impl FeedDatabase {
         // };
 
         let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
-            Cursor::new(compressed_bytes),
+            if len == 0 {
+                &self.reader[offset as usize..]
+            } else {
+                &self.reader[offset as usize..(offset + (len as u32)) as usize]
+            },
             &self.dictionary,
         )?;
 
@@ -402,12 +393,12 @@ impl FeedDatabase {
             metadata,
         };
 
-        self.cache.put(offset, ev.clone());
+        self.cache.insert(offset, ev.clone());
         Ok(ev)
     }
 
     pub fn events_after(
-        &mut self,
+        &self,
         timestamp: DateTime<Utc>,
         count: usize,
         category: i8,
@@ -435,7 +426,7 @@ impl FeedDatabase {
     }
 
     pub fn events_before(
-        &mut self,
+        &self,
         timestamp: DateTime<Utc>,
         count: usize,
         category: i8,
@@ -445,7 +436,7 @@ impl FeedDatabase {
             .binary_search_by_key(&timestamp.timestamp(), |(s, _)| s.timestamp())
         {
             Ok(i) => i,
-            Err(i) => i,
+            Err(i) => i - 1,
         };
 
         let mut events: Vec<FeedEvent> = Vec::with_capacity(count);
@@ -463,7 +454,7 @@ impl FeedDatabase {
     }
 
     pub fn events_by_phase(
-        &mut self,
+        &self,
         season: u8,
         phase: u8,
         count: usize,
@@ -474,7 +465,7 @@ impl FeedDatabase {
             .copied()
             .collect::<Vec<(i64, (u32, u16))>>();
 
-        ids.iter()
+        ids.par_iter()
             .map(|(time, (offset, len))| {
                 self.read_event(*offset, *len, Utc.timestamp_millis(*time))
             })
@@ -517,7 +508,7 @@ impl FeedDatabase {
     }
 
     pub fn events_by_tag_and_time(
-        &mut self,
+        &self,
         timestamp: DateTime<Utc>,
         tag: &Uuid,
         tag_type: TagType,

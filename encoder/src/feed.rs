@@ -77,10 +77,10 @@ fn main() {
 
     let base_path = Path::new(matches.value_of("OUT").unwrap());
     let input_path = matches.value_of("INPUT").unwrap();
-    let main_path = base_path.join("feed.riv").to_path_buf();
-    let id_path = base_path.join("feed.fp").to_path_buf();
-    let lookup_path = base_path.join("id_lookup.bin").to_path_buf();
-    let tag_indexes_path = base_path.join("tag_indexes.fp").to_path_buf();
+    let main_path = base_path.join("feed.riv");
+    let id_path = base_path.join("feed.fp");
+    let lookup_path = base_path.join("id_lookup.bin");
+    let tag_indexes_path = base_path.join("tag_indexes.fp");
 
     let feed_dict: Option<Vec<u8>> = if let Some(dict_path) = matches.value_of("ZSTD_DICT") {
         let mut feed_dict: Vec<u8> = Vec::new();

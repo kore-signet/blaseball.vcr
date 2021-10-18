@@ -11,7 +11,10 @@ lru = "0.6.6"
 sha2 = "0.9.8"
 thiserror = "1.0"
 integer-encoding = "3.0.2"
+memmap2 = "0.5.0"
+moka = "0.6.1"
 anyhow = "1.0"
+rayon = "1.5.1"
 
 [dependencies.rocket]
 version = "0.5.0-rc.1"

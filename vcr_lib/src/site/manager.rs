@@ -1,15 +1,15 @@
 use super::chron::*;
 use super::*;
 use crate::*;
+use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs::{read_dir, File};
-use std::io::{self, BufReader, Read, Seek, SeekFrom};
+use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 pub struct ResourceManager {
     headers: HashMap<String, EncodedResource>,
-    resources: HashMap<String, Mutex<BufReader<File>>>,
+    resources: HashMap<String, Mmap>,
 }
 
 impl ResourceManager {
@@ -47,16 +47,16 @@ impl ResourceManager {
             .collect();
 
         let mut headers: HashMap<String, EncodedResource> = HashMap::new();
-        let mut resources: HashMap<String, Mutex<BufReader<File>>> = HashMap::new();
+        let mut resources: HashMap<String, Mmap> = HashMap::new();
 
         for (r_type, r_header, r_file) in entries {
             let header_f = File::open(r_header)?;
             let header: EncodedResource = rmp_serde::from_read(header_f)?;
 
             let main_f = File::open(r_file)?;
-            let reader = BufReader::new(main_f);
+            let reader = unsafe { MmapOptions::new().populate().map(&main_f)? };
 
-            resources.insert(r_type.to_owned(), Mutex::new(reader));
+            resources.insert(r_type.to_owned(), reader);
             headers.insert(r_type.to_owned(), header);
         }
 
@@ -65,16 +65,16 @@ impl ResourceManager {
 
     pub fn from_files(files: Vec<(&str, &str, &str)>) -> VCRResult<ResourceManager> {
         let mut headers: HashMap<String, EncodedResource> = HashMap::new();
-        let mut resources: HashMap<String, Mutex<BufReader<File>>> = HashMap::new();
+        let mut resources: HashMap<String, Mmap> = HashMap::new();
 
         for (r_type, r_header, r_file) in files {
             let header_f = File::open(r_header)?;
             let header: EncodedResource = rmp_serde::from_read(header_f)?;
 
             let main_f = File::open(r_file)?;
-            let reader = BufReader::new(main_f);
+            let reader = unsafe { MmapOptions::new().populate().map(&main_f)? };
 
-            resources.insert(r_type.to_owned(), Mutex::new(reader));
+            resources.insert(r_type.to_owned(), reader);
             headers.insert(r_type.to_owned(), header);
         }
 
@@ -82,19 +82,18 @@ impl ResourceManager {
     }
 
     pub fn get_resource(&self, name: &str, delta_idx: u16) -> VCRResult<Vec<u8>> {
-        let mut delta_file = self.resources[name].lock().unwrap();
+        let delta_file = &self.resources[name];
         let header = &self.headers[name];
 
         let mut res: Vec<u8> = header.basis.clone();
 
         for idx in 0..delta_idx + 1 {
             let (offset, length, _) = header.deltas[idx as usize];
-            delta_file.seek(SeekFrom::Start(offset))?;
-
-            let mut delta_buffer: Vec<u8> = vec![0; length as usize];
-            delta_file.read_exact(&mut delta_buffer)?;
-
-            res = xdelta3::decode(&delta_buffer, &res).unwrap();
+            res = xdelta3::decode(
+                &delta_file[offset as usize..(offset + length) as usize],
+                &res,
+            )
+            .unwrap();
         }
 
         Ok(res)
