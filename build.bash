@@ -4,7 +4,7 @@
 ./target/release/build_entities -o tapes giftprogress
 ./target/release/build_entities -o tapes renovationprogress
 ./target/release/build_entities -o tapes globalevents offseasonsetup shopsetup offseasonrecap
-./target/release/build_entities -o tapes sunsun vault
+./target/release/build_entities -o tapes vault
 ./target/release/build_entities -o tapes teamelectionstats decreeresult eventresult bonusresult
 ./target/release/build_entities -o tapes division subleague
 ./target/release/build_entities -o tapes player
@@ -21,4 +21,5 @@
 ./target/release/build_entities -o tapes --whee -c 100 -d zstd-dictionaries/stadium.dict stadium
 ./target/release/build_entities -o tapes -c 100 playoffs playoffround playoffmatchup
 ./target/release/build_entities -o tapes -c 100 bossfight
+./target/release/build_entities -o tapes -c 100 sunsun
 ./target/release/tributes

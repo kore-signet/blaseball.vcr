@@ -5,16 +5,12 @@ use rocket::{get, serde::json::Json as RocketJson, State};
 use serde_json::Value as JSONValue;
 use uuid::Uuid;
 
-use std::sync::Mutex;
-
 #[get("/feed/<kind>?<req..>")]
 pub fn feed(
     kind: &str,
-    db: &State<Mutex<FeedDatabase>>,
+    feed: &State<FeedDatabase>,
     req: FeedReq,
 ) -> VCRResult<RocketJson<Vec<FeedEvent>>> {
-    let mut feed = db.lock().unwrap();
-
     let time = req
         .start
         .as_ref()

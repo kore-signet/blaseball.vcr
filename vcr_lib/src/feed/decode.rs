@@ -473,7 +473,7 @@ impl FeedDatabase {
     }
 
     pub fn events_by_type_and_time(
-        &mut self,
+        &self,
         timestamp: DateTime<Utc>,
         etype: i16,
         count: usize,
