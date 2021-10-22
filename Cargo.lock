@@ -202,13 +202,12 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "before"
 version = "0.2.0"
-source = "git+https://github.com/iliana/before.git?branch=main#c6773a5a7b20771b918131ee9aaa450c88665a3b"
+source = "git+https://github.com/iliana/before.git?branch=main#c86f30697a53f72b6f9b1a03a4266c2e6b2405e8"
 dependencies = [
  "anyhow",
  "askama",
  "derive_builder",
  "derive_more",
- "either",
  "http-range",
  "indexmap",
  "itertools",
@@ -311,9 +310,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.7.1"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9df67f7bf9ef8498769f994239c45613ef0c5899415fb58e9add412d2c1a538"
+checksum = "8f1e260c3a9040a7c19a12468758f4c16f31a81a1fe087482be9570ec864bb6c"
 
 [[package]]
 name = "bytecount"
@@ -730,9 +729,6 @@ name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "encode_unicode"

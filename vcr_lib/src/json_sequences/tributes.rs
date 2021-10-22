@@ -2,11 +2,12 @@ use crate::{hash_entities, read_u32, ChronV2EndpointKind, InternalPaging};
 use crate::{ChroniclerEntity, VCRResult};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use integer_encoding::VarIntReader;
+use memmap2::{Mmap, MmapOptions};
 use serde_json::{json, value::RawValue, Value as JSONValue};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
+use std::io::{BufReader, Read};
 use std::path::Path;
 use uuid::Uuid;
 
@@ -15,7 +16,7 @@ static TEAMS_EPOCH: u32 = 1623642600;
 pub struct TributesDatabase {
     times: Vec<(u32, u32, u16)>,     // (time, start, length)
     ids: HashMap<u16, (Uuid, bool)>, // (id_number, (id, is_team))
-    reader: BufReader<File>,
+    reader: Mmap,
 }
 
 impl TributesDatabase {
@@ -65,12 +66,12 @@ impl TributesDatabase {
         Ok(TributesDatabase {
             times,
             ids,
-            reader: BufReader::new(main_file),
+            reader: unsafe { MmapOptions::new().populate().map(&main_file)? },
         })
     }
 
     pub fn get_versions(
-        &mut self,
+        &self,
         before: u32,
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
@@ -82,11 +83,7 @@ impl TributesDatabase {
                 break;
             }
 
-            self.reader.seek(SeekFrom::Start(*start as u64))?;
-
-            let mut bytes: Vec<u8> = vec![0; *length as usize];
-            self.reader.read_exact(&mut bytes)?;
-            let mut bytes = Cursor::new(bytes);
+            let mut bytes = &self.reader[*start as usize..(*start as usize + *length as usize)];
 
             loop {
                 let idx = bytes.read_varint::<u16>();
@@ -171,17 +168,14 @@ impl TributesDatabase {
         Ok(versions)
     }
 
-    pub fn get_entity(&mut self, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
+    pub fn get_entity(&self, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let mut vals: HashMap<(Uuid, bool), u64> = HashMap::new();
         let mut last_time = 0;
 
         for (time, start, length) in &self.times {
             last_time = *time;
-            self.reader.seek(SeekFrom::Start(*start as u64))?;
 
-            let mut bytes: Vec<u8> = vec![0; *length as usize];
-            self.reader.read_exact(&mut bytes)?;
-            let mut bytes = Cursor::new(bytes);
+            let mut bytes = &self.reader[*start as usize..(*start as usize + *length as usize)];
 
             loop {
                 let idx = bytes.read_varint::<u16>();
@@ -264,7 +258,7 @@ impl TributesDatabase {
     }
 
     pub fn fetch_page(
-        &mut self,
+        &self,
         page: &mut InternalPaging<Box<RawValue>>,
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {

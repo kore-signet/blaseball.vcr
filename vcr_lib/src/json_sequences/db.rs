@@ -5,7 +5,6 @@ use std::ffi::OsStr;
 use std::fs::{read_dir, File};
 use std::io::{self, prelude::*};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use memmap2::{Mmap, MmapOptions};
@@ -33,6 +32,7 @@ fn clamp(input: u32, min: u32, max: u32) -> u32 {
     }
 }
 
+/// Serializes the data inside a list of ChroniclerEntity's, adding a SHA224 hash of the JSON string to the object.
 pub fn hash_entities(
     e: Vec<ChroniclerEntity<JSONValue>>,
 ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
@@ -55,6 +55,7 @@ pub fn hash_entities(
         .collect()
 }
 
+/// A handle over a memory map of a VCR .riv file, a mapping of entity ids to positions in the file, a possible ZSTD dictionary, and a cache.
 pub struct Database {
     reader: Mmap,
     entities: HashMap<String, EntityData>,
@@ -90,6 +91,7 @@ impl Database {
         })
     }
 
+    /// Gets the last version of an entity, which is serialized as a standalone MSGPack object to avoid the patch system.
     pub fn get_last_version(&self, entity: &str) -> VCRResult<(u32, JSONValue)> {
         let metadata = &self.entities.get(entity).ok_or(VCRError::EntityNotFound)?;
         let (time, patch_start, patch_len) =
@@ -114,6 +116,7 @@ impl Database {
         Ok((time, rmp_serde::from_read_ref(&e_bytes)?))
     }
 
+    /// Gets the JSONPatch'es associated with a specific entity until a certain time.
     pub fn get_entity_data(
         &self,
         entity: &str,
@@ -251,6 +254,7 @@ impl Database {
         Ok(patches)
     }
 
+    /// Gets all versions of an entity between two UNIX timestamps.
     pub fn get_entity_versions(
         &self,
         entity: &str,
@@ -293,6 +297,7 @@ impl Database {
         Ok(results)
     }
 
+    /// Gets an entity at a certain point in time.
     pub fn get_entity(&self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let patch_idx = match self.entities[entity]
             .patches
@@ -369,6 +374,7 @@ impl Database {
         Ok(e)
     }
 
+    /// Gets the very first version of an entity.
     pub fn get_first_entity(&self, entity: &str) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let mut entity_value = self
             .entities
@@ -401,6 +407,7 @@ impl Database {
         })
     }
 
+    /// Fetches (in parallel) a list of entities at a certain time.
     pub fn get_entities(
         &self,
         entities: Vec<String>,
@@ -412,6 +419,7 @@ impl Database {
             .collect()
     }
 
+    /// Fetches (in parallel) all the versions of a list of entities between two UNIX timestamps.
     pub fn get_entities_versions(
         &self,
         entities: Vec<String>,
@@ -425,6 +433,7 @@ impl Database {
             .concat())
     }
 
+    /// Gets all entities registered at a certain point in time.
     pub fn all_entities(&self, at: u32) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         self.entities
             .par_iter()
@@ -432,6 +441,7 @@ impl Database {
             .collect()
     }
 
+    /// Gets the versions of all registered entities between two timestamps.
     pub fn all_entities_versions(
         &self,
         before: u32,
@@ -445,6 +455,7 @@ impl Database {
             .concat())
     }
 
+    /// Fetches a 'page' of data, loading data into a buffer until it reaches the requested object count. If the buffer length is higher than the requested count, the buffer will be used to (at least partially) fulfill the next request.
     pub fn fetch_page(
         &self,
         page: &mut InternalPaging<Box<RawValue>>,
@@ -472,10 +483,11 @@ impl Database {
     }
 }
 
+/// A handle over a group of databases, including a special database for Tributes and an index over game times.
 pub struct MultiDatabase {
     pub dbs: HashMap<String, Database>, // entity_type:db
     pub game_index: HashMap<GameDate, Vec<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>>,
-    pub tributes: Mutex<TributesDatabase>,
+    pub tributes: TributesDatabase,
 }
 
 impl MultiDatabase {
@@ -560,7 +572,7 @@ impl MultiDatabase {
         Ok(MultiDatabase {
             dbs,
             game_index,
-            tributes: Mutex::new(tributes.unwrap()),
+            tributes: tributes.unwrap(),
         })
     }
 
@@ -571,8 +583,7 @@ impl MultiDatabase {
         at: u32,
     ) -> VCRResult<ChroniclerEntity<JSONValue>> {
         if e_type == "tributes" {
-            let mut db = self.tributes.lock().unwrap();
-            db.get_entity(at)
+            self.tributes.get_entity(at)
         } else {
             self.dbs
                 .get(e_type)
@@ -589,8 +600,7 @@ impl MultiDatabase {
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         if e_type == "tributes" {
-            let mut db = self.tributes.lock().unwrap();
-            db.get_versions(before, after)
+            self.tributes.get_versions(before, after)
         } else {
             self.dbs
                 .get(e_type)
@@ -606,8 +616,7 @@ impl MultiDatabase {
         at: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         if e_type == "tributes" {
-            let mut db = self.tributes.lock().unwrap();
-            db.get_entity(at).map(|v| vec![v])
+            self.tributes.get_entity(at).map(|v| vec![v])
         } else {
             self.dbs
                 .get(e_type)
@@ -624,8 +633,7 @@ impl MultiDatabase {
         after: u32,
     ) -> VCRResult<Vec<ChroniclerEntity<JSONValue>>> {
         if e_type == "tributes" {
-            let mut db = self.tributes.lock().unwrap();
-            db.get_versions(before, after)
+            self.tributes.get_versions(before, after)
         } else {
             self.dbs
                 .get(e_type)
@@ -673,8 +681,7 @@ impl MultiDatabase {
         count: usize,
     ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
         if e_type == "tributes" {
-            let mut db = self.tributes.lock().unwrap();
-            db.fetch_page(page, count)
+            self.tributes.fetch_page(page, count)
         } else {
             self.dbs
                 .get(e_type)
