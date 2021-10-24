@@ -297,6 +297,17 @@ impl Database {
         Ok(results)
     }
 
+    pub fn get_next_time(&self, entity: &str, at: u32) -> u32 {
+        self.entities[entity].patches[match self.entities[entity]
+            .patches
+            .binary_search_by_key(&at, |(t, _, _)| *t)
+        {
+            Ok(idx) => idx,
+            Err(idx) => idx,
+        }]
+        .0
+    }
+
     /// Gets an entity at a certain point in time.
     pub fn get_entity(&self, entity: &str, at: u32) -> VCRResult<ChroniclerEntity<JSONValue>> {
         let patch_idx = match self.entities[entity]
@@ -733,6 +744,41 @@ impl MultiDatabase {
         Ok(results)
     }
 
+    pub fn games_for_bets(&self, date: &GameDate, at: u32) -> VCRResult<Vec<ChronV1Game>> {
+        let db = self
+            .dbs
+            .get("game_updates")
+            .ok_or(VCRError::EntityTypeNotFound)?;
+        let mut results = Vec::new();
+        let json_zero = json!(0); // lol. lmao
+        for (game, start_time, end_time) in self.game_index.get(date).unwrap_or(&Vec::new()) {
+            let mut data = db.get_entity(game, at)?.data;
+            let mut time = at;
+
+            while data
+                .get("awayOdds")
+                .and_then(|v| if v == &json_zero { None } else { Some(()) })
+                .is_none()
+                && data
+                    .get("homeOdds")
+                    .and_then(|v| if v == &json_zero { None } else { Some(()) })
+                    .is_none()
+            {
+                time = db.get_next_time(game, time);
+                data = db.get_entity(game, time)?.data;
+            }
+
+            results.push(ChronV1Game {
+                game_id: game.to_owned(),
+                start_time: *start_time,
+                end_time: *end_time,
+                data: data,
+            });
+        }
+
+        Ok(results)
+    }
+
     pub fn games_with_date(&self, after: DateTime<Utc>) -> VCRResult<Vec<ChronV1Game>> {
         let mut results = Vec::with_capacity(self.game_index.len());
         for (date, games) in self.game_index.iter() {
@@ -881,7 +927,7 @@ impl MultiDatabase {
         date.day += 1;
 
         let tomorrow_schedule: Vec<JSONValue> = self
-            .games_by_date_and_time(&date, at)?
+            .games_for_bets(&date, at)?
             .into_iter()
             .map(|g| g.data)
             .filter(|g| g != &json!({}))

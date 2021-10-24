@@ -63,7 +63,7 @@ pub fn versions(
                 req.count.unwrap_or(100),
                 req.order.unwrap_or(Order::Asc),
             )?;
-            if results.len() < req.count.unwrap_or(100) {
+            if p.remaining_data.is_empty() && p.remaining_ids.is_empty() {
                 ChroniclerResponse {
                     next_page: None,
                     items: results,
@@ -109,6 +109,7 @@ pub fn versions(
             req.count.unwrap_or(100),
             req.order.unwrap_or(Order::Asc),
         )?;
+
         if res.len() >= req.count.unwrap_or(100) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
@@ -165,7 +166,7 @@ pub fn entities(
                 )?
                 .into_iter()
                 .collect();
-            if results.len() < req.count.unwrap_or(100) {
+            if p.remaining_data.is_empty() && p.remaining_ids.is_empty() {
                 ChroniclerResponse {
                     next_page: None,
                     items: results,

@@ -273,7 +273,7 @@ pub fn game_updates(
             req.order.unwrap_or(Order::Asc),
         )?;
 
-        if res.len() > req.count.unwrap_or(100) {
+        if res.len() >= req.count.unwrap_or(100) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
                 let mut k = String::new();
