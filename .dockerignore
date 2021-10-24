@@ -3,3 +3,7 @@ tapes
 resources
 datasets
 feed.json
+dev
+test_tapes
+tapes.tar.gz
+.git

@@ -3,15 +3,19 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
 use chrono::{DateTime, Utc};
+use clap::clap_app;
 use crossbeam::channel::bounded;
-use progress_bar::color::{Color, Style};
-use progress_bar::progress_bar::ProgressBar;
+use indicatif::{
+    MultiProgress, MultiProgressAlignment, ProgressBar, ProgressDrawTarget, ProgressStyle,
+};
+use integer_encoding::VarIntWriter;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
-use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, Write};
+use std::path::Path;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,15 +52,18 @@ fn paged_get<T: DeserializeOwned>(
     client: &reqwest::blocking::Client,
     url: &str,
     mut parameters: ChroniclerGameParameters,
-) -> VCRResult<Vec<T>> {
+) -> anyhow::Result<Vec<T>> {
     let mut results: Vec<T> = Vec::new();
 
     loop {
         let mut chron_response: ChroniclerV1Response<T> =
             client.get(url).query(&parameters).send()?.json()?;
+        let res_len = chron_response.data.len() as u32;
         results.append(&mut chron_response.data);
 
-        if let Some(next_page) = chron_response.next_page {
+        if res_len < parameters.count.unwrap_or(0) {
+            break;
+        } else if let Some(next_page) = chron_response.next_page {
             parameters.next_page = Some(next_page);
         } else {
             break;
@@ -71,32 +78,53 @@ pub fn main() -> VCRResult<()> {
     let (snd2, rcv2) = bounded(1);
 
     crossbeam::scope(|s| {
-        let client = reqwest::blocking::Client::new(); // let entity_types = vec!["team"];
-        let mut args: Vec<String> = env::args().skip(1).collect();
-        let dict_path = if !args.is_empty() {
-            args.remove(0)
-        } else {
-            "nodict".to_string()
-        };
-        let compress_level = (if !args.is_empty() {
-            args.remove(0)
-        } else {
-            "22".to_string()
-        })
-        .parse::<i32>()
-        .unwrap();
+        let matches = clap_app!(build_games =>
+            (version: "1.0")
+            (author: "allie signet <allie@sibr.dev>")
+            (about: "blaseball.vcr game update encoder")
+            (@arg ZSTD_DICT: -d --dict [FILE] "set zstd dictionary to use")
+            (@arg COMPRESSION_LEVEL: -l --level [LEVEL] "set compression level")
+            (@arg THREADS: -t --threads [THREADS] "set amount of threads to use")
+            (@arg WHEE: --whee "show extra progress bars for patch compression")
+            (@arg OUT: <FOLDER> "set output folder")
+        )
+        .get_matches();
+
+        let dict_path = matches.value_of("ZSTD_DICT").unwrap_or("nodict");
+        let compression_level = matches
+            .value_of("COMPRESSION_LEVEL")
+            .unwrap_or("19")
+            .parse::<i32>()
+            .unwrap();
+        let n_workers = matches
+            .value_of("THREADS")
+            .unwrap_or("2")
+            .parse::<i32>()
+            .unwrap();
+        let base_path = Path::new(matches.value_of("OUT").unwrap());
+        let main_path = base_path.join("game_updates.riv");
+        let date_table_path = base_path.join("game_updates.dates.riv.zstd");
+        let header_path = base_path.join("game_updates.header.riv.zstd");
 
         println!(
             "Set zstd dictionary to {} and compression level to {}",
-            dict_path, compress_level
+            dict_path, compression_level
         );
 
-        let mut dict_f = File::open(dict_path).map_err(VCRError::IOError).unwrap();
+        let client = reqwest::blocking::Client::new();
+
+        let mut dict_f = File::open(dict_path).unwrap();
         let mut dict: Vec<u8> = Vec::new();
-        dict_f
-            .read_to_end(&mut dict)
-            .map_err(VCRError::IOError)
-            .unwrap();
+        dict_f.read_to_end(&mut dict).unwrap();
+
+        let bars = MultiProgress::new();
+        bars.set_alignment(MultiProgressAlignment::Top);
+        bars.set_draw_target(ProgressDrawTarget::stderr_with_hz(10));
+
+        let spinny = bars.add(ProgressBar::new_spinner());
+        spinny.enable_steady_tick(120);
+        spinny.set_style(ProgressStyle::default_spinner().template("{spinner:.blue} {msg}"));
+        spinny.set_message("fetching game list..");
 
         let games: Vec<Game> = paged_get::<Game>(
             &client,
@@ -112,23 +140,21 @@ pub fn main() -> VCRResult<()> {
         .into_iter()
         .collect();
 
+        spinny.finish_and_clear();
+        bars.remove(&spinny);
+
         println!("| found {} entities", games.len());
-        let mut progress_bar = ProgressBar::new(games.len());
-        progress_bar.set_action(
-            "Loading & encoding entity versions",
-            Color::Blue,
-            Style::Bold,
+        let progress_bar = bars.add(ProgressBar::new(games.len() as u64));
+        progress_bar.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg:.bold} {pos:>7}/{len:7} \n{percent:.bold}% {bar:70.green/white}"),
         );
+        progress_bar.tick();
 
-        let n_workers = 8;
-
-        let out_file = File::create(&"./tapes/game_updates.riv".to_string())
-            .map_err(VCRError::IOError)
-            .unwrap();
+        let out_file = File::create(main_path).unwrap();
         let mut out = BufWriter::new(out_file);
 
         s.spawn(|_| {
-            let mut table_compressor = zstd::block::Compressor::new();
             let mut game_date_lookup_table: HashMap<
                 GameDate,
                 Vec<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>,
@@ -150,30 +176,33 @@ pub fn main() -> VCRResult<()> {
                 snd1.send(id).unwrap();
             }
 
-            let mut date_table_f = File::create(&"./tapes/game_updates.dates.riv.zstd".to_string())
-                .map_err(VCRError::IOError)
+            let date_table_f = File::create(date_table_path).unwrap();
+            let mut date_table_writer = zstd::Encoder::new(date_table_f, 21).unwrap();
+            date_table_writer
+                .write_all(&rmp_serde::to_vec(&game_date_lookup_table).unwrap())
                 .unwrap();
-            date_table_f
-                .write_all(
-                    &table_compressor
-                        .compress(
-                            &rmp_serde::to_vec(&game_date_lookup_table)
-                                .map_err(VCRError::MsgPackEncError)
-                                .unwrap(),
-                            22,
-                        )
-                        .map_err(VCRError::IOError)
-                        .unwrap(),
-                )
-                .map_err(VCRError::IOError)
-                .unwrap();
+            date_table_writer.finish().unwrap();
 
             drop(snd1);
         });
 
-        for _ in 0..n_workers {
+        for threadn in 0..n_workers {
             let (sendr, recvr) = (snd2.clone(), rcv1.clone());
             let zstd_dict = dict.clone();
+            let pb = bars.add(ProgressBar::new(0));
+
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{msg:.bold} [{bar:40.blue/cyan}] {pos:>7}/{len:7} ")
+                    .progress_chars("##-"),
+            );
+
+            pb.set_message(format!("[THREAD {} - compressing]", threadn + 1));
+
+            if !matches.is_present("WHEE") {
+                pb.set_draw_target(ProgressDrawTarget::hidden());
+            }
+
             s.spawn(move |_| {
                 let mut compressor = zstd::block::Compressor::with_dict(zstd_dict);
                 let loc_client = reqwest::blocking::Client::new();
@@ -195,73 +224,72 @@ pub fn main() -> VCRResult<()> {
 
                     entity_versions.sort_by_key(|v| v.0);
                     let (patches, path_map, base) = encode(entity_versions, u16::MAX);
+                    pb.set_length(patches.len() as u64);
                     sendr
                         .send((
                             id,
                             patches
                                 .into_iter()
                                 .map(|(t, v)| {
-                                    (t, compressor.compress(&v.concat(), compress_level).unwrap())
+                                    pb.inc(1);
+                                    (
+                                        t,
+                                        compressor
+                                            .compress(&v.concat(), compression_level)
+                                            .unwrap(),
+                                    )
                                 })
                                 .collect::<Vec<(u32, Vec<u8>)>>(),
                             path_map,
                             base,
                         ))
                         .unwrap();
+                    pb.set_position(0);
                 }
             });
         }
 
         drop(snd2);
 
-        let mut entity_lookup_table: HashMap<String, EntityData> = HashMap::new();
+        let entity_table_f = File::create(header_path).unwrap();
+        let mut entity_table_writer = zstd::Encoder::new(entity_table_f, 21).unwrap();
+        entity_table_writer.long_distance_matching(true).unwrap();
 
-        for (id, patches, path_map, base) in rcv2.iter() {
-            let mut offsets: Vec<(u32, u32, u32)> = Vec::new(); // timestamp:start_position:end_position
-            progress_bar.set_action(&id, Color::Green, Style::Bold);
+        for (id, patches, path_map, base) in progress_bar.wrap_iter(rcv2.iter()) {
+            progress_bar.set_message(format!("writing game {}", id));
+
+            let mut last_position = out.stream_position().unwrap() as u32;
+            let mut header_encoder =
+                HeaderEncoder::new(base, u16::MAX, path_map, last_position, Vec::new()).unwrap();
 
             for (time, patch) in patches {
-                let start_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
+                let start_pos = out.stream_position().map_err(VCRError::IOError).unwrap() as u32;
+                header_encoder
+                    .write_patch(time, start_pos - last_position)
+                    .unwrap();
 
                 out.write_all(&patch).unwrap();
-
-                let end_pos = out.stream_position().map_err(VCRError::IOError).unwrap();
-                offsets.push((time, start_pos as u32, end_pos as u32));
+                last_position = start_pos;
             }
 
-            entity_lookup_table.insert(
-                id.to_owned(),
-                EntityData {
-                    patches: offsets,
-                    path_map,
-                    checkpoint_every: u16::MAX,
-                    base,
-                },
-            );
-
-            progress_bar.inc();
+            let header = header_encoder.release();
+            entity_table_writer
+                .write_varint(header.len() as u32)
+                .unwrap();
+            entity_table_writer
+                .write_varint(out.stream_position().unwrap() as u32)
+                .unwrap();
+            entity_table_writer
+                .write_all(Uuid::parse_str(&id).unwrap().as_bytes())
+                .unwrap();
+            entity_table_writer.write_all(&header).unwrap();
 
             out.flush().map_err(VCRError::IOError).unwrap();
         }
 
-        progress_bar.finalize();
+        progress_bar.finish_with_message("done!");
 
-        let entity_table_f = File::create(&"./tapes/game_updates.header.riv.zstd".to_string())
-            .map_err(VCRError::IOError)
-            .unwrap();
-        let mut entity_table_compressor = zstd::Encoder::new(entity_table_f, 21).unwrap();
-        entity_table_compressor
-            .long_distance_matching(true)
-            .unwrap();
-        entity_table_compressor
-            .write_all(
-                &rmp_serde::to_vec(&entity_lookup_table)
-                    .map_err(VCRError::MsgPackEncError)
-                    .unwrap(),
-            )
-            .map_err(VCRError::IOError)
-            .unwrap();
-        entity_table_compressor.finish().unwrap();
+        entity_table_writer.finish().unwrap();
     })
     .unwrap();
 

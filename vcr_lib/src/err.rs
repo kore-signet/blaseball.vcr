@@ -1,71 +1,36 @@
-use std::fmt;
 use std::io;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum VCRError {
+    #[error("entity not found")]
     EntityNotFound,
+    #[error("entity type not found")]
     EntityTypeNotFound,
+    #[error("patch data invalid")]
     InvalidPatchData,
+    #[error("couldn't resolve json path")]
     PathResolutionError,
+    #[error("invalid page token")]
     InvalidPageToken,
+    #[error("invalid op code in patch bytecode")]
     InvalidOpCode,
-    MsgPackError(rmp_serde::decode::Error),
-    MsgPackEncError(rmp_serde::encode::Error),
-    IOError(io::Error),
-    JSONPatchError(json_patch::PatchError),
-    ReqwestError(reqwest::Error),
-}
-
-use VCRError::*;
-
-impl std::error::Error for VCRError {}
-
-impl From<io::Error> for VCRError {
-    fn from(err: io::Error) -> VCRError {
-        VCRError::IOError(err)
-    }
-}
-
-impl From<rmp_serde::decode::Error> for VCRError {
-    fn from(err: rmp_serde::decode::Error) -> VCRError {
-        VCRError::MsgPackError(err)
-    }
-}
-
-impl From<rmp_serde::encode::Error> for VCRError {
-    fn from(err: rmp_serde::encode::Error) -> VCRError {
-        VCRError::MsgPackEncError(err)
-    }
-}
-
-impl From<json_patch::PatchError> for VCRError {
-    fn from(err: json_patch::PatchError) -> VCRError {
-        VCRError::JSONPatchError(err)
-    }
-}
-
-impl From<reqwest::Error> for VCRError {
-    fn from(err: reqwest::Error) -> VCRError {
-        VCRError::ReqwestError(err)
-    }
-}
-
-impl fmt::Display for VCRError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            IOError(err) => write!(f, "IO/ERR {}", err),
-            MsgPackError(err) => write!(f, "MSGPACKERR {}", err),
-            MsgPackEncError(err) => write!(f, "MSGPACKENCERR {}", err),
-            JSONPatchError(err) => write!(f, "JSONPATCHERR {}", err),
-            ReqwestError(err) => write!(f, "REQWESTERR {}", err),
-            EntityNotFound => write!(f, "entity not found"),
-            EntityTypeNotFound => write!(f, "entity type not found"),
-            PathResolutionError => write!(f, "could not resolve patch path"),
-            InvalidOpCode => write!(f, "invalid patch opcode"),
-            InvalidPatchData => write!(f, "invalid patch data"),
-            InvalidPageToken => write!(f, "invalid page token"),
-        }
-    }
+    #[error("data not indexed during tapes build")]
+    IndexMissing,
+    #[error(transparent)]
+    MsgPackEncError(#[from] rmp_serde::encode::Error),
+    #[error(transparent)]
+    MsgPackDecError(#[from] rmp_serde::decode::Error),
+    #[error(transparent)]
+    JSONPatchError(#[from] json_patch::PatchError),
+    #[error(transparent)]
+    IOError(#[from] io::Error),
+    #[error(transparent)]
+    SerdeJSONError(#[from] serde_json::Error),
+    #[error(transparent)]
+    UTF8Error(#[from] std::string::FromUtf8Error),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 use rocket::{

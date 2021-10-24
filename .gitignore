@@ -9,3 +9,5 @@ AppDir
 appimage-builder-cache
 dev/
 voyager_tapes/
+voyager_data
+correct_tapes/

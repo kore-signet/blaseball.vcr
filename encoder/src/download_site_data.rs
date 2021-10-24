@@ -1,6 +1,6 @@
 use blaseball_vcr::{
     site::{chron, chron::*, *},
-    ChroniclerV1Response, VCRError, VCRResult,
+    ChroniclerV1Response, VCRError,
 };
 
 use reqwest::blocking;
@@ -10,8 +10,7 @@ use std::io::BufWriter;
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
-use progress_bar::color::{Color, Style};
-use progress_bar::progress_bar::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use std::io::{Read, Seek, Write};
 
@@ -34,7 +33,7 @@ pub fn encode_resource<W: Write + Seek>(
     steps: Vec<FileStep>,
     replaces: &[Replace],
     out: &mut W,
-) -> VCRResult<EncodedResource> {
+) -> anyhow::Result<EncodedResource> {
     let client = reqwest::blocking::Client::new();
 
     let mut basis: Vec<u8> = Vec::new();
@@ -43,11 +42,8 @@ pub fn encode_resource<W: Write + Seek>(
             "https://api.sibr.dev/chronicler/v1{}",
             &steps[0].download_url
         ))
-        .send()
-        .map_err(VCRError::ReqwestError)?;
-    basis_response
-        .copy_to(&mut basis)
-        .map_err(VCRError::ReqwestError)?;
+        .send()?;
+    basis_response.copy_to(&mut basis)?;
 
     let mut last: Vec<u8> = basis.clone();
 
@@ -56,21 +52,21 @@ pub fn encode_resource<W: Write + Seek>(
 
     let total_len = steps.len();
 
-    let mut progress_bar = ProgressBar::new(total_len);
+    let progress_bar = ProgressBar::new(total_len as u64);
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+            .template("{pos}/{len:4} {bar:70.green/white} {percent:.bold}%"),
+    );
 
-    for step in steps {
-        progress_bar.set_action("downloading", Color::Green, Style::Bold);
-
+    for step in progress_bar.wrap_iter(steps.into_iter()) {
         let next: Vec<u8> = {
             let mut basis = client
                 .get(&format!(
                     "https://api.sibr.dev/chronicler/v1{}",
                     &step.download_url
                 ))
-                .send()
-                .map_err(VCRError::ReqwestError)?
-                .text()
-                .map_err(VCRError::ReqwestError)?;
+                .send()?
+                .text()?;
             for r in replaces {
                 basis = basis.replace(&r.replace, &r.with);
             }
@@ -78,13 +74,9 @@ pub fn encode_resource<W: Write + Seek>(
             basis.as_bytes().to_vec()
         };
 
-        progress_bar.set_action("creating delta", Color::Blue, Style::Bold);
-
         let delta = xdelta3::encode(&next, &last, 9i32 << 20i32).unwrap();
 
         last = next;
-
-        progress_bar.set_action("writing", Color::Red, Style::Bold);
 
         let offset_start = out.stream_position().map_err(VCRError::IOError)?;
         out.write_all(&delta).map_err(VCRError::IOError)?;
@@ -96,11 +88,9 @@ pub fn encode_resource<W: Write + Seek>(
         for path in step.paths {
             paths.push((path.0, path.1, delta_idx));
         }
-
-        progress_bar.inc();
     }
 
-    progress_bar.finalize();
+    progress_bar.finish_with_message("done!");
 
     Ok(EncodedResource {
         paths,
@@ -110,12 +100,9 @@ pub fn encode_resource<W: Write + Seek>(
 }
 
 // usage: download_site_data <out folder> <optional toml file with replaces>
-fn main() -> VCRResult<()> {
+fn main() -> anyhow::Result<()> {
     let chron_res: ChroniclerV1Response<chron::SiteUpdate> =
-        blocking::get("https://api.sibr.dev/chronicler/v1/site/updates")
-            .map_err(VCRError::ReqwestError)?
-            .json()
-            .map_err(VCRError::ReqwestError)?;
+        blocking::get("https://api.sibr.dev/chronicler/v1/site/updates")?.json()?;
     let all_steps = chron::updates_to_steps(chron_res.data);
     let args: Vec<String> = env::args().collect();
 

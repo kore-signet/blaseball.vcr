@@ -1,3 +1,5 @@
+use super::{ChronV1Res, RawChronEntity};
+
 use blaseball_vcr::{
     site::{chron::SiteUpdate, manager::ResourceManager},
     *,
@@ -6,11 +8,13 @@ use chrono::{DateTime, TimeZone, Utc};
 use lru::LruCache;
 use rand::Rng;
 use rocket::{get, http::ContentType, serde::json::Json as RocketJson, State};
-use serde_json::{json, Value as JSONValue};
+use serde_json::{json, value::RawValue, Value as JSONValue};
 
-use crate::types::{Order, UserAgent, V1GameUpdatesReq, V1GamesReq};
+use crate::types::{UserAgent, V1GameUpdatesReq, V1GamesReq};
 
 use std::sync::Mutex;
+
+type RawChronV1GameUpdate = ChronV1GameUpdate<Box<RawValue>>;
 
 #[get("/site/updates")]
 pub fn site_updates(
@@ -176,14 +180,18 @@ pub fn games(
 pub fn game_updates(
     req: V1GameUpdatesReq,
     db: &State<MultiDatabase>,
-    page_map: &State<Mutex<LruCache<String, InternalPaging>>>,
-) -> VCRResult<RocketJson<ChroniclerV1Response<ChronV1GameUpdate>>> {
-    let mut res = if let Some(page_token) = req.page {
+    page_map: &State<Mutex<LruCache<String, InternalPaging<Box<RawValue>>>>>,
+) -> ChronV1Res<RawChronV1GameUpdate> {
+    let res = if let Some(page_token) = req.page {
         let mut page_cache = page_map.lock().unwrap();
-        if let Some(ref mut p) = page_cache.get_mut(&page_token) {
-            let results: Vec<ChroniclerEntity> =
-                db.fetch_page("game_updates", p, req.count.unwrap_or(100))?;
-            if results.len() < req.count.unwrap_or(100) {
+        if let Some(p) = page_cache.get_mut(&page_token) {
+            let results: Vec<RawChronEntity> = db.fetch_page(
+                "game_updates",
+                p,
+                req.count.unwrap_or(100),
+                req.order.unwrap_or(Order::Asc),
+            )?;
+            if p.remaining_data.len() == 0 && p.remaining_ids.len() == 0 {
                 ChroniclerV1Response {
                     next_page: None,
                     data: results
@@ -191,10 +199,10 @@ pub fn game_updates(
                         .map(|e| ChronV1GameUpdate {
                             game_id: e.entity_id,
                             timestamp: e.valid_from,
-                            hash: String::new(),
+                            hash: e.hash,
                             data: e.data,
                         })
-                        .collect::<Vec<ChronV1GameUpdate>>(),
+                        .collect::<Vec<RawChronV1GameUpdate>>(),
                 }
             } else {
                 ChroniclerV1Response {
@@ -204,10 +212,10 @@ pub fn game_updates(
                         .map(|e| ChronV1GameUpdate {
                             game_id: e.entity_id,
                             timestamp: e.valid_from,
-                            hash: String::new(),
+                            hash: e.hash,
                             data: e.data,
                         })
-                        .collect::<Vec<ChronV1GameUpdate>>(),
+                        .collect::<Vec<RawChronV1GameUpdate>>(),
                 }
             }
         } else {
@@ -258,7 +266,13 @@ pub fn game_updates(
             kind: ChronV2EndpointKind::Versions(end_time, start_time),
         };
 
-        let res = db.fetch_page("game_updates", &mut page, req.count.unwrap_or(100))?;
+        let res = db.fetch_page(
+            "game_updates",
+            &mut page,
+            req.count.unwrap_or(100),
+            req.order.unwrap_or(Order::Asc),
+        )?;
+
         if res.len() >= req.count.unwrap_or(100) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
@@ -289,10 +303,10 @@ pub fn game_updates(
                     .map(|e| ChronV1GameUpdate {
                         game_id: e.entity_id,
                         timestamp: e.valid_from,
-                        hash: String::new(),
+                        hash: e.hash,
                         data: e.data,
                     })
-                    .collect::<Vec<ChronV1GameUpdate>>(),
+                    .collect::<Vec<RawChronV1GameUpdate>>(),
             }
         } else {
             ChroniclerV1Response {
@@ -302,20 +316,13 @@ pub fn game_updates(
                     .map(|e| ChronV1GameUpdate {
                         game_id: e.entity_id,
                         timestamp: e.valid_from,
-                        hash: String::new(),
+                        hash: e.hash,
                         data: e.data,
                     })
-                    .collect::<Vec<ChronV1GameUpdate>>(),
+                    .collect::<Vec<RawChronV1GameUpdate>>(),
             }
         }
     };
-
-    if let Some(ord) = req.order {
-        res.data.sort_by_key(|v| v.timestamp);
-        if ord == Order::Desc {
-            res.data.reverse();
-        }
-    }
 
     Ok(RocketJson(res))
 }

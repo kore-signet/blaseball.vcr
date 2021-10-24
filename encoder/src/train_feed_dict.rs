@@ -1,14 +1,13 @@
 use blaseball_vcr::feed::{CompactedFeedEvent, FeedEvent};
+use clap::clap_app;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
 use uuid::Uuid;
-//
+
 fn main() {
-    //     // let mut feed_dict: Vec<u8> = Vec::new();
-    //     // let mut dict_f = File::open("zstd-dictionaries/feed.dict").unwrap();
-    //     // dict_f.read_to_end(&mut feed_dict).unwrap();
-    //     // let mut feed_compressor = zstd::block::Compressor::with_dict(feed_dict);
     let mut feed_samples: Vec<u8> = Vec::new();
     let mut feed_sample_lens: Vec<usize> = Vec::new();
 
@@ -16,11 +15,26 @@ fn main() {
     let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
     let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
 
-    let f = File::open("feed.json").unwrap();
+    let matches = clap_app!(train_feed_dict =>
+        (version: "1.0")
+        (author: "allie signet <allie@sibr.dev>")
+        (about: "blaseball.vcr feed zstd dict trainer")
+        (@arg INPUT: <INPUT> "input feed dump in NDJSON format")
+        (@arg OUT: <OUTPUT> "output dict file")
+    )
+    .get_matches();
+
+    let out_path = Path::new(matches.value_of("OUT").unwrap());
+    let input_path = matches.value_of("INPUT").unwrap();
+
+    let f = File::open(input_path).unwrap();
     let reader = BufReader::new(f);
 
     for l in reader.lines() {
         let event: FeedEvent = serde_json::from_str(&l.unwrap()).unwrap();
+        if event.season == 0 {
+            continue;
+        }
         let compact_player_tags: Vec<u16> = event
             .player_tags
             .unwrap_or_default()
@@ -69,7 +83,7 @@ fn main() {
         let mut ev_bytes = CompactedFeedEvent {
             id: event.id,
             category: event.category,
-            day: event.day,
+            day: event.day.try_into().unwrap_or(255),
             created: event.created,
             description: event.description,
             player_tags: compact_player_tags,
@@ -86,13 +100,9 @@ fn main() {
         feed_samples.append(&mut ev_bytes);
     }
 
-    //
-    //     // let a: Vec<u8> = bincode::serialize(&trie).unwrap();
-    // let a: Vec<u8> = trie.iter().map(|(k,v)| [k.clone(),v.to_be_bytes().to_vec()].concat()).flatten().collect();
-    // println!("{:?}", zstd::encode_all(Cursor::new(a), 22).unwrap().len());
-    //     //
     println!("making dict");
     let dict = zstd::dict::from_continuous(&feed_samples, &feed_sample_lens, 400_000).unwrap();
-    let mut feed_dict_f = File::create("feed.dict").unwrap();
+    let mut feed_dict_f = File::create(out_path).unwrap();
     feed_dict_f.write_all(&dict).unwrap();
+    println!("done?");
 }

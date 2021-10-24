@@ -1,13 +1,14 @@
 use super::*;
 use crate::{VCRError, VCRResult};
 use chrono::{DateTime, TimeZone, Utc};
-use lru::LruCache;
-
+use memmap2::{Mmap, MmapOptions};
+use moka::sync::Cache;
+use rayon::prelude::*;
 use serde_json::Value as JSONValue;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
+use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 use uuid::Uuid;
 use zstd::dict::DecoderDictionary;
@@ -52,9 +53,9 @@ pub struct FeedDatabase {
     offset_table: Vec<(DateTime<Utc>, (u32, u16))>,
     meta_index: MetaIndex,
     event_index: EventIndex,
-    reader: BufReader<File>,
+    reader: Mmap,
     dictionary: DecoderDictionary<'static>,
-    cache: LruCache<u32, FeedEvent>,
+    cache: Cache<u32, FeedEvent>,
 }
 
 impl FeedDatabase {
@@ -70,7 +71,8 @@ impl FeedDatabase {
         let meta_idx: MetaIndex = rmp_serde::from_read(id_file)?;
 
         let idx_file = File::open(idx_file_path)?;
-        let mut idx_decoder = zstd::Decoder::new(idx_file)?;
+        let idx_r = BufReader::new(idx_file);
+        let mut idx_decoder = zstd::Decoder::new(idx_r)?;
 
         let game_index = {
             let mut idx: HashMap<u16, Vec<(u32, (u32, u16))>> = HashMap::new();
@@ -153,15 +155,44 @@ impl FeedDatabase {
             idx
         };
 
-        let phase_index = {
-            let mut idx: HashMap<(i8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
+        let etype_index = {
+            let mut idx: HashMap<i16, Vec<(u32, (u32, u16))>> = HashMap::new();
             let idx_len = read_u32!(idx_decoder);
             let mut bytes: Vec<u8> = vec![0; idx_len as usize];
             idx_decoder.read_exact(&mut bytes)?;
             let mut cursor = Cursor::new(bytes);
 
             while cursor.position() < idx_len as u64 {
-                let key = (read_i8!(cursor), read_u8!(cursor));
+                let key = read_i16!(cursor);
+                let klen: u64 = read_u32!(cursor) as u64;
+                let start_pos = cursor.position();
+
+                let entry = idx
+                    .entry(key)
+                    .or_insert_with(|| Vec::with_capacity(klen as usize));
+
+                while (cursor.position() - start_pos) < klen {
+                    entry.push((
+                        read_u32!(cursor),
+                        (read_u32!(cursor), decode_varint!(cursor)),
+                    ));
+                }
+            }
+
+            idx
+        };
+
+        let phase_index = {
+            let mut idx: HashMap<(u8, u8), Vec<(i64, (u32, u16))>> = HashMap::new();
+            let idx_len = read_u32!(idx_decoder);
+            let mut bytes: Vec<u8> = vec![0; idx_len as usize];
+            idx_decoder.read_exact(&mut bytes)?;
+            let mut cursor = Cursor::new(bytes);
+
+            while cursor.position() < idx_len as u64 {
+                let season_phase: u8 = read_u8!(cursor);
+                let key = ((season_phase & 0xF) + 10, (season_phase >> 4) & 0xF);
+
                 let klen: u64 = read_u32!(cursor) as u64;
                 let start_pos = cursor.position();
 
@@ -184,11 +215,13 @@ impl FeedDatabase {
             player_index,
             team_index,
             phase_index,
+            etype_index,
             game_index,
         };
 
         let position_index_file = File::open(position_index_path)?;
-        let position_index_decompressor = zstd::stream::Decoder::new(position_index_file)?;
+        let position_index_reader = BufReader::new(position_index_file);
+        let position_index_decompressor = zstd::stream::Decoder::new(position_index_reader)?;
         let offset_table = make_offset_table(position_index_decompressor);
 
         let mut dictionary_file = File::open(dict_file_path)?;
@@ -196,7 +229,7 @@ impl FeedDatabase {
         dictionary_file.read_to_end(&mut dictionary)?;
 
         let main_file = File::open(db_file_path)?;
-        let main_file_reader = BufReader::new(main_file);
+        let main_file_reader = unsafe { MmapOptions::new().map(&main_file)? };
 
         Ok(FeedDatabase {
             offset_table,
@@ -204,33 +237,19 @@ impl FeedDatabase {
             event_index: event_idx,
             meta_index: meta_idx,
             dictionary: DecoderDictionary::copy(&dictionary),
-            cache: LruCache::new(cache_size),
+            cache: Cache::new(cache_size),
         })
     }
 
     pub fn read_event(
-        &mut self,
+        &self,
         offset: u32,
         len: u16,
         timestamp: DateTime<Utc>,
     ) -> VCRResult<FeedEvent> {
         if let Some(ev) = self.cache.get(&offset) {
-            return Ok(ev.clone());
+            return Ok(ev);
         }
-
-        let compressed_bytes: Vec<u8> = if len == 0 {
-            let mut bytes: Vec<u8> = Vec::new();
-            self.reader.seek(SeekFrom::Start(offset as u64))?;
-            self.reader.read_to_end(&mut bytes)?;
-            bytes
-        } else {
-            let mut bytes: Vec<u8> = vec![0; len as usize];
-
-            self.reader.seek(SeekFrom::Start(offset as u64))?;
-
-            self.reader.read_exact(&mut bytes)?;
-            bytes
-        };
 
         // let timestamp_raw = u32::from_be_bytes(snowflake[2..6].try_into().unwrap());
         // let timestamp = match self.millis_epoch_table.get(&(season, phase)) {
@@ -239,15 +258,28 @@ impl FeedDatabase {
         // };
 
         let mut decoder = zstd::stream::Decoder::with_prepared_dictionary(
-            Cursor::new(compressed_bytes),
+            if len == 0 {
+                &self.reader[offset as usize..]
+            } else {
+                &self.reader[offset as usize..(offset + (len as u32)) as usize]
+            },
             &self.dictionary,
         )?;
 
         let category: i8 = read_i8!(decoder);
         let etype: i16 = read_i16!(decoder);
-        let day: i16 = read_i16!(decoder);
-        let season: i8 = read_i8!(decoder);
-        let phase: u8 = read_u8!(decoder);
+        let day: i16 = {
+            let d = read_u8!(decoder);
+            if d == 255 {
+                1522
+            } else {
+                d.into()
+            }
+        };
+
+        let season_phase: u8 = read_u8!(decoder);
+        let season: u8 = (season_phase & 0xF) + 10;
+        let phase: u8 = (season_phase >> 4) & 0xF;
 
         let id = if phase == 13 {
             let mut uuid: [u8; 16] = [0; 16];
@@ -348,27 +380,27 @@ impl FeedDatabase {
 
         let ev = FeedEvent {
             id,
-            category: category,
+            category,
             created: timestamp,
-            day: day,
-            season: season,
+            day,
+            season,
             nuts: 0,
             phase,
             player_tags: Some(player_tags),
             team_tags: Some(team_tags),
             game_tags: Some(game_tags),
-            etype: etype,
+            etype,
             tournament: -1,
             description,
             metadata,
         };
 
-        self.cache.put(offset, ev.clone());
+        self.cache.insert(offset, ev.clone());
         Ok(ev)
     }
 
     pub fn events_after(
-        &mut self,
+        &self,
         timestamp: DateTime<Utc>,
         count: usize,
         category: i8,
@@ -396,7 +428,7 @@ impl FeedDatabase {
     }
 
     pub fn events_before(
-        &mut self,
+        &self,
         timestamp: DateTime<Utc>,
         count: usize,
         category: i8,
@@ -406,7 +438,7 @@ impl FeedDatabase {
             .binary_search_by_key(&timestamp.timestamp(), |(s, _)| s.timestamp())
         {
             Ok(i) => i,
-            Err(i) => i,
+            Err(i) => i - 1,
         };
 
         let mut events: Vec<FeedEvent> = Vec::with_capacity(count);
@@ -424,8 +456,8 @@ impl FeedDatabase {
     }
 
     pub fn events_by_phase(
-        &mut self,
-        season: i8,
+        &self,
+        season: u8,
         phase: u8,
         count: usize,
     ) -> VCRResult<Vec<FeedEvent>> {
@@ -435,20 +467,56 @@ impl FeedDatabase {
             .copied()
             .collect::<Vec<(i64, (u32, u16))>>();
 
-        ids.iter()
+        ids.par_iter()
             .map(|(time, (offset, len))| {
                 self.read_event(*offset, *len, Utc.timestamp_millis(*time))
             })
             .collect::<VCRResult<Vec<FeedEvent>>>()
     }
 
+    pub fn events_by_type_and_time(
+        &self,
+        timestamp: DateTime<Utc>,
+        etype: i16,
+        count: usize,
+    ) -> VCRResult<Vec<FeedEvent>> {
+        if !self.event_index.etype_index.contains_key(&etype) {
+            return Err(VCRError::IndexMissing);
+        }
+
+        let len = self.event_index.etype_index[&etype].len();
+
+        let mut idx = 0;
+
+        let mut events = Vec::with_capacity(count);
+        while idx < len && events.len() < count {
+            // AaaaaaaaaaaaaAAAAAAAAAAAAAAaaaAAAAAAAAAAAAaaAAAAAA
+            let (time, (offset, length)) = self.event_index.etype_index[&etype][idx];
+
+            let time = Utc.timestamp(time as i64, 0);
+            if time <= timestamp {
+                let e = self.read_event(offset, length, time)?;
+                events.push(e);
+            }
+
+            idx += 1;
+        }
+
+        events.sort_by_key(|e| e.created.timestamp());
+        events.dedup();
+        events.reverse();
+
+        Ok(events)
+    }
+
     pub fn events_by_tag_and_time(
-        &mut self,
+        &self,
         timestamp: DateTime<Utc>,
         tag: &Uuid,
         tag_type: TagType,
         count: usize,
         category: i8,
+        etype: i16,
     ) -> VCRResult<Vec<FeedEvent>> {
         let tag: u16 = match tag_type {
             TagType::Game => *self
@@ -468,6 +536,10 @@ impl FeedDatabase {
                 .ok_or(VCRError::EntityNotFound)? as u16,
         };
 
+        if etype != -1 && !self.event_index.etype_index.contains_key(&etype) {
+            return Err(VCRError::IndexMissing);
+        }
+
         let len = match tag_type {
             TagType::Game => self.event_index.game_index[&tag].len(),
             TagType::Team => self.event_index.team_index[&(tag as u8)].len(),
@@ -485,12 +557,15 @@ impl FeedDatabase {
                 TagType::Player => self.event_index.player_index[&tag][idx],
             };
 
-            let time = Utc.timestamp(time as i64, 0);
-
-            if time <= timestamp {
-                let e = self.read_event(offset, length, time)?;
-                if category == -3 || e.category == category {
-                    events.push(e);
+            if etype == -1
+                || self.event_index.etype_index[&etype].contains(&(time, (offset, length)))
+            {
+                let time = Utc.timestamp(time as i64, 0);
+                if time <= timestamp {
+                    let e = self.read_event(offset, length, time)?;
+                    if category == -3 || e.category == category {
+                        events.push(e);
+                    }
                 }
             }
 

@@ -1,7 +1,6 @@
 use blaseball_vcr::encoder::*;
 use blaseball_vcr::*;
-use progress_bar::color::{Color, Style};
-use progress_bar::progress_bar::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
 use serde_json::Value as JSONValue;
 
@@ -26,30 +25,18 @@ struct ChroniclerParameters {
 
 async fn paged_get(
     client: &reqwest::Client,
-    progress: &mut ProgressBar,
-    show_progress: bool,
     url: &str,
     mut parameters: ChroniclerParameters,
-) -> VCRResult<Vec<ChroniclerEntity>> {
-    let mut results: Vec<ChroniclerEntity> = Vec::new();
+) -> anyhow::Result<Vec<ChroniclerEntity<JSONValue>>> {
+    let mut results: Vec<ChroniclerEntity<JSONValue>> = Vec::new();
 
     let mut page = 1;
-
+    let spinny = ProgressBar::new_spinner();
+    spinny.enable_steady_tick(120);
+    spinny.set_style(ProgressStyle::default_spinner().template("{spinner:.blue} {msg}"));
     loop {
-        if show_progress {
-            progress.print_info(
-                "fetching",
-                &format!(
-                    "page #{} - {} total entities",
-                    page,
-                    page * parameters.count
-                ),
-                Color::Red,
-                Style::Italic,
-            );
-        }
-
-        let mut chron_response: ChroniclerResponse<ChroniclerEntity> = client
+        spinny.set_message(format!("downloading entities - page {}", page));
+        let mut chron_response: ChroniclerResponse<ChroniclerEntity<JSONValue>> = client
             .get(url)
             .query(&parameters)
             .send()
@@ -65,23 +52,21 @@ async fn paged_get(
             break;
         }
     }
+    spinny.finish_and_clear();
 
     Ok(results)
 }
 
 #[tokio::main]
-pub async fn main() -> VCRResult<()> {
+pub async fn main() -> anyhow::Result<()> {
     let client = reqwest::Client::new();
     let mut entity_types: Vec<String> = env::args().skip(1).collect();
     let checkpoint_every = entity_types.remove(0).parse::<u16>().unwrap_or(u16::MAX);
 
     for etype in entity_types {
-        let mut progress_bar = ProgressBar::new(0);
         println!("-> Fetching list of entities of type {}", etype);
         let entity_ids: Vec<String> = paged_get(
             &client,
-            &mut progress_bar,
-            false,
             "https://api.sibr.dev/chronicler/v2/entities",
             ChroniclerParameters {
                 next_page: None,
@@ -96,13 +81,12 @@ pub async fn main() -> VCRResult<()> {
         .map(|e| e.entity_id)
         .collect();
 
-        println!("| found {} entities", entity_ids.len());
-        let mut progress_bar = ProgressBar::new(entity_ids.len());
-        progress_bar.set_action(
-            "Loading & encoding entity versions",
-            Color::Blue,
-            Style::Bold,
-        );
+        let bar_style = ProgressStyle::default_bar()
+            .template("{msg:.bold} - {pos}/{len} {wide_bar:40.green/white}");
+
+        let entity_id_bar = ProgressBar::new(entity_ids.len() as u64);
+        entity_id_bar.set_style(bar_style.clone());
+        entity_id_bar.set_message("encoding entities");
 
         let mut out_file = File::create(&format!("./zstd-dictionaries/{}.dict", &etype))
             .map_err(VCRError::IOError)?;
@@ -110,20 +94,12 @@ pub async fn main() -> VCRResult<()> {
         let mut samples: Vec<u8> = Vec::new();
         let mut sample_sizes: Vec<usize> = Vec::new();
 
-        for id in entity_ids {
-            progress_bar.set_action(&id, Color::Green, Style::Bold);
-
-            progress_bar.print_info(
-                "downloading",
-                &format!("entity {} of type {}", id, etype),
-                Color::Green,
-                Style::Italic,
-            );
+        for id in entity_id_bar.wrap_iter(entity_ids.into_iter()) {
+            entity_id_bar.tick();
+            entity_id_bar.set_message(format!("encoding {}", id));
 
             let mut entity_versions: Vec<(u32, JSONValue)> = paged_get(
                 &client,
-                &mut progress_bar,
-                true,
                 "https://api.sibr.dev/chronicler/v2/versions",
                 ChroniclerParameters {
                     next_page: None,
@@ -147,17 +123,15 @@ pub async fn main() -> VCRResult<()> {
                 sample_sizes.push(patch_bytes.len());
                 samples.append(&mut patch_bytes);
             }
-
-            progress_bar.inc();
         }
 
-        progress_bar.set_action("Training dictionary", Color::Blue, Style::Bold);
+        entity_id_bar.set_message("training dictionary");
 
         out_file
             .write_all(&zstd::dict::from_continuous(&samples, &sample_sizes, 112640).unwrap())
             .unwrap();
 
-        progress_bar.finalize();
+        entity_id_bar.finish_with_message("done!");
     }
 
     Ok(())

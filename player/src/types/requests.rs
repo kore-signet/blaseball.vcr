@@ -1,12 +1,5 @@
-use rocket::{FromForm, FromFormField};
-
-#[derive(Debug, Copy, Clone, FromFormField, PartialEq)]
-pub enum Order {
-    #[field(value = "asc")]
-    Asc,
-    #[field(value = "desc")]
-    Desc,
-}
+use blaseball_vcr::Order;
+use rocket::FromForm;
 
 #[derive(FromForm)]
 pub struct EntityReq {
@@ -60,4 +53,17 @@ pub struct V1GameUpdatesReq {
     pub tournament: Option<i32>,
     pub game: Option<String>,
     pub page: Option<String>,
+}
+
+#[derive(Debug, FromForm)]
+pub struct FeedReq {
+    pub id: Option<String>,
+    pub time: Option<i64>,
+    pub start: Option<String>,
+    pub limit: Option<usize>,
+    pub phase: Option<u8>,
+    pub season: Option<u8>,
+    pub category: Option<i8>,
+    #[field(name = "type")]
+    pub etype: Option<i16>,
 }
