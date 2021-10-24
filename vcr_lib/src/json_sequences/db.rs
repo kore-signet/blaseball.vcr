@@ -297,7 +297,7 @@ impl Database {
                         NaiveDateTime::from_timestamp(next_time as i64, 0),
                         Utc,
                     ).to_rfc3339()),
-                    hash: String::from("ahh"),
+                    hash: String::new(),
                 });
             }
         }
@@ -322,7 +322,7 @@ impl Database {
                     Utc,
                 ),
                 valid_to: None,
-                hash: String::from("ahh2"),
+                hash: String::new(),
             });
         }
 
