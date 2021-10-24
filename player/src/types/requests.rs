@@ -1,12 +1,5 @@
-use rocket::{FromForm, FromFormField};
-
-#[derive(Debug, Copy, Clone, FromFormField, PartialEq)]
-pub enum Order {
-    #[field(value = "asc")]
-    Asc,
-    #[field(value = "desc")]
-    Desc,
-}
+use blaseball_vcr::Order;
+use rocket::FromForm;
 
 #[derive(FromForm)]
 pub struct EntityReq {

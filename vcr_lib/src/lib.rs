@@ -8,6 +8,7 @@ pub use err::*;
 pub use json_sequences::*;
 
 use chrono::{DateTime, Utc};
+use rocket::FromFormField;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
 
@@ -74,4 +75,12 @@ pub struct ChronV1GameUpdate<T> {
     pub timestamp: DateTime<Utc>,
     pub hash: String,
     pub data: T,
+}
+
+#[derive(Debug, Copy, Clone, FromFormField, PartialEq)]
+pub enum Order {
+    #[field(value = "asc")]
+    Asc,
+    #[field(value = "desc")]
+    Desc,
 }

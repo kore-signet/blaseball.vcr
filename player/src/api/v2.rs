@@ -6,7 +6,7 @@ use rand::Rng;
 use rocket::{get, serde::json::Json as RocketJson, State};
 use serde_json::{value::RawValue, Value as JSONValue};
 
-use crate::types::{EntityReq, Order, StreamDataStep, VersionsReq};
+use crate::types::{EntityReq, StreamDataStep, VersionsReq};
 
 use std::sync::Mutex;
 
@@ -17,8 +17,7 @@ pub fn versions(
     db: &State<MultiDatabase>,
     page_map: &State<Mutex<LruCache<String, InternalPaging<Box<RawValue>>>>>,
 ) -> ChronV2Res<RawChronEntity> {
-    let mut res: ChroniclerResponse<RawChronEntity> = if req.entity_type.to_lowercase() == "stream"
-    {
+    let res: ChroniclerResponse<RawChronEntity> = if req.entity_type.to_lowercase() == "stream" {
         let start_time = req.after.as_ref().map_or(
             req.before.as_ref().map_or(u32::MAX, |x| {
                 DateTime::parse_from_rfc3339(x).unwrap().timestamp() as u32
@@ -58,8 +57,12 @@ pub fn versions(
     } else if let Some(page_token) = req.page {
         let mut page_cache = page_map.lock().unwrap();
         if let Some(ref mut p) = page_cache.get_mut(&page_token) {
-            let results: Vec<RawChronEntity> =
-                db.fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?;
+            let results: Vec<RawChronEntity> = db.fetch_page(
+                &req.entity_type.to_lowercase(),
+                p,
+                req.count.unwrap_or(100),
+                req.order.unwrap_or(Order::Asc),
+            )?;
             if results.len() < req.count.unwrap_or(100) {
                 ChroniclerResponse {
                     next_page: None,
@@ -104,6 +107,7 @@ pub fn versions(
             &req.entity_type.to_lowercase(),
             &mut page,
             req.count.unwrap_or(100),
+            req.order.unwrap_or(Order::Asc),
         )?;
         if res.len() >= req.count.unwrap_or(100) {
             let mut page_cache = page_map.lock().unwrap();
@@ -126,13 +130,6 @@ pub fn versions(
                 k
             };
 
-            if let Some(ord) = req.order {
-                page.remaining_data.sort_by_key(|x| x.valid_from);
-                if ord == Order::Desc {
-                    page.remaining_data.reverse();
-                }
-            }
-
             page_cache.put(key.clone(), page);
 
             ChroniclerResponse {
@@ -147,13 +144,6 @@ pub fn versions(
         }
     };
 
-    if let Some(ord) = req.order {
-        res.items.sort_by_key(|x| x.valid_from);
-        if ord == Order::Desc {
-            res.items.reverse();
-        }
-    }
-
     Ok(RocketJson(res))
 }
 
@@ -163,11 +153,16 @@ pub fn entities(
     db: &State<MultiDatabase>,
     page_map: &State<Mutex<LruCache<String, InternalPaging<Box<RawValue>>>>>,
 ) -> ChronV2Res<RawChronEntity> {
-    let mut res = if let Some(page_token) = req.page {
+    let res = if let Some(page_token) = req.page {
         let mut page_cache = page_map.lock().unwrap();
         if let Some(ref mut p) = page_cache.get_mut(&page_token) {
             let results: Vec<RawChronEntity> = db
-                .fetch_page(&req.entity_type.to_lowercase(), p, req.count.unwrap_or(100))?
+                .fetch_page(
+                    &req.entity_type.to_lowercase(),
+                    p,
+                    req.count.unwrap_or(100),
+                    req.order.unwrap_or(Order::Asc),
+                )?
                 .into_iter()
                 .collect();
             if results.len() < req.count.unwrap_or(100) {
@@ -211,6 +206,7 @@ pub fn entities(
                 &req.entity_type.to_lowercase(),
                 &mut page,
                 req.count.unwrap_or(100),
+                req.order.unwrap_or(Order::Asc),
             )?
             .into_iter()
             .collect();
@@ -235,13 +231,6 @@ pub fn entities(
                 k
             };
 
-            if let Some(ord) = req.order {
-                page.remaining_data.sort_by_key(|x| x.valid_from);
-                if ord == Order::Desc {
-                    page.remaining_data.reverse();
-                }
-            }
-
             page_cache.put(key.clone(), page);
 
             ChroniclerResponse {
@@ -255,13 +244,6 @@ pub fn entities(
             }
         }
     };
-
-    if let Some(ord) = req.order {
-        res.items.sort_by_key(|x| x.valid_from);
-        if ord == Order::Desc {
-            res.items.reverse();
-        }
-    }
 
     Ok(RocketJson(res))
 }

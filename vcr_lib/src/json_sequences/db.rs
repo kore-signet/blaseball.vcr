@@ -460,6 +460,7 @@ impl Database {
         &self,
         page: &mut InternalPaging<Box<RawValue>>,
         count: usize,
+        order: Order,
     ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
         while page.remaining_data.len() < count {
             if !page.remaining_ids.is_empty() {
@@ -474,6 +475,11 @@ impl Database {
             } else {
                 break;
             }
+        }
+
+        page.remaining_data.sort_by_key(|x| x.valid_from);
+        if order == Order::Desc {
+            page.remaining_data.reverse();
         }
 
         Ok(page
@@ -679,6 +685,7 @@ impl MultiDatabase {
         e_type: &str,
         page: &mut InternalPaging<Box<RawValue>>,
         count: usize,
+        order: Order,
     ) -> VCRResult<Vec<ChroniclerEntity<Box<RawValue>>>> {
         if e_type == "tributes" {
             self.tributes.fetch_page(page, count)
@@ -686,7 +693,7 @@ impl MultiDatabase {
             self.dbs
                 .get(e_type)
                 .ok_or(VCRError::EntityTypeNotFound)?
-                .fetch_page(page, count)
+                .fetch_page(page, count, order)
         }
     }
 

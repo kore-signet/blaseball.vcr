@@ -10,7 +10,7 @@ use rand::Rng;
 use rocket::{get, http::ContentType, serde::json::Json as RocketJson, State};
 use serde_json::{json, value::RawValue, Value as JSONValue};
 
-use crate::types::{Order, UserAgent, V1GameUpdatesReq, V1GamesReq};
+use crate::types::{UserAgent, V1GameUpdatesReq, V1GamesReq};
 
 use std::sync::Mutex;
 
@@ -182,12 +182,16 @@ pub fn game_updates(
     db: &State<MultiDatabase>,
     page_map: &State<Mutex<LruCache<String, InternalPaging<Box<RawValue>>>>>,
 ) -> ChronV1Res<RawChronV1GameUpdate> {
-    let mut res = if let Some(page_token) = req.page {
+    let res = if let Some(page_token) = req.page {
         let mut page_cache = page_map.lock().unwrap();
         if let Some(p) = page_cache.get_mut(&page_token) {
-            let results: Vec<RawChronEntity> =
-                db.fetch_page("game_updates", p, req.count.unwrap_or(100))?;
-            if results.len() < req.count.unwrap_or(100) {
+            let results: Vec<RawChronEntity> = db.fetch_page(
+                "game_updates",
+                p,
+                req.count.unwrap_or(100),
+                req.order.unwrap_or(Order::Asc),
+            )?;
+            if p.remaining_data.len() == 0 && p.remaining_ids.len() == 0 {
                 ChroniclerV1Response {
                     next_page: None,
                     data: results
@@ -262,8 +266,14 @@ pub fn game_updates(
             kind: ChronV2EndpointKind::Versions(end_time, start_time),
         };
 
-        let res = db.fetch_page("game_updates", &mut page, req.count.unwrap_or(100))?;
-        if res.len() >= req.count.unwrap_or(100) {
+        let res = db.fetch_page(
+            "game_updates",
+            &mut page,
+            req.count.unwrap_or(100),
+            req.order.unwrap_or(Order::Asc),
+        )?;
+
+        if res.len() > req.count.unwrap_or(100) {
             let mut page_cache = page_map.lock().unwrap();
             let key = {
                 let mut k = String::new();
@@ -283,13 +293,6 @@ pub fn game_updates(
 
                 k
             };
-
-            if let Some(ord) = req.order {
-                page.remaining_data.sort_by_key(|x| x.valid_from);
-                if ord == Order::Desc {
-                    page.remaining_data.reverse();
-                }
-            }
 
             page_cache.put(key.clone(), page);
 
@@ -320,13 +323,6 @@ pub fn game_updates(
             }
         }
     };
-
-    if let Some(ord) = req.order {
-        res.data.sort_by_key(|v| v.timestamp);
-        if ord == Order::Desc {
-            res.data.reverse();
-        }
-    }
 
     Ok(RocketJson(res))
 }
