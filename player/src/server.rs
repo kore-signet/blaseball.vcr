@@ -2,7 +2,7 @@ use blaseball_vcr::site::manager::ResourceManager;
 use blaseball_vcr::{feed::FeedDatabase, InternalPaging, MultiDatabase};
 use lru::LruCache;
 use rocket::figment::{
-    providers::{Format, Toml},
+    providers::{Format, Toml, Env},
     Figment, Profile,
 };
 use rocket::{
@@ -101,7 +101,7 @@ async fn spinny(formatting: &str, msg: &str) {
 
 #[rocket::launch]
 async fn build_vcr() -> rocket::Rocket<rocket::Build> {
-    #[derive(serde::Deserialize)]
+    #[derive(serde::Deserialize,Debug)]
     struct VCRConfig {
         tapes: String,
         site_assets: String,
@@ -117,7 +117,8 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         open_in_browser: Option<bool>,
     }
 
-    #[derive(serde::Deserialize)]
+
+    #[derive(serde::Deserialize,Debug)]
     struct FeedConfig {
         index: String,
         path: String,
@@ -140,8 +141,10 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
 
     let figment = Figment::from(rocket::Config::default())
         .merge(Toml::file("Vcr.toml").nested())
+        .merge(Env::prefixed("VCR_"))
         .select(Profile::from_env_or("VCR_PROFILE", "default"));
     let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
+
     let mut rocket = build_rocket(figment).await;
 
     let dicts = if let Some(dicts_folder) = config.zstd_dictionaries {
@@ -235,6 +238,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
             })
         }));
     }
+
 
     rocket
         .manage(dbs)
