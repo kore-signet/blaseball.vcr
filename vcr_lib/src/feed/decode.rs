@@ -297,6 +297,67 @@ impl FeedDatabase {
                 decoder.read_exact(&mut variant_byte)?;
                 possibilities[u8::from_be(variant_byte[0]) as usize].to_owned()
             }
+            ConstantMiddle(mid) => {
+                let start_len = decode_varint!(decoder);
+                let end_len = decode_varint!(decoder);
+
+                let mut start_bytes: Vec<u8> = vec![0; start_len as usize];
+                decoder.read_exact(&mut start_bytes)?;
+
+                let mut end_bytes: Vec<u8> = vec![0; end_len as usize];
+                decoder.read_exact(&mut end_bytes)?;
+
+                String::from_utf8(start_bytes).unwrap()
+                    + mid
+                    + &String::from_utf8(end_bytes).unwrap()
+            }
+            VariableMiddle(possible_mid) => {
+                let const_idx = read_u8!(decoder);
+                let start_len = decode_varint!(decoder);
+
+                if const_idx > possible_mid.len() as u8 {
+                    let mut description_bytes: Vec<u8> = vec![0; start_len as usize];
+                    decoder.read_exact(&mut description_bytes)?;
+                    String::from_utf8(description_bytes).unwrap()
+                } else {
+                    let end_len = decode_varint!(decoder);
+
+                    let mut start_bytes: Vec<u8> = vec![0; start_len as usize];
+                    decoder.read_exact(&mut start_bytes)?;
+
+                    let mut end_bytes: Vec<u8> = vec![0; end_len as usize];
+                    decoder.read_exact(&mut end_bytes)?;
+
+                    String::from_utf8(start_bytes).unwrap()
+                        + possible_mid[const_idx as usize]
+                        + &String::from_utf8(end_bytes).unwrap()
+                }
+            }
+            VariablePrefix(possible_pfx) => {
+                let const_idx = read_u8!(decoder);
+                let description_len = decode_varint!(decoder);
+                let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
+                decoder.read_exact(&mut description_bytes)?;
+
+                if const_idx > possible_pfx.len() as u8 {
+                    String::from_utf8(description_bytes).unwrap()
+                } else {
+                    possible_pfx[const_idx as usize].to_owned()
+                        + &String::from_utf8(description_bytes).unwrap()
+                }
+            }
+            VariableSuffix(possible_sfx) => {
+                let const_idx = read_u8!(decoder);
+                let description_len = decode_varint!(decoder);
+                let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
+                decoder.read_exact(&mut description_bytes)?;
+
+                if const_idx > possible_sfx.len() as u8 {
+                    String::from_utf8(description_bytes).unwrap()
+                } else {
+                    String::from_utf8(description_bytes).unwrap() + possible_sfx[const_idx as usize]
+                }
+            }
             Suffix(sfx) => {
                 let description_len = decode_varint!(decoder);
                 let mut description_bytes: Vec<u8> = vec![0; description_len as usize];
@@ -376,7 +437,7 @@ impl FeedDatabase {
                 .collect()
         };
 
-        let metadata: JSONValue = rmp_serde::from_read_ref(&metadata_bytes)?;
+        let metadata: JSONValue = metadata::decode_metadata(etype, &metadata_bytes[..])?;
 
         let ev = FeedEvent {
             id,

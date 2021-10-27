@@ -1,6 +1,10 @@
 pub enum EventDescription {
     Constant(&'static str),
     ConstantVariant(Vec<&'static str>),
+    ConstantMiddle(&'static str), // constant middle; prefix and suffix vary
+    VariableMiddle(Vec<&'static str>),
+    VariablePrefix(Vec<&'static str>),
+    VariableSuffix(Vec<&'static str>),
     Prefix(&'static str),
     Suffix(&'static str),
     Variable,
@@ -12,6 +16,33 @@ impl EventDescription {
 
         match t {
             1 => Constant("Play ball!"),
+            2 => VariablePrefix(vec!["Bottom of ", "Top of "]),
+            6 => VariableSuffix(vec![
+                " strikes out swinging.",
+                " strikes out looking.",
+                " strikes out thinking.",
+            ]),
+            8 => VariableMiddle(vec![
+                " hit a ground out to ",
+                " hit into a double play!",
+                " out at first base.",
+                " out at second base.",
+                " out at third base.",
+            ]),
+            12 => VariableMiddle(vec![" batting for the ", " skipped up to bat for the "]),
+            13 => VariablePrefix(vec![
+                "Strike, swinging.",
+                "Strike, looking.",
+                "Strike, flinching.",
+            ]),
+            14 => VariablePrefix(vec!["Ball."]),
+            15 => VariablePrefix(vec![
+                " Foul Ball.",
+                "Offworld Very Foul Ball.",
+                "Offworld  Foul Ball.",
+                "Foul Ball.",
+                "Very Foul Ball.",
+            ]),
             25 => Constant("The Electricity zaps a strike away!"),
             73 => ConstantVariant(vec![
                 "A desolate peanutty wind blows.",

@@ -202,7 +202,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "before"
 version = "0.2.0"
-source = "git+https://github.com/iliana/before.git?branch=main#4ea5b9f0dc67f5b588997dc2c3812d5935acf53b"
+source = "git+https://github.com/iliana/before.git?branch=main#316fc031c017608d6cf5cd860bdc266e5577a7da"
 dependencies = [
  "anyhow",
  "askama",
@@ -224,7 +224,7 @@ dependencies = [
  "serde_plain",
  "serde_urlencoded",
  "textnonce",
- "time 0.3.3",
+ "time 0.3.4",
  "tokio-util",
  "toml",
  "uuid",
@@ -1740,6 +1740,7 @@ dependencies = [
  "lru 0.6.6",
  "open",
  "rand 0.8.4",
+ "rayon",
  "rocket",
  "serde",
  "serde_json",
@@ -1766,9 +1767,9 @@ checksum = "bc881b2c22681370c6a780e47af9840ef841837bc98118431d4e1868bd0c1086"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.30"
+version = "1.0.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edc3358ebc67bc8b7fa0c007f945b0b18226f78437d61bec735a9eb96b61ee70"
+checksum = "ba508cc11742c0dc5c1659771673afbab7a0efab23aa17e854cbab0837ed0b43"
 dependencies = [
  "unicode-xid",
 ]
@@ -2637,9 +2638,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "syn"
-version = "1.0.80"
+version = "1.0.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d010a1623fbd906d51d650a9916aaefc05ffa0e4053ff7fe601167f3e715d194"
+checksum = "f2afee18b8beb5a596ecb4a2dce128c719b4ba399d34126b9e4396e3f9860966"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2760,9 +2761,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cde1cf55178e0293453ba2cca0d5f8392a922e52aa958aee9c28ed02becc6d03"
+checksum = "99beeb0daeac2bd1e86ac2c21caddecb244b39a093594da1a661ec2060c7aedd"
 dependencies = [
  "itoa",
  "libc",

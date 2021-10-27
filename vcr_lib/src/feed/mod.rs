@@ -1,6 +1,7 @@
 mod decode;
 mod desc;
 mod event;
+pub mod metadata;
 pub use decode::*;
 pub use desc::*;
 pub use event::*;

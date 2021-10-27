@@ -6,7 +6,9 @@ use rand::Rng;
 use rocket::{get, serde::json::Json as RocketJson, State};
 use serde_json::{value::RawValue, Value as JSONValue};
 
-use crate::types::{EntityReq, StreamDataStep, VersionsReq};
+use rayon::prelude::*;
+
+use crate::types::{EntityReq, ParallelizeStreamData, StreamDataStep, VersionsReq};
 
 use std::sync::Mutex;
 
@@ -14,6 +16,7 @@ use std::sync::Mutex;
 pub fn versions(
     req: VersionsReq,
     step: &State<StreamDataStep>,
+    parallelize_stream_data: &State<ParallelizeStreamData>,
     db: &State<MultiDatabase>,
     page_map: &State<Mutex<LruCache<String, InternalPaging<Box<RawValue>>>>>,
 ) -> ChronV2Res<RawChronEntity> {
@@ -39,16 +42,45 @@ pub fn versions(
             |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
         );
 
-        let mut results: Vec<ChroniclerEntity<JSONValue>> = Vec::new();
-        for at in (start_time..end_time).into_iter().step_by(step as usize) {
-            results.push(ChroniclerEntity {
-                entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
-                valid_from: Utc.timestamp(at as i64, 0),
-                valid_to: Some(Utc.timestamp((at + step) as i64, 0).to_rfc3339()),
-                hash: String::new(),
-                data: db.stream_data(at)?,
-            });
-        }
+        let results = if parallelize_stream_data.0 {
+            (start_time..end_time)
+                .into_par_iter()
+                .step_by(step as usize)
+                .map(|at| {
+                    Ok(ChroniclerEntity {
+                        entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+                        valid_from: Utc.timestamp(at as i64, 0),
+                        valid_to: Some(Utc.timestamp((at + step) as i64, 0).to_rfc3339()),
+                        hash: String::new(),
+                        data: db.stream_data(at)?,
+                    })
+                })
+                .collect::<VCRResult<Vec<ChroniclerEntity<JSONValue>>>>()?
+        } else {
+            (start_time..end_time)
+                .into_iter()
+                .step_by(step as usize)
+                .map(|at| {
+                    Ok(ChroniclerEntity {
+                        entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+                        valid_from: Utc.timestamp(at as i64, 0),
+                        valid_to: Some(Utc.timestamp((at + step) as i64, 0).to_rfc3339()),
+                        hash: String::new(),
+                        data: db.stream_data(at)?,
+                    })
+                })
+                .collect::<VCRResult<Vec<ChroniclerEntity<JSONValue>>>>()?
+        };
+
+        // for at in (start_time..end_time).into_iter().step_by(step as usize) {
+        //     results.push(ChroniclerEntity {
+        //         entity_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+        //         valid_from: Utc.timestamp(at as i64, 0),
+        //         valid_to: Some(Utc.timestamp((at + step) as i64, 0).to_rfc3339()),
+        //         hash: String::new(),
+        //         data: db.stream_data(at)?,
+        //     });
+        // }
 
         ChroniclerResponse {
             next_page: None,

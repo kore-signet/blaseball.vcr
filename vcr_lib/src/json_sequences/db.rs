@@ -281,7 +281,7 @@ impl Database {
                     entity_value = v.clone();
                 }
                 Patch::Normal(p) => {
-                    patch_json(&mut entity_value, &p)?;
+                    patch_json(&mut entity_value, p)?;
                 }
             }
 
@@ -293,10 +293,13 @@ impl Database {
                         NaiveDateTime::from_timestamp(time as i64, 0),
                         Utc,
                     ),
-                    valid_to: Some(DateTime::<Utc>::from_utc(
-                        NaiveDateTime::from_timestamp(next_time as i64, 0),
-                        Utc,
-                    ).to_rfc3339()),
+                    valid_to: Some(
+                        DateTime::<Utc>::from_utc(
+                            NaiveDateTime::from_timestamp(next_time as i64, 0),
+                            Utc,
+                        )
+                        .to_rfc3339(),
+                    ),
                     hash: String::new(),
                 });
             }
@@ -309,7 +312,7 @@ impl Database {
                 entity_value = v.clone();
             }
             Patch::Normal(p) => {
-                patch_json(&mut entity_value, &p)?;
+                patch_json(&mut entity_value, p)?;
             }
         }
 
@@ -356,7 +359,7 @@ impl Database {
             } else if patch_idx == self.entities[entity].patches.len() - 1 {
                 let (time, data) = self.get_last_version(entity)?;
                 return Ok(ChroniclerEntity {
-                    data: data,
+                    data,
                     entity_id: entity.to_owned(),
                     valid_from: DateTime::<Utc>::from_utc(
                         NaiveDateTime::from_timestamp(time as i64, 0),
@@ -804,7 +807,7 @@ impl MultiDatabase {
                 game_id: game.to_owned(),
                 start_time: *start_time,
                 end_time: *end_time,
-                data: data,
+                data,
             });
         }
 

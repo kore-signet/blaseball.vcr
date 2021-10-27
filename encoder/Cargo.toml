@@ -69,3 +69,7 @@ path = "src/train_feed_dict.rs"
 [[bin]]
 name = "tributes"
 path = "src/tributes.rs"
+
+[[bin]]
+name = "feed_stats"
+path = "src/feed_stats.rs"

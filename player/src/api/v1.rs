@@ -191,7 +191,7 @@ pub fn game_updates(
                 req.count.unwrap_or(100),
                 req.order.unwrap_or(Order::Asc),
             )?;
-            if p.remaining_data.len() == 0 && p.remaining_ids.len() == 0 {
+            if p.remaining_data.is_empty() && p.remaining_ids.is_empty() {
                 ChroniclerV1Response {
                     next_page: None,
                     data: results

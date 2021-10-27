@@ -112,6 +112,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         time_responses: Option<bool>,
         cors: Option<bool>,
         stream_data_step: Option<u32>,
+        parallelize_stream_data: Option<bool>,
         #[cfg(feature = "bundle_before")]
         open_in_browser: Option<bool>,
     }
@@ -240,6 +241,9 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         .manage(manager)
         .manage(Mutex::new(cache))
         .manage(StreamDataStep(config.stream_data_step.unwrap_or(5)))
+        .manage(ParallelizeStreamData(
+            config.parallelize_stream_data.unwrap_or(false),
+        ))
         .mount("/vcr/v2", routes![v2::entities, v2::versions])
         .mount(
             "/vcr/v1",

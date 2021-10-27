@@ -6,6 +6,7 @@ zstd_dictionaries = "./zstd-dictionaries/" # this is optional; you can exclude i
 cors = true
 time_responses = true
 open_in_browser = false
+parallelize_stream_data = false # make stream data fetching parallel
 
 # if you don't want to include feed support, just comment this bit out!
 [default.vcr.feed]

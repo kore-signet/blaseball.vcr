@@ -71,7 +71,7 @@ fn main() {
     let event_types_to_index: Vec<i16> = matches
         .value_of("EVENT_TYPES")
         .unwrap_or("")
-        .split(",")
+        .split(',')
         .map(|s| s.parse::<i16>().unwrap())
         .collect();
 
@@ -156,6 +156,8 @@ fn main() {
                     })
                     .collect();
 
+                // println!("{:#?}",event.metadata);
+
                 snd1.send(CompactedFeedEvent {
                     id: event.id,
                     category: event.category,
@@ -230,7 +232,7 @@ fn main() {
             .tick_strings(&["-", "-"]);
 
         let feed_size_spinny = bars.add(ProgressBar::new_spinner());
-        feed_size_spinny.set_style(spinner_style.clone());
+        feed_size_spinny.set_style(spinner_style);
 
         feed_size_spinny.set_message("starting feed writer");
 
@@ -240,6 +242,7 @@ fn main() {
                 .template("{percent}% [{bar:60.blue/cyan}] {pos:>7}/{len:7}")
                 .progress_chars("##-"),
         );
+        // bars.set_draw_target(indicatif::ProgressDrawTarget::hidden());
 
         for (i, (event, bytes)) in rcv2.iter().enumerate() {
             feed_progress_bar.tick();
