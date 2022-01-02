@@ -73,8 +73,7 @@ impl CompactedFeedEvent {
             let player_tags: Vec<u8> = self
                 .player_tags
                 .iter()
-                .map(|id| id.to_be_bytes())
-                .flatten()
+                .flat_map(|id| id.to_be_bytes())
                 .collect();
             [
                 (self.player_tags.len() as u8).to_be_bytes().to_vec(),
@@ -87,8 +86,7 @@ impl CompactedFeedEvent {
             let team_tags: Vec<u8> = self
                 .team_tags
                 .iter()
-                .map(|id| id.to_be_bytes())
-                .flatten()
+                .flat_map(|id| id.to_be_bytes())
                 .collect();
             [
                 (self.team_tags.len() as u8).to_be_bytes().to_vec(),
@@ -101,8 +99,7 @@ impl CompactedFeedEvent {
             let game_tags: Vec<u8> = self
                 .game_tags
                 .iter()
-                .map(|id| id.to_be_bytes())
-                .flatten()
+                .flat_map(|id| id.to_be_bytes())
                 .collect();
             [
                 (self.game_tags.len() as u8).to_be_bytes().to_vec(),
@@ -300,8 +297,7 @@ impl CompactedFeedEvent {
             let player_tags: Vec<u8> = self
                 .player_tags
                 .iter()
-                .map(|id| id.to_be_bytes())
-                .flatten()
+                .flat_map(|id| id.to_be_bytes())
                 .collect();
             [
                 (self.player_tags.len() as u8).to_be_bytes().to_vec(),
@@ -314,8 +310,7 @@ impl CompactedFeedEvent {
             let team_tags: Vec<u8> = self
                 .team_tags
                 .iter()
-                .map(|id| id.to_be_bytes())
-                .flatten()
+                .flat_map(|id| id.to_be_bytes())
                 .collect();
             [
                 (self.team_tags.len() as u8).to_be_bytes().to_vec(),
@@ -328,8 +323,7 @@ impl CompactedFeedEvent {
             let game_tags: Vec<u8> = self
                 .game_tags
                 .iter()
-                .map(|id| id.to_be_bytes())
-                .flatten()
+                .flat_map(|id| id.to_be_bytes())
                 .collect();
             [
                 (self.game_tags.len() as u8).to_be_bytes().to_vec(),

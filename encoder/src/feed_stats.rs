@@ -3,15 +3,15 @@ use clap::clap_app;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use uuid::Uuid;
 
 // quick test program for analysing feed encoding sizes
 
 fn main() {
-    let mut feed_samples: Vec<u8> = Vec::new();
-    let mut feed_sample_lens: Vec<usize> = Vec::new();
+    let _feed_samples: Vec<u8> = Vec::new();
+    let _feed_sample_lens: Vec<usize> = Vec::new();
 
     let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
     let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
@@ -26,7 +26,7 @@ fn main() {
     )
     .get_matches();
 
-    let out_path = Path::new(matches.value_of("OUT").unwrap());
+    let _out_path = Path::new(matches.value_of("OUT").unwrap());
     let input_path = matches.value_of("INPUT").unwrap();
 
     let f = File::open(input_path).unwrap();
@@ -107,9 +107,9 @@ fn main() {
         tag_samples.push(tag_len);
     }
 
-    metadata_samples.sort();
-    description_samples.sort();
-    tag_samples.sort();
+    metadata_samples.sort_unstable();
+    description_samples.sort_unstable();
+    tag_samples.sort_unstable();
 
     println!(
         "average metadata length - {:.2}",

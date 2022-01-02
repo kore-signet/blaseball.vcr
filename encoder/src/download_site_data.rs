@@ -18,6 +18,10 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+use sha2::{Digest, Sha224};
+
+use bsdiff::diff::diff;
+
 #[derive(Deserialize)]
 pub struct Replace {
     replace: String,
@@ -47,7 +51,7 @@ pub fn encode_resource<W: Write + Seek>(
 
     let mut last: Vec<u8> = basis.clone();
 
-    let mut deltas: Vec<(u64, u64, String)> = Vec::new();
+    let mut deltas: Vec<PatchData> = Vec::new();
     let mut paths: Vec<(DateTime<Utc>, String, u16)> = Vec::new();
 
     let total_len = steps.len();
@@ -57,6 +61,9 @@ pub fn encode_resource<W: Write + Seek>(
         ProgressStyle::default_bar()
             .template("{pos}/{len:4} {bar:70.green/white} {percent:.bold}%"),
     );
+
+    let mut compressor = zstd::block::Compressor::new();
+    let mut hasher = Sha224::new();
 
     for step in progress_bar.wrap_iter(steps.into_iter()) {
         let next: Vec<u8> = {
@@ -71,18 +78,32 @@ pub fn encode_resource<W: Write + Seek>(
                 basis = basis.replace(&r.replace, &r.with);
             }
 
-            basis.as_bytes().to_vec()
+            basis.into_bytes()
         };
 
-        let delta = xdelta3::encode(&next, &last, 9i32 << 20i32).unwrap();
+        hasher.update(&next);
+        let hash = hasher.finalize_reset();
+
+        // let delta = xdelta3::encode(&next, &last, 9i32 << 20i32).unwrap();
+        let mut delta: Vec<u8> = Vec::new();
+        diff(&last, &next, &mut delta).unwrap();
+        let uncompressed_patch_length = delta.len() as u32;
+        delta = compressor.compress(&delta, 11).unwrap();
 
         last = next;
 
-        let offset_start = out.stream_position().map_err(VCRError::IOError)?;
-        out.write_all(&delta).map_err(VCRError::IOError)?;
-        let offset_end = out.stream_position().map_err(VCRError::IOError)?;
+        let offset_start = out.stream_position()?;
+        out.write_all(&delta)?;
+        let offset_end = out.stream_position()?;
 
-        deltas.push((offset_start, (offset_end - offset_start), step.hash));
+        deltas.push(PatchData {
+            offset: offset_start as u32,
+            compressed_patch_length: (offset_end - offset_start) as u32,
+            uncompressed_patch_length,
+            original_length: last.len() as u32,
+            hash: format!("{:x}", hash),
+        });
+
         let delta_idx = (deltas.len() - 1) as u16;
 
         for path in step.paths {

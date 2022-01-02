@@ -157,14 +157,13 @@ pub fn main() {
 
     let idx_ids: Vec<u8> = ids
         .into_iter()
-        .map(|(k, v)| {
+        .flat_map(|(k, v)| {
             vec![
                 k.as_bytes().to_vec(),
                 (v.0 | ((v.1 as u16) << 15)).to_be_bytes().to_vec(),
             ]
             .concat()
         })
-        .flatten()
         .collect();
 
     header_f
@@ -174,7 +173,7 @@ pub fn main() {
 
     let times: Vec<u8> = times
         .into_iter()
-        .map(|(time, start, len)| {
+        .flat_map(|(time, start, len)| {
             vec![
                 time.to_be_bytes().to_vec(),
                 start.to_be_bytes().to_vec(),
@@ -182,7 +181,6 @@ pub fn main() {
             ]
             .concat()
         })
-        .flatten()
         .collect();
 
     header_f.write_all(&times).unwrap();

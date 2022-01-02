@@ -14,6 +14,8 @@ integer-encoding = "3.0.2"
 clap = "2.33.3"
 indicatif = "0.17.0-beta.1"
 anyhow = "1"
+bsdiff = "0.1.6"
+sha2 = "0.9.8"
 
 [dependencies.blaseball_vcr]
 path = "../vcr_lib"
@@ -38,9 +40,6 @@ features = ["blocking","json","gzip","deflate"]
 [dependencies.serde]
 version = "1.0"
 features = ["derive"]
-
-[dependencies.xdelta3]
-git = "https://github.com/alisww/xdelta3-rs.git"
 
 [[bin]]
 name = "build_entities"

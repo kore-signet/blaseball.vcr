@@ -6,3 +6,4 @@ zstd_dictionaries = "./usr/share/blaseball-vcr/zstd-dictionaries/" # this is opt
 cors = true
 time_responses = false
 open_in_browser = false
+parallelize_stream_data = true

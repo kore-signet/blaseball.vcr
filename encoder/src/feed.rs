@@ -324,10 +324,10 @@ fn main() {
 
         let phase_idx_bytes = phase_idx
             .into_iter()
-            .map(|(k, v)| {
+            .flat_map(|(k, v)| {
                 let v_bytes = v
                     .into_iter()
-                    .map(|(time, (offset, length))| {
+                    .flat_map(|(time, (offset, length))| {
                         vec![
                             time.to_be_bytes().to_vec(),
                             offset.to_be_bytes().to_vec(),
@@ -335,7 +335,6 @@ fn main() {
                         ]
                         .concat()
                     })
-                    .flatten()
                     .collect::<Vec<u8>>();
                 vec![
                     ((k.0 - 10) | (k.1 << 4)).to_be_bytes().to_vec(),
@@ -344,7 +343,6 @@ fn main() {
                 ]
                 .concat()
             })
-            .flatten()
             .collect::<Vec<u8>>();
 
         idx_out

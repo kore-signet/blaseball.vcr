@@ -592,7 +592,7 @@ impl MultiDatabase {
                     .unwrap()
                     .to_str()
                     .unwrap()
-                    .split_once(".")
+                    .split_once('.')
                     .unwrap()
                     .0
                     .to_owned();
@@ -887,7 +887,7 @@ impl MultiDatabase {
 
         let all_matchups_ids: Vec<String> = all_rounds
             .iter()
-            .map(|x| {
+            .flat_map(|x| {
                 x["matchups"]
                     .as_array()
                     .unwrap_or(&Vec::new())
@@ -895,7 +895,6 @@ impl MultiDatabase {
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
-            .flatten()
             .collect();
 
         let all_matchups: Vec<JSONValue> = self
@@ -986,7 +985,7 @@ impl MultiDatabase {
 
         let subleague_ids: Vec<String> = leagues
             .iter()
-            .map(|x| {
+            .flat_map(|x| {
                 x["subleagues"]
                     .as_array()
                     .unwrap_or(&Vec::new())
@@ -994,7 +993,6 @@ impl MultiDatabase {
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
-            .flatten()
             .collect();
 
         let tiebreaker_ids: Vec<String> = leagues
@@ -1017,7 +1015,7 @@ impl MultiDatabase {
 
         let division_ids: Vec<String> = subleagues
             .iter()
-            .map(|x| {
+            .flat_map(|x| {
                 x["divisions"]
                     .as_array()
                     .unwrap_or(&Vec::new())
@@ -1025,7 +1023,6 @@ impl MultiDatabase {
                     .map(|x| x.as_str().unwrap().to_owned())
                     .collect::<Vec<String>>()
             })
-            .flatten()
             .collect();
 
         let mut divisions: Vec<JSONValue> = self

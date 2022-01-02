@@ -1,6 +1,7 @@
 use super::chron::*;
 use super::*;
 use crate::*;
+use bsdiff::patch::patch;
 use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs::{read_dir, File};
@@ -38,7 +39,7 @@ impl ResourceManager {
                     .unwrap()
                     .to_str()
                     .unwrap()
-                    .split_once(".")
+                    .split_once('.')
                     .unwrap()
                     .0
                     .to_owned();
@@ -87,14 +88,19 @@ impl ResourceManager {
         let header = &self.headers[name];
 
         let mut res: Vec<u8> = header.basis.clone();
+        let mut decompressor = zstd::block::Decompressor::new();
 
         for idx in 0..delta_idx + 1 {
-            let (offset, length, _) = header.deltas[idx as usize];
-            res = xdelta3::decode(
-                &delta_file[offset as usize..(offset + length) as usize],
-                &res,
-            )
-            .unwrap();
+            let metadata = &header.deltas[idx as usize];
+            let mut patch_data = io::Cursor::new(decompressor.decompress(
+                &delta_file[metadata.offset as usize
+                    ..(metadata.offset + metadata.compressed_patch_length) as usize],
+                metadata.uncompressed_patch_length as usize,
+            )?);
+
+            let mut patched = vec![0; metadata.original_length as usize];
+            patch(&res, &mut patch_data, &mut patched)?;
+            res = patched;
         }
 
         Ok(res)
@@ -103,14 +109,14 @@ impl ResourceManager {
     pub fn expand_site_updates(&self, base_url: &str) -> Vec<SiteUpdate> {
         self.headers
             .iter()
-            .map(|(key, resources)| {
+            .flat_map(|(key, resources)| {
                 resources
                     .paths
                     .iter()
                     .map(|(time, path, idx)| SiteUpdate {
                         timestamp: *time,
                         path: path.to_owned(),
-                        hash: resources.deltas[*idx as usize].2.clone(),
+                        hash: resources.deltas[*idx as usize].hash.clone(),
                         download_url: format!(
                             "{base_url}/{kind}/{idx}",
                             base_url = base_url,
@@ -120,7 +126,6 @@ impl ResourceManager {
                     })
                     .collect::<Vec<SiteUpdate>>()
             })
-            .flatten()
             .collect::<Vec<SiteUpdate>>()
     }
 }
