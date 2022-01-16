@@ -1,6 +1,6 @@
-FROM rust:1.56-slim-buster as builder
+FROM rust:1.58-slim-buster as builder
 
-RUN apt-get update; apt-get install -y --no-install-recommends llvm-dev libclang-dev clang libssl-dev pkg-config
+RUN apt-get update; apt-get install -y --no-install-recommends libssl-dev pkg-config
 
 WORKDIR /usr/src/vcr
 
@@ -10,7 +10,7 @@ COPY encoder ./encoder
 COPY Cargo.toml ./Cargo.toml
 COPY Cargo.lock ./Cargo.lock
 
-RUN cargo build --release --features bundle_before
+RUN SKIP_ASSET_BUILD=1 cargo build --release --features bundle_before
 
 FROM debian:buster-slim
 
