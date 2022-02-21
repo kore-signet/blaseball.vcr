@@ -176,7 +176,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "before"
 version = "0.2.0"
-source = "git+https://github.com/iliana/before.git?branch=main#167ea19c8d11c5248f868a02b04a95fcb647c1bc"
+source = "git+https://github.com/iliana/before.git?branch=main#ba6d32ac2288059c38e12473467b3665936cc6e5"
 dependencies = [
  "anyhow",
  "askama",
