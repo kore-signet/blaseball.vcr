@@ -176,7 +176,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "before"
 version = "0.2.0"
-source = "git+https://github.com/iliana/before.git?branch=main#0304c044b483542580bd2822589990fc3757a79c"
+source = "git+https://github.com/iliana/before.git?branch=main#167ea19c8d11c5248f868a02b04a95fcb647c1bc"
 dependencies = [
  "anyhow",
  "askama",
@@ -201,7 +201,7 @@ dependencies = [
  "textnonce",
  "time 0.3.4",
  "tokio",
- "tokio-util",
+ "tokio-util 0.7.0",
  "toml",
  "uuid",
  "zip",
@@ -960,7 +960,7 @@ dependencies = [
  "indexmap",
  "slab",
  "tokio",
- "tokio-util",
+ "tokio-util 0.6.8",
  "tracing",
 ]
 
@@ -1383,7 +1383,7 @@ dependencies = [
  "mime",
  "spin",
  "tokio",
- "tokio-util",
+ "tokio-util 0.6.8",
  "twoway",
  "version_check",
 ]
@@ -1936,7 +1936,7 @@ dependencies = [
  "serde_urlencoded",
  "tokio",
  "tokio-native-tls",
- "tokio-util",
+ "tokio-util 0.6.8",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1998,7 +1998,7 @@ dependencies = [
  "time 0.2.27",
  "tokio",
  "tokio-stream",
- "tokio-util",
+ "tokio-util 0.6.8",
  "ubyte",
  "version_check",
  "yansi",
@@ -2617,6 +2617,20 @@ name = "tokio-util"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d3725d3efa29485e87311c5b699de63cde14b00ed4d256b8318aa30ca452cd"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "log",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-util"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64910e1b9c1901aaf5375561e35b9c057d95ff41a44ede043a03e09279eabaf1"
 dependencies = [
  "bytes",
  "futures-core",
