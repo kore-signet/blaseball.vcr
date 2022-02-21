@@ -29,5 +29,5 @@ jobs:
           context: ./
           push: true
           tags: |
-            ghcr.io/alisww/blaseball_vcr
-            ghcr.io/alisww/blaseball_vcr:${{ github.sha }}
+            ghcr.io/allie-signet/blaseball_vcr
+            ghcr.io/allie-signet/blaseball_vcr:${{ github.sha }}
