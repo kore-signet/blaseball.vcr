@@ -6,7 +6,7 @@ use std::fs::{read_dir, File};
 use std::io::{self, prelude::*};
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use memmap2::{Mmap, MmapOptions};
 use serde_json::{json, value::RawValue, Value as JSONValue};
 use zstd::dict::DecoderDictionary;
@@ -814,22 +814,24 @@ impl MultiDatabase {
         Ok(results)
     }
 
-    pub fn games_with_date(&self, after: DateTime<Utc>) -> VCRResult<Vec<ChronV1Game>> {
-        let mut results = Vec::with_capacity(self.game_index.len());
-        for (date, games) in self.game_index.iter() {
-            for (game, start_time, end_time) in games {
-                if start_time.unwrap_or(Utc.timestamp(0, 0)) > after {
-                    results.push(ChronV1Game {
-                        game_id: game.to_owned(),
-                        start_time: *start_time,
-                        end_time: *end_time,
-                        data: json!(date),
-                    });
-                }
-            }
+    pub fn games_with_date(&self, d: &GameDate) -> Vec<ChronV1Game> {
+        if let Some((date, games)) = self
+            .game_index
+            .iter()
+            .find(|(date, _)| d.day == date.day && d.season == date.season)
+        {
+            games
+                .iter()
+                .map(|(game, start_time, end_time)| ChronV1Game {
+                    game_id: game.to_owned(),
+                    start_time: *start_time,
+                    end_time: *end_time,
+                    data: json!(date),
+                })
+                .collect()
+        } else {
+            Vec::new()
         }
-
-        Ok(results)
     }
 
     fn playoffs(&self, id: &str, round: Option<i64>, at: u32) -> VCRResult<JSONValue> {
