@@ -50,15 +50,25 @@ pub fn games(
     user_agent: UserAgent,
     db: &State<MultiDatabase>,
 ) -> VCRResult<RocketJson<ChroniclerV1Response<ChronV1Game>>> {
-    if user_agent.0.map_or(false, |v| {
-        // if user agent is before, return only the game dates, not the game data itself. this is because before only uses the date information, and fetch operations are costly.
-        v == "Before/1.0 (https://github.com/iliana/before; iliana@sibr.dev)"
-    }) {
-        Ok(RocketJson(ChroniclerV1Response {
-            next_page: None,
-            data: db.games_with_date(Utc.timestamp(0, 0))?,
-        }))
-    } else if let Some(req) = req {
+    if let Some(req) = req {
+        if user_agent.0.map_or(false, |v| {
+            // Before only requests v1/games to get a list of games by season/day, and when it does
+            // it only wants game IDs, start times, or game dates, but none of the rest of the game
+            // data. This avoids costly fetch operations.
+            v == "Before/1.0 (https://github.com/iliana/before; iliana@sibr.dev)"
+        }) && req.day.is_some()
+            && req.season.is_some()
+        {
+            return Ok(RocketJson(ChroniclerV1Response {
+                next_page: None,
+                data: db.games_with_date(&GameDate {
+                    day: req.day.unwrap_or_default(),
+                    season: req.season.unwrap_or_default(),
+                    tournament: None,
+                }),
+            }));
+        }
+
         let before = req.before.as_ref().map_or(chrono::MAX_DATETIME, |d| {
             DateTime::parse_from_rfc3339(d).unwrap().with_timezone(&Utc)
         });
