@@ -15,7 +15,9 @@ use std::path::Path;
 macro_rules! encode_index {
     ($idx:expr) => {
         $idx.into_iter()
-            .map(|(k, v)| {
+            .map(|(k, mut v)| {
+                v.sort_by_key(|(time, (_, _))| time.clone());
+
                 let v_bytes = v
                     .into_iter()
                     .map(|(time, (offset, length))| {

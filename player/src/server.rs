@@ -200,9 +200,10 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         .unwrap();
         blahaj.abort();
         println!();
-        rocket = rocket
-            .manage(feed_db)
-            .mount("/vcr", routes![player::feed::feed]);
+        rocket = rocket.manage(feed_db).mount(
+            "/vcr",
+            routes![player::feed::feed, player::feed::feed_count],
+        );
     }
 
     if config.time_responses.unwrap_or(false) {

@@ -67,3 +67,15 @@ pub struct FeedReq {
     #[field(name = "type")]
     pub etype: Option<i16>,
 }
+
+#[derive(Debug, FromForm)]
+pub struct EventuallyCountReq {
+    pub before: String,
+    pub after: String,
+    #[field(name = "type")]
+    pub etype: i16,
+    #[field(name = "playerTags")]
+    pub player_tags: Option<String>,
+    #[field(name = "teamTags")]
+    pub team_tags: Option<String>,
+}

@@ -11,3 +11,6 @@ dev/
 voyager_tapes/
 voyager_data
 correct_tapes/
+feed.json
+feed.json.zst
+container-tapes/

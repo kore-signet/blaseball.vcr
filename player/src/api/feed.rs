@@ -1,4 +1,4 @@
-use crate::types::FeedReq;
+use crate::types::{EventuallyCountReq, FeedReq};
 use blaseball_vcr::{feed::*, MultiDatabase, VCRError, VCRResult};
 use chrono::{DateTime, TimeZone, Utc};
 use rocket::{get, serde::json::Json as RocketJson, State};
@@ -94,4 +94,29 @@ pub fn library(
         )
         .unwrap(),
     ))
+}
+
+//api.sibr.dev/eventually/count?before=2021-04-08T19%3A00%3A08.47507619Z&after=2021-04-08T17%3A05%3A42.223899933Z&type=0
+#[get("/feed_count?<req..>")]
+pub fn feed_count(
+    feed: &State<FeedDatabase>,
+    req: EventuallyCountReq,
+) -> VCRResult<RocketJson<JSONValue>> {
+    let (tag_t, tag) = if let Some(u) = req.player_tags.and_then(|v| Uuid::parse_str(&v).ok()) {
+        (Some(TagType::Player), Some(u)) // wow! i hate this
+    } else if let Some(u) = req.team_tags.and_then(|v| Uuid::parse_str(&v).ok()) {
+        (Some(TagType::Team), Some(u))
+    } else {
+        (None, None)
+    };
+
+    Ok(RocketJson(serde_json::json!({
+        "count": feed.get_event_ids(
+        req.after.parse().unwrap(),
+        req.before.parse().unwrap(),
+        tag.as_ref(),
+        tag_t,
+        req.etype,
+    )?
+    .len()})))
 }

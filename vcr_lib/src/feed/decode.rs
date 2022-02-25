@@ -13,6 +13,15 @@ use std::path::Path;
 use uuid::Uuid;
 use zstd::dict::DecoderDictionary;
 
+macro_rules! into_ok_or_err {
+    ($e:expr) => {
+        match $e {
+            Ok(i) => i,
+            Err(i) => i,
+        }
+    };
+}
+
 fn make_offset_table<R: Read>(mut reader: R) -> Vec<(DateTime<Utc>, (u32, u16))> {
     let mut last_position: u64 = 0;
     let mut index: Vec<(DateTime<Utc>, (u32, u16))> = Vec::with_capacity(5110062);
@@ -638,5 +647,83 @@ impl FeedDatabase {
         events.reverse();
 
         Ok(events)
+    }
+
+    pub fn get_event_ids(
+        &self,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        tag: Option<&Uuid>,
+        tag_type: Option<TagType>,
+        etype: i16,
+    ) -> VCRResult<Vec<(u32, (u32, u16))>> {
+        let tag_slice: Option<&[(u32, (u32, u16))]> = if let Some(ref t) = tag_type {
+            // this is so deeply cursed
+            Some(match t {
+                TagType::Game => {
+                    let tag = *self
+                        .meta_index
+                        .reverse_game_tags
+                        .get(tag.unwrap())
+                        .ok_or(VCRError::EntityNotFound)?;
+
+                    let start_idx = into_ok_or_err!(self.event_index.game_index[&tag]
+                        .binary_search_by_key(&(from.timestamp() as u32), |&(t, _)| t));
+                    let end_idx = into_ok_or_err!(self.event_index.game_index[&tag]
+                        .binary_search_by_key(&(to.timestamp() as u32), |&(t, _)| t));
+                    &self.event_index.game_index[&tag][start_idx..end_idx]
+                }
+                TagType::Team => {
+                    let tag = *self
+                        .meta_index
+                        .reverse_team_tags
+                        .get(tag.unwrap())
+                        .ok_or(VCRError::EntityNotFound)?;
+
+                    let start_idx = into_ok_or_err!(self.event_index.team_index[&tag]
+                        .binary_search_by_key(&(from.timestamp() as u32), |&(t, _)| t));
+                    let end_idx = into_ok_or_err!(self.event_index.team_index[&tag]
+                        .binary_search_by_key(&(to.timestamp() as u32), |&(t, _)| t));
+                    &self.event_index.team_index[&tag][start_idx..end_idx]
+                }
+                TagType::Player => {
+                    let tag = *self
+                        .meta_index
+                        .reverse_player_tags
+                        .get(tag.unwrap())
+                        .ok_or(VCRError::EntityNotFound)?;
+
+                    let start_idx = into_ok_or_err!(self.event_index.player_index[&tag]
+                        .binary_search_by_key(&(from.timestamp() as u32), |&(t, _)| t));
+                    let end_idx = into_ok_or_err!(self.event_index.player_index[&tag]
+                        .binary_search_by_key(&(to.timestamp() as u32), |&(t, _)| t));
+                    &self.event_index.player_index[&tag][start_idx..end_idx]
+                }
+            })
+        } else {
+            None
+        };
+
+        // TODO: the contains here is *massively* inefficient and in need of fixing
+        let check_if_in_tag_index = |v| tag_slice.map_or(true, |t| t.contains(v));
+
+        let start_idx = match self.event_index.etype_index[&etype]
+            .binary_search_by_key(&(from.timestamp() as u32), |&(t, _)| t)
+        {
+            Ok(i) => i,
+            Err(i) => i,
+        };
+        let end_idx = match self.event_index.etype_index[&etype]
+            .binary_search_by_key(&(to.timestamp() as u32), |&(t, _)| t)
+        {
+            Ok(i) => i,
+            Err(i) => i,
+        };
+
+        Ok((&self.event_index.etype_index[&etype][start_idx..end_idx])
+            .iter()
+            .filter(|v| check_if_in_tag_index(v))
+            .copied()
+            .collect())
     }
 }
