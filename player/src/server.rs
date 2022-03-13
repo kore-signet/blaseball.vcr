@@ -14,9 +14,9 @@ use rocket::{
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
 
-use player::{types::*, v1, v2};
+use player::{types::*, v1, v2, RunState};
 
 use serde_json::value::RawValue;
 
@@ -99,8 +99,8 @@ async fn spinny(formatting: &str, msg: &str) {
     }
 }
 
-#[rocket::launch]
-async fn build_vcr() -> rocket::Rocket<rocket::Build> {
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
     #[derive(serde::Deserialize, Debug)]
     struct VCRConfig {
         tapes: String,
@@ -113,8 +113,10 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         cors: Option<bool>,
         stream_data_step: Option<u32>,
         parallelize_stream_data: Option<bool>,
-        #[cfg(feature = "bundle_before")]
-        open_in_browser: Option<bool>,
+        #[cfg(feature = "gui")]
+        gui: Option<bool>,
+        #[cfg(feature = "gui")]
+        gui_title: Option<String>,
     }
 
     #[derive(serde::Deserialize, Debug)]
@@ -171,6 +173,26 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
         HashMap::new()
     };
 
+    let (state_tx, state_rx) = mpsc::channel();
+
+    let ui_handle;
+    #[cfg(feature = "gui")]
+    {
+        if config.gui.unwrap_or(false) {
+            let title = config.gui_title.unwrap_or(String::from("blaseball.vcr"));
+            ui_handle =
+                rocket::tokio::task::spawn_blocking(|| player::gui::run_ui(state_rx, title));
+        } else {
+            ui_handle = rocket::tokio::task::spawn(async {});
+        }
+    }
+
+    #[cfg(not(feature = "gui"))]
+    {
+        ui_handle = rocket::tokio::task::spawn(async {});
+    }
+
+    state_tx.send(RunState::ReadingEntities).unwrap();
     let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading entities database"));
     let dbs = MultiDatabase::from_folder(
         PathBuf::from(config.tapes),
@@ -182,12 +204,14 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
 
     println!();
 
+    state_tx.send(RunState::ReadingSiteAssets).unwrap();
     let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading site assets"));
     let manager = ResourceManager::from_folder(&config.site_assets).unwrap();
     blahaj.abort();
     println!();
 
     if let Some(feed_config) = config.feed {
+        state_tx.send(RunState::ReadingFeed).unwrap();
         let blahaj = rocket::tokio::task::spawn(spinny("\x1b[1m", "reading feed data"));
         let feed_db = FeedDatabase::from_files(
             feed_config.index,
@@ -216,28 +240,7 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
     let cache: LruCache<String, InternalPaging<Box<RawValue>>> =
         LruCache::new(config.cached_page_capacity.unwrap_or(20));
 
-    #[cfg(feature = "bundle_before")]
-    if config.open_in_browser.unwrap_or(false) {
-        rocket = rocket.attach(rocket::fairing::AdHoc::on_liftoff("Open in browser", |r| {
-            Box::pin(async move {
-                let url = format!(
-                    "{}://{}:{}",
-                    if r.config().tls_enabled() {
-                        "https"
-                    } else {
-                        "http"
-                    },
-                    r.config().address,
-                    r.config().port,
-                );
-                if open::that(&url).is_err() {
-                    println!("Couldn't open before in default browser");
-                }
-            })
-        }));
-    }
-
-    rocket
+    let rocket = rocket
         .manage(dbs)
         .manage(manager)
         .manage(Mutex::new(cache))
@@ -254,4 +257,28 @@ async fn build_vcr() -> rocket::Rocket<rocket::Build> {
             "/vcr",
             routes![coffee, embed, cors_preflight, player::feed::library],
         )
+        .ignite()
+        .await?;
+
+    #[cfg(feature = "gui")]
+    {
+        if config.gui.unwrap_or(false) {
+            let (shutdown_handle, config) = (rocket.shutdown(), rocket.config().clone());
+            state_tx
+                .send(RunState::Running(config, Some(shutdown_handle)))
+                .unwrap();
+
+            rocket.launch().await?;
+            ui_handle.abort();
+        } else {
+            rocket.launch().await?;
+        }
+    }
+
+    #[cfg(not(feature = "gui"))]
+    {
+        rocket.launch().await?;
+    }
+
+    Ok(())
 }

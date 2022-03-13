@@ -122,8 +122,12 @@ pub fn main() -> VCRResult<()> {
         bars.set_draw_target(ProgressDrawTarget::stderr_with_hz(10));
 
         let spinny = bars.add(ProgressBar::new_spinner());
-        spinny.enable_steady_tick(120);
-        spinny.set_style(ProgressStyle::default_spinner().template("{spinner:.blue} {msg}"));
+        spinny.enable_steady_tick(std::time::Duration::from_millis(120));
+        spinny.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.blue} {msg}")
+                .unwrap(),
+        );
         spinny.set_message("fetching game list..");
 
         let games: Vec<Game> = paged_get::<Game>(
@@ -147,7 +151,8 @@ pub fn main() -> VCRResult<()> {
         let progress_bar = bars.add(ProgressBar::new(games.len() as u64));
         progress_bar.set_style(
             ProgressStyle::default_bar()
-                .template("{msg:.bold} {pos:>7}/{len:7} \n{percent:.bold}% {bar:70.green/white}"),
+                .template("{msg:.bold} {pos:>7}/{len:7} \n{percent:.bold}% {bar:70.green/white}")
+                .unwrap(),
         );
         progress_bar.tick();
 
@@ -194,6 +199,7 @@ pub fn main() -> VCRResult<()> {
             pb.set_style(
                 ProgressStyle::default_bar()
                     .template("{msg:.bold} [{bar:40.blue/cyan}] {pos:>7}/{len:7} ")
+                    .unwrap()
                     .progress_chars("##-"),
             );
 

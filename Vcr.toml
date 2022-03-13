@@ -7,6 +7,7 @@ cors = true
 time_responses = true
 open_in_browser = false
 parallelize_stream_data = false # make stream data fetching parallel
+gui = true
 
 # if you don't want to include feed support, just comment this bit out!
 [default.vcr.feed]

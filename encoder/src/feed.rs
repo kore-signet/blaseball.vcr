@@ -229,6 +229,7 @@ fn main() {
 
         let spinner_style = ProgressStyle::default_spinner()
             .template("{spinner:.blue} {msg}")
+            .unwrap()
             .tick_strings(&["-", "-"]);
 
         let feed_size_spinny = bars.add(ProgressBar::new_spinner());
@@ -240,6 +241,7 @@ fn main() {
         feed_progress_bar.set_style(
             ProgressStyle::default_bar()
                 .template("{percent}% [{bar:60.blue/cyan}] {pos:>7}/{len:7}")
+                .unwrap()
                 .progress_chars("##-"),
         );
         // bars.set_draw_target(indicatif::ProgressDrawTarget::hidden());
