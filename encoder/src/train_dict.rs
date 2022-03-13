@@ -32,8 +32,12 @@ async fn paged_get(
 
     let mut page = 1;
     let spinny = ProgressBar::new_spinner();
-    spinny.enable_steady_tick(120);
-    spinny.set_style(ProgressStyle::default_spinner().template("{spinner:.blue} {msg}"));
+    spinny.enable_steady_tick(std::time::Duration::from_millis(120));
+    spinny.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.blue} {msg}")
+            .unwrap(),
+    );
     loop {
         spinny.set_message(format!("downloading entities - page {}", page));
         let mut chron_response: ChroniclerResponse<ChroniclerEntity<JSONValue>> = client
@@ -82,7 +86,8 @@ pub async fn main() -> anyhow::Result<()> {
         .collect();
 
         let bar_style = ProgressStyle::default_bar()
-            .template("{msg:.bold} - {pos}/{len} {wide_bar:40.green/white}");
+            .template("{msg:.bold} - {pos}/{len} {wide_bar:40.green/white}")
+            .unwrap();
 
         let entity_id_bar = ProgressBar::new(entity_ids.len() as u64);
         entity_id_bar.set_style(bar_style.clone());

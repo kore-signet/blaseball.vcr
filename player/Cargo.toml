@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-bundle_before = ["before", "open"]
+gui = ["open", "fltk-egui"]
+bundle_before = ["before"]
 
 [dependencies]
 lru = "0.6.6"
@@ -35,6 +36,10 @@ features = ["derive"]
 
 [dependencies.open]
 version = "2"
+optional = true
+
+[dependencies.fltk-egui]
+version = "0.5"
 optional = true
 
 [dependencies.serde_json]

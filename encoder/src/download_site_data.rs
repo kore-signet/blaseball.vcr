@@ -59,7 +59,8 @@ pub fn encode_resource<W: Write + Seek>(
     let progress_bar = ProgressBar::new(total_len as u64);
     progress_bar.set_style(
         ProgressStyle::default_bar()
-            .template("{pos}/{len:4} {bar:70.green/white} {percent:.bold}%"),
+            .template("{pos}/{len:4} {bar:70.green/white} {percent:.bold}%")
+            .unwrap(),
     );
 
     let mut compressor = zstd::block::Compressor::new();
