@@ -3,7 +3,8 @@
 members = [
   "encoder",
   "vcr_lib",
-  "player"
+  "player",
+  "new-encoder"
 ]
 
 # [profile.release]

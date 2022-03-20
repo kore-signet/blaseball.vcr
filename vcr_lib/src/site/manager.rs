@@ -88,7 +88,7 @@ impl ResourceManager {
         let header = &self.headers[name];
 
         let mut res: Vec<u8> = header.basis.clone();
-        let mut decompressor = zstd::block::Decompressor::new();
+        let mut decompressor = zstd::bulk::Decompressor::new()?;
 
         for idx in 0..delta_idx + 1 {
             let metadata = &header.deltas[idx as usize];

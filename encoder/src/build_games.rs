@@ -210,7 +210,8 @@ pub fn main() -> VCRResult<()> {
             }
 
             s.spawn(move |_| {
-                let mut compressor = zstd::block::Compressor::with_dict(zstd_dict);
+                let mut compressor =
+                    zstd::bulk::Compressor::with_dictionary(compression_level, &zstd_dict).unwrap();
                 let loc_client = reqwest::blocking::Client::new();
                 for id in recvr.iter() {
                     let mut entity_versions: Vec<(u32, JSONValue)> = paged_get::<GameUpdate>(
@@ -238,12 +239,7 @@ pub fn main() -> VCRResult<()> {
                                 .into_iter()
                                 .map(|(t, v)| {
                                     pb.inc(1);
-                                    (
-                                        t,
-                                        compressor
-                                            .compress(&v.concat(), compression_level)
-                                            .unwrap(),
-                                    )
+                                    (t, compressor.compress(&v.concat()).unwrap())
                                 })
                                 .collect::<Vec<(u32, Vec<u8>)>>(),
                             path_map,

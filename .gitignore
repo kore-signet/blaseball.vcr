@@ -11,3 +11,8 @@ dev/
 voyager_tapes/
 voyager_data
 correct_tapes/
+prototype/
+vhs_tapes/
+vhs-dicts/
+etypes.txt
+game.schema

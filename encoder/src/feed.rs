@@ -191,15 +191,13 @@ fn main() {
             // Spawn workers in separate threads
             s.spawn(move |_| {
                 let mut feed_compressor = if let Some(dict) = zstd_dict {
-                    zstd::block::Compressor::with_dict(dict)
+                    zstd::bulk::Compressor::with_dictionary(compression_level, &dict).unwrap()
                 } else {
-                    zstd::block::Compressor::new()
+                    zstd::bulk::Compressor::new(compression_level).unwrap()
                 };
                 // Receive until channel closes
                 for event in recvr.iter() {
-                    let compressed_bytes = feed_compressor
-                        .compress(&event.encode(), compression_level)
-                        .unwrap();
+                    let compressed_bytes = feed_compressor.compress(&event.encode()).unwrap();
                     sendr.send((event, compressed_bytes)).unwrap();
                 }
             });

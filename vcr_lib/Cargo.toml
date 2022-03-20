@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 json-patch = "0.2.6"
 rmp-serde = "0.15.5"
-zstd = "0.9"
 lru = "0.6.6"
 sha2 = "0.9.8"
 thiserror = "1.0"
@@ -16,6 +15,17 @@ moka = "0.6.1"
 anyhow = "1.0"
 rayon = "1.5.1"
 bsdiff = "0.1.6"
+vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
+easybench = "1.1.0"
+crossbeam = "0.8"
+automod = "1"
+num_cpus = "1.13.1"
+type-map = "0.5.0"
+tempfile = "3.3.0"
+
+[dependencies.zstd]
+version = "0.11"
+features = ["experimental", "zdict_builder"]
 
 [dependencies.rocket]
 version = "0.5.0-rc.1"

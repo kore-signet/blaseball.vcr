@@ -31,6 +31,10 @@ pub enum VCRError {
     UTF8Error(#[from] std::string::FromUtf8Error),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
+    #[error("error occurred inside parallel processing block")]
+    ParallelError,
+    #[error("missing data required from streamdata construction")]
+    MissingRequiredStreamData,
 }
 
 use rocket::{

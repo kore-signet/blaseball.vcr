@@ -100,9 +100,9 @@ pub async fn main() -> VCRResult<()> {
         let mut dict_f = File::open(&dict_path).map_err(VCRError::IOError)?;
         let mut dict: Vec<u8> = Vec::new();
         dict_f.read_to_end(&mut dict).map_err(VCRError::IOError)?;
-        zstd::block::Compressor::with_dict(dict)
+        zstd::bulk::Compressor::with_dictionary(compression_level, &dict)?
     } else {
-        zstd::block::Compressor::new()
+        zstd::bulk::Compressor::new(compression_level)?
     };
 
     for etype in entity_types {
@@ -200,12 +200,8 @@ pub async fn main() -> VCRResult<()> {
                     .unwrap();
 
                 let patch_bytes = patch.concat();
-                out.write_all(
-                    &patch_compressor
-                        .compress(&patch_bytes, compression_level)
-                        .unwrap(),
-                )
-                .unwrap();
+                out.write_all(&patch_compressor.compress(&patch_bytes).unwrap())
+                    .unwrap();
 
                 last_position = start_pos;
             }

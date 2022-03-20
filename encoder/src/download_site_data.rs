@@ -63,7 +63,7 @@ pub fn encode_resource<W: Write + Seek>(
             .unwrap(),
     );
 
-    let mut compressor = zstd::block::Compressor::new();
+    let mut compressor = zstd::bulk::Compressor::new(11)?;
     let mut hasher = Sha224::new();
 
     for step in progress_bar.wrap_iter(steps.into_iter()) {
@@ -89,7 +89,7 @@ pub fn encode_resource<W: Write + Seek>(
         let mut delta: Vec<u8> = Vec::new();
         diff(&last, &next, &mut delta).unwrap();
         let uncompressed_patch_length = delta.len() as u32;
-        delta = compressor.compress(&delta, 11).unwrap();
+        delta = compressor.compress(&delta).unwrap();
 
         last = next;
 
