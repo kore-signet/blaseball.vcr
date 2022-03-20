@@ -95,17 +95,17 @@ pub trait EntityDatabase {
         ids: &[[u8; 16]],
         at: u32,
     ) -> VCRResult<Vec<Option<(u32, Self::Record)>>> {
-        ids.into_iter()
+        ids.iter()
             .map(|id| self.get_entity(id, at))
             .collect::<VCRResult<Vec<Option<(u32, Self::Record)>>>>()
     }
 
-    // fn get_versions(
-    //     &self,
-    //     id: &[u8; 16],
-    //     before: u32,
-    //     after: u32,
-    // ) -> VCRResult<Option<Vec<Self::Record>>>;
+    fn get_versions(
+        &self,
+        id: &[u8; 16],
+        before: u32,
+        after: u32,
+    ) -> VCRResult<Option<Vec<Self::Record>>>;
 
     fn all_ids(&self) -> &[[u8; 16]];
 }

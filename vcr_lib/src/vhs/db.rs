@@ -217,146 +217,142 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         Ok(None)
     }
 
-    // pub fn get_versions_inner(
-    //     &self,
-    //     id: &[u8; 16],
-    //     before: u32,
-    //     after: u32,
-    // ) -> VCRResult<Option<Vec<T>>> {
-    //     if let Some(header) = self.index.get(id) {
-    //         let end_index = match header.times.binary_search(&before) {
-    //             Ok(i) => i,
-    //             Err(i) => {
-    //                 if i > 0 {
-    //                     i - 1
-    //                 } else {
-    //                     i
-    //                 }
-    //             }
-    //         };
+    fn get_versions_inner(
+        &self,
+        id: &[u8; 16],
+        before: u32,
+        after: u32,
+        decompressor: &mut Decompressor,
+    ) -> VCRResult<Option<Vec<T>>> {
+        if let Some(header) = self.index.get(id) {
+            let end_index = match header.times.binary_search(&before) {
+                Ok(i) => i,
+                Err(i) => {
+                    if i > 0 {
+                        i - 1
+                    } else {
+                        i
+                    }
+                }
+            };
 
-    //         let start_index = match header.times.binary_search(&after) {
-    //             Ok(i) => i,
-    //             Err(i) => {
-    //                 if i > 0 {
-    //                     i - 1
-    //                 } else {
-    //                     i
-    //                 }
-    //             }
-    //         };
+            let start_index = match header.times.binary_search(&after) {
+                Ok(i) => i,
+                Err(i) => {
+                    if i > 0 {
+                        i - 1
+                    } else {
+                        i
+                    }
+                }
+            };
 
-    //         let start_checkpoint =
-    //             (start_index - (start_index % header.checkpoint_every)) / header.checkpoint_every;
-    //         let end_checkpoint =
-    //             (end_index - (end_index % header.checkpoint_every)) / header.checkpoint_every;
+            let start_checkpoint =
+                (start_index - (start_index % header.checkpoint_every)) / header.checkpoint_every;
+            let end_checkpoint =
+                (end_index - (end_index % header.checkpoint_every)) / header.checkpoint_every;
 
-    //         let data = &self.inner
-    //             [header.offset as usize..(header.offset + header.compressed_len) as usize];
-    //         let decompressed = self
-    //             .decompressor()?
-    //             .decompress(&data, header.decompressed_len as usize)?;
+            let data = &self.inner
+                [header.offset as usize..(header.offset + header.compressed_len) as usize];
+            let decompressed = decompressor.decompress(data, header.decompressed_len as usize)?;
 
-    //         let range = start_index..(end_index.checked_sub(1).unwrap_or(0));
+            let mut out = Vec::with_capacity(end_index - start_index);
 
-    //         println!("{}, {}", start_checkpoint, end_checkpoint);
+            // if the versions are in a single checkpoint range, we can just return that.
+            if start_checkpoint == end_checkpoint {
+                let start_index = start_index % header.checkpoint_every;
+                let end_index = end_index % header.checkpoint_every;
 
-    //         let mut vec = Vec::new();
+                let range = start_index..end_index;
 
-    //         self.get_version_range(&header, &mut vec, 0, 0..9, &decompressed[..])?;
-    //         println!("{}", vec.len());
-    //         println!("{}", serde_json::to_string_pretty(&vec).unwrap());
-    //     }
+                self.get_version_range(
+                    header,
+                    &mut out,
+                    start_checkpoint,
+                    range,
+                    &decompressed[..],
+                )?;
+            // else, if the versions are spread across two consecutive ranges,
+            } else if start_checkpoint + 1 == end_checkpoint {
+                // we deserialize the first range, sliced from the starting index to it's end
+                let start_index = start_index % header.checkpoint_every;
+                let range = start_index..usize::MAX;
+                self.get_version_range(
+                    header,
+                    &mut out,
+                    start_checkpoint,
+                    range,
+                    &decompressed[..],
+                )?;
 
-    //     Ok(None)
-    // }
+                // then, we get the ending range, sliced from it's start to the end index
+                let end_index = end_index % header.checkpoint_every;
+                let range = 0..end_index;
+                self.get_version_range(header, &mut out, end_checkpoint, range, &decompressed[..])?
+            // else, if the versions are spread across multiple checkpoint ranges
+            } else if end_checkpoint > start_checkpoint {
+                // we make an iterator of all the indices
+                let middle_checkpoint_indices = start_checkpoint + 1..=end_checkpoint - 1;
 
-    // fn get_version_range(
-    //     &self,
-    //     header: &DataHeader,
-    //     out: &mut Vec<T>,
-    //     checkpoint_index: usize,
-    //     range: Range<usize>,
-    //     decompressed: &[u8],
-    // ) -> VCRResult<()> {
-    //     let slice = if let Some(start_pos) = header.checkpoint_positions.get(checkpoint_index) {
-    //         if let Some(next) = header.checkpoint_positions.get(start_pos + 1) {
-    //             &decompressed[*start_pos..*next]
-    //         } else {
-    //             &decompressed[*start_pos..]
-    //         }
-    //     } else {
-    //         &decompressed[..]
-    //     };
+                // we get the first range
+                let start_index = start_index % header.checkpoint_every;
+                let range = start_index..usize::MAX;
+                self.get_version_range(
+                    header,
+                    &mut out,
+                    start_checkpoint,
+                    range,
+                    &decompressed[..],
+                )?;
 
-    //     let mut deserializer = rmp_serde::Deserializer::from_read_ref(slice);
-    //     let mut cur = T::deserialize(&mut deserializer)?;
+                // we apply all the middle ranges fully
+                for check_idx in middle_checkpoint_indices {
+                    self.get_version_range(
+                        header,
+                        &mut out,
+                        check_idx,
+                        0..usize::MAX,
+                        &decompressed[..],
+                    )?;
+                }
 
-    //     if range.contains(&0) {
-    //         out.push(cur.clone());
-    //     }
+                // we apply the last range
+                let end_index = end_index % header.checkpoint_every;
+                let range = 0..end_index + 1;
+                self.get_version_range(header, &mut out, end_checkpoint, range, &decompressed[..])?
+            }
 
-    //     PatchesToVec::apply_range(cur, out, range, &mut deserializer)?;
+            return Ok(Some(out));
+        }
 
-    //     Ok(())
-    // }
+        Ok(None)
+    }
 
-    // fn get_versions_inner(
-    //     &self,
-    //     id: &[u8; 16],
-    //     before: u32,
-    //     after: u32,
-    //     decompressor: &mut Decompressor,
-    // ) -> VCRResult<Option<Vec<T>>> {
-    // if let Some(header) = self.index.get(id) {
-    //     let end_index = match header.times.binary_search(&before) {
-    //         Ok(i) => i,
-    //         Err(i) => {
-    //             if i > 0 {
-    //                 i - 1
-    //             } else {
-    //                 i
-    //             }
-    //         }
-    //     };
+    fn get_version_range(
+        &self,
+        header: &DataHeader,
+        out: &mut Vec<T>,
+        checkpoint_index: usize,
+        range: Range<usize>,
+        decompressed: &[u8],
+    ) -> VCRResult<()> {
+        let slice = if let Some(start_pos) = header.checkpoint_positions.get(checkpoint_index) {
+            if let Some(next) = header.checkpoint_positions.get(start_pos + 1) {
+                &decompressed[*start_pos..*next]
+            } else {
+                &decompressed[*start_pos..]
+            }
+        } else {
+            &decompressed
+        };
 
-    //     let start_index = match header.times.binary_search(&after) {
-    //         Ok(i) => i,
-    //         Err(i) => {
-    //             if i > 0 {
-    //                 i - 1
-    //             } else {
-    //                 i
-    //             }
-    //         }
-    //     };
+        let mut deserializer = rmp_serde::Deserializer::from_read_ref(slice);
+        let cur = T::deserialize(&mut deserializer)?;
 
-    // let range = start_index..(end_index.checked_sub(1).unwrap_or(0));
+        PatchesToVec::apply_range(cur, out, range, &mut deserializer)?;
 
-    // let mut versions = Vec::with_capacity(range.len());
-
-    //         if start_index == 0 {
-    //             versions.push(header.starter.clone());
-    //         }
-
-    // let data = &self.inner
-    //     [header.offset as usize..(header.offset + header.compressed_len) as usize];
-    // let decompressed = decompressor.decompress(&data, header.decompressed_len as usize)?;
-
-    // let mut deserializer = rmp_serde::Deserializer::from_read_ref(&decompressed[..]);
-
-    //         PatchesToVec::apply_range(
-    //             header.starter.clone(),
-    //             &mut versions,
-    //             range,
-    //             &mut deserializer,
-    //         )?;
-
-    //         Ok(Some(versions))
-    //     } else {
-    //         Ok(None)
-    //     }
-    // }
+        Ok(())
+    }
 }
 
 impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize> EntityDatabase
@@ -382,11 +378,11 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
         self.get_entities_parallel(ids, at)
     }
 
-    // fn get_versions(&self, id: &[u8; 16], before: u32, after: u32) -> VCRResult<Option<Vec<T>>> {
-    //     let mut decompressor = self.decompressor()?;
+    fn get_versions(&self, id: &[u8; 16], before: u32, after: u32) -> VCRResult<Option<Vec<T>>> {
+        let mut decompressor = self.decompressor()?;
 
-    //     self.get_versions_inner(id, before, after, &mut decompressor)
-    // }
+        self.get_versions_inner(id, before, after, &mut decompressor)
+    }
 
     fn all_ids(&self) -> &[[u8; 16]] {
         &self.id_list
