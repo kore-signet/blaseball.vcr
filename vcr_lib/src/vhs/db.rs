@@ -343,7 +343,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 &decompressed[*start_pos..]
             }
         } else {
-            &decompressed
+            decompressed
         };
 
         let mut deserializer = rmp_serde::Deserializer::from_read_ref(slice);

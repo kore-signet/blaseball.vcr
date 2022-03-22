@@ -22,6 +22,12 @@ automod = "1"
 num_cpus = "1.13.1"
 type-map = "0.5.0"
 tempfile = "3.3.0"
+phf = "0.10.1"
+
+[dependencies.rkyv]
+version = "0.7.36"
+default-features = false
+features = ["archive_le", "size_16", "std", "uuid", "uuid_std"]
 
 [dependencies.zstd]
 version = "0.11"

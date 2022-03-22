@@ -1,74 +1,32 @@
 [package]
-name = "encoder"
+name = "new-encoder"
 version = "0.1.0"
 edition = "2021"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
-json-patch = "0.2.6"
-serde_json = "1.0.64"
-rmp-serde = "0.15.5"
-zstd = "0.11"
-crossbeam = "0.8.1"
-toml = "0.5.8"
+chrono = { version = "0.4", features = ["serde"] }
+zstd = { version = "0.11", features = ["experimental", "zdict_builder"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1.0.64", features = ["raw_value"] }
+anyhow = "1"
+uuid = "0.8.2"
+memmap2 = "0.5.3"
+blaseball_vcr = { path = "../vcr_lib" }
+indicatif = "0.17.0-beta.1"
 integer-encoding = "3.0.2"
 clap = "2.33.3"
-indicatif = "0.17.0-beta.1"
-anyhow = "1"
-bsdiff = "0.1.6"
-sha2 = "0.9.8"
+tempfile = "3.3.0"
+vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
+phf_codegen = "0.10.0"
+itertools = "0.10"
 
-[dependencies.blaseball_vcr]
-path = "../vcr_lib"
-
-[dependencies.uuid]
-version = "0.8.2"
-features = ["serde"]
-
+[dependencies.reqwest]
+version = "0.11"
+default-features = false
+features = ["json", "blocking", "rustls-tls"]
 
 [dependencies.tokio]
 version = "1"
 features = ["macros"]
-
-[dependencies.chrono]
-version = "0.4"
-features = ["serde"]
-
-[dependencies.reqwest]
-version = "0.11.4"
-features = ["blocking","json","gzip","deflate"]
-
-[dependencies.serde]
-version = "1.0"
-features = ["derive"]
-
-[[bin]]
-name = "build_entities"
-path = "src/build_entities.rs"
-
-[[bin]]
-name = "build_games"
-path = "src/build_games.rs"
-
-[[bin]]
-name = "download_site_data"
-path = "src/download_site_data.rs"
-
-[[bin]]
-name = "encode_feed"
-path = "src/feed.rs"
-
-[[bin]]
-name = "train_dict"
-path = "src/train_dict.rs"
-
-[[bin]]
-name = "train_feed_dict"
-path = "src/train_feed_dict.rs"
-
-[[bin]]
-name = "tributes"
-path = "src/tributes.rs"
-
-[[bin]]
-name = "feed_stats"
-path = "src/feed_stats.rs"

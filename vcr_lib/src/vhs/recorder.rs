@@ -28,7 +28,6 @@ impl<T> From<Vec<ChroniclerEntity<T>>> for TapeEntity<T> {
     }
 }
 
-// todo: use erased serde here maybe
 pub struct TapeRecorder<T: Serialize + Clone + Patch + Diff + Send + Sync, H: Write, M: Write> {
     header_out: H,
     patch_out: M,

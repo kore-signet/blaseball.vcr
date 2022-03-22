@@ -1,10 +1,9 @@
 [workspace]
 
 members = [
-  "encoder",
   "vcr_lib",
   "player",
-  "new-encoder"
+  "encoder"
 ]
 
 # [profile.release]

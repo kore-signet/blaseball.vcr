@@ -1,11 +1,9 @@
-use super::{metadata as feed_metadata, EventDescription};
-use crate::utils::encode_varint;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use serde_json::Value as JSONValue;
+use super::lookup_tables::*;
+use chrono::{DateTime, TimeZone, Utc};
+use std::ops::Deref;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FeedEvent {
     pub id: Uuid,
@@ -24,474 +22,177 @@ pub struct FeedEvent {
     pub tournament: i8,
     pub season: u8,
     #[serde(default)]
-    pub metadata: JSONValue,
+    pub metadata: Option<Box<serde_json::value::RawValue>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(rkyv::Archive, rkyv::Serialize)]
+#[archive_attr(derive(Debug))]
 pub struct CompactedFeedEvent {
-    pub id: Uuid,
-    pub created: DateTime<Utc>,
+    pub id: Option<Uuid>,
     pub category: i8,
     pub day: u8,
     pub description: String,
-    #[serde(default)]
     pub player_tags: Vec<u16>,
     pub game_tags: Vec<u16>,
     pub team_tags: Vec<u8>,
-    #[serde(rename = "type")]
     pub etype: i16,
     pub tournament: i8,
-    #[serde(default)]
-    pub metadata: JSONValue,
+    pub metadata: Option<String>,
     pub season: u8,
     pub phase: u8,
 }
 
-impl FeedEvent {
-    pub fn generate_id(&self, millis_epoch: Option<u32>) -> Vec<u8> {
-        let timestamp = match millis_epoch {
-            Some(epoch) => {
-                let epoch = (epoch as i64) * 1000;
-                (self.created.timestamp_millis() - epoch) as u32
-            }
-            None => self.created.timestamp() as u32,
-        };
-        [
-            self.season.to_be_bytes().to_vec(),
-            self.phase.to_be_bytes().to_vec(),
-            timestamp.to_be_bytes().to_vec(),
-            self.id.as_bytes()[0..2].to_vec(),
-        ]
-        .concat()
+impl CompactedFeedEvent {
+    pub fn convert(ev: FeedEvent) -> CompactedFeedEvent {
+        CompactedFeedEvent {
+            id: if ev.phase == 13 { Some(ev.id) } else { None },
+            category: ev.category,
+            day: ev.day.try_into().unwrap_or(255),
+            etype: ev.etype,
+            tournament: ev.tournament,
+            season: ev.season,
+            phase: ev.phase,
+            description: ev.description,
+            metadata: ev.metadata.map(|v| v.get().to_owned()),
+            player_tags: ev
+                .player_tags
+                .unwrap_or_default()
+                .into_iter()
+                .map(|id| UUID_TO_PLAYER[id.as_bytes()])
+                .collect(),
+            game_tags: ev
+                .game_tags
+                .unwrap_or_default()
+                .into_iter()
+                .map(|id| UUID_TO_GAME[id.as_bytes()])
+                .collect(),
+            team_tags: ev
+                .team_tags
+                .unwrap_or_default()
+                .into_iter()
+                .map(|id| UUID_TO_TEAM[id.as_bytes()])
+                .collect(),
+        }
     }
 }
 
-impl CompactedFeedEvent {
-    pub fn encode(&self) -> Vec<u8> {
-        let player_tag_bytes: Vec<u8> = {
-            let player_tags: Vec<u8> = self
-                .player_tags
-                .iter()
-                .flat_map(|id| id.to_be_bytes())
-                .collect();
-            [
-                (self.player_tags.len() as u8).to_be_bytes().to_vec(),
-                player_tags,
-            ]
-            .concat()
-        };
+// a simple wrapper around a the archived version that allows for serialization, and adds the event timestamp timestamp
+pub struct ArchivedEventWithTimestamp<'a> {
+    created: u64,
+    inner: &'a ArchivedCompactedFeedEvent,
+}
 
-        let team_tag_bytes: Vec<u8> = {
-            let team_tags: Vec<u8> = self
-                .team_tags
-                .iter()
-                .flat_map(|id| id.to_be_bytes())
-                .collect();
-            [
-                (self.team_tags.len() as u8).to_be_bytes().to_vec(),
-                team_tags,
-            ]
-            .concat()
-        };
-
-        let game_tag_bytes: Vec<u8> = {
-            let game_tags: Vec<u8> = self
-                .game_tags
-                .iter()
-                .flat_map(|id| id.to_be_bytes())
-                .collect();
-            [
-                (self.game_tags.len() as u8).to_be_bytes().to_vec(),
-                game_tags,
-            ]
-            .concat()
-        };
-
-        let description_bytes = {
-            match EventDescription::from_type(self.etype) {
-                EventDescription::Constant(s) => {
-                    assert_eq!(self.description, s);
-                    vec![]
-                }
-                EventDescription::ConstantVariant(possibilities) => {
-                    vec![(possibilities
-                        .iter()
-                        .position(|&d| d == self.description)
-                        .unwrap_or_else(|| panic!("{}", self.etype))
-                        as u8)
-                        .to_be()]
-                }
-                EventDescription::ConstantMiddle(m) => {
-                    let (start, end) = self.description.split_once(m).unwrap();
-                    let (start, end) = (start.as_bytes().to_vec(), end.as_bytes().to_vec());
-
-                    [
-                        encode_varint(start.len() as u16),
-                        encode_varint(end.len() as u16),
-                        start,
-                        end,
-                    ]
-                    .concat()
-                }
-                EventDescription::VariableMiddle(possible_m) => {
-                    match possible_m
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, m)| {
-                            let maybe = self.description.split_once(m);
-                            if let Some((start, end)) = maybe {
-                                let (start, end) =
-                                    (start.as_bytes().to_vec(), end.as_bytes().to_vec());
-                                Some(
-                                    [
-                                        (i as u8).to_be_bytes().to_vec(),
-                                        encode_varint(start.len() as u16),
-                                        encode_varint(end.len() as u16),
-                                        start,
-                                        end,
-                                    ]
-                                    .concat(),
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                    {
-                        Some(bytes) => bytes,
-                        None => {
-                            let bytes = self.description.as_bytes().to_vec();
-                            [
-                                ((possible_m.len() + 1) as u8).to_be_bytes().to_vec(),
-                                encode_varint(bytes.len() as u16),
-                                bytes,
-                            ]
-                            .concat()
-                        }
-                    }
-                }
-                EventDescription::VariablePrefix(possible_pfx) => {
-                    match possible_pfx
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, pfx)| {
-                            let maybe = self.description.strip_prefix(pfx);
-                            if let Some(rest) = maybe {
-                                let rest = rest.as_bytes().to_vec();
-                                Some(
-                                    [
-                                        (i as u8).to_be_bytes().to_vec(),
-                                        encode_varint(rest.len() as u16),
-                                        rest,
-                                    ]
-                                    .concat(),
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                    {
-                        Some(bytes) => bytes,
-                        None => {
-                            let bytes = self.description.as_bytes().to_vec();
-                            [
-                                ((possible_pfx.len() + 1) as u8).to_be_bytes().to_vec(),
-                                encode_varint(bytes.len() as u16),
-                                bytes,
-                            ]
-                            .concat()
-                        }
-                    }
-                }
-                EventDescription::VariableSuffix(possible_sfx) => {
-                    match possible_sfx
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, sfx)| {
-                            let maybe = self.description.strip_suffix(sfx);
-                            if let Some(rest) = maybe {
-                                let rest = rest.as_bytes().to_vec();
-                                Some(
-                                    [
-                                        (i as u8).to_be_bytes().to_vec(),
-                                        encode_varint(rest.len() as u16),
-                                        rest,
-                                    ]
-                                    .concat(),
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                    {
-                        Some(bytes) => bytes,
-                        None => {
-                            let bytes = self.description.as_bytes().to_vec();
-                            [
-                                ((possible_sfx.len() + 1) as u8).to_be_bytes().to_vec(),
-                                encode_varint(bytes.len() as u16),
-                                bytes,
-                            ]
-                            .concat()
-                        }
-                    }
-                }
-                EventDescription::Suffix(s) => {
-                    let description = self
-                        .description
-                        .strip_suffix(s)
-                        .unwrap()
-                        .as_bytes()
-                        .to_vec();
-                    [encode_varint(description.len() as u16), description].concat()
-                }
-                EventDescription::Prefix(s) => {
-                    let description = self
-                        .description
-                        .strip_prefix(s)
-                        .unwrap()
-                        .as_bytes()
-                        .to_vec();
-                    [encode_varint(description.len() as u16), description].concat()
-                }
-                EventDescription::Variable => {
-                    let description = self.description.as_bytes().to_vec();
-                    [encode_varint(description.len() as u16), description].concat()
-                }
-            }
-        };
-
-        // println!(
-        //     "type: {}, tags: {}, description: {}",
-        //     self.etype,
-        //     team_tag_bytes.len() + game_tag_bytes.len() + player_tag_bytes.len(),
-        //     description_bytes.len()
-        // );
-
-        [
-            self.category.to_be_bytes().to_vec(), // 1 byte
-            self.etype.to_be_bytes().to_vec(),    // 2 bytes
-            self.day.to_be_bytes().to_vec(),      // 1 byte
-            ((self.season - 10) | (self.phase << 4)) // 1 byte
-                .to_be_bytes()
-                .to_vec(),
-            if self.phase == 13 {
-                self.id.as_bytes().to_vec() // 16 bytes or none
-            } else {
-                vec![]
-            },
-            description_bytes, // <length> bytes
-            player_tag_bytes,  // n * 2 bytes
-            team_tag_bytes,    // n bytes
-            game_tag_bytes,    // n * 2 bytes
-            feed_metadata::encode_metadata(self.etype, &self.metadata), // usually 3 bytes
-        ]
-        .concat()
+impl<'a> ArchivedEventWithTimestamp<'a> {
+    pub fn new(
+        created: u64,
+        inner: &'a ArchivedCompactedFeedEvent,
+    ) -> ArchivedEventWithTimestamp<'a> {
+        ArchivedEventWithTimestamp { created, inner }
     }
+}
 
-    pub fn encode_stats(&self) -> (usize, usize, usize) {
-        let player_tag_bytes: Vec<u8> = {
-            let player_tags: Vec<u8> = self
-                .player_tags
-                .iter()
-                .flat_map(|id| id.to_be_bytes())
-                .collect();
-            [
-                (self.player_tags.len() as u8).to_be_bytes().to_vec(),
-                player_tags,
-            ]
-            .concat()
-        };
+impl<'a> Deref for ArchivedEventWithTimestamp<'a> {
+    type Target = ArchivedCompactedFeedEvent;
 
-        let team_tag_bytes: Vec<u8> = {
-            let team_tags: Vec<u8> = self
-                .team_tags
-                .iter()
-                .flat_map(|id| id.to_be_bytes())
-                .collect();
-            [
-                (self.team_tags.len() as u8).to_be_bytes().to_vec(),
-                team_tags,
-            ]
-            .concat()
-        };
+    fn deref(&self) -> &Self::Target {
+        self.inner
+    }
+}
 
-        let game_tag_bytes: Vec<u8> = {
-            let game_tags: Vec<u8> = self
-                .game_tags
-                .iter()
-                .flat_map(|id| id.to_be_bytes())
-                .collect();
-            [
-                (self.game_tags.len() as u8).to_be_bytes().to_vec(),
-                game_tags,
-            ]
-            .concat()
-        };
+impl<'a> serde::Serialize for ArchivedEventWithTimestamp<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use rkyv::rend::LittleEndian;
+        use serde::ser::{Serialize, SerializeSeq, SerializeStruct, Serializer};
 
-        let description_bytes = {
-            match EventDescription::from_type(self.etype) {
-                EventDescription::Constant(s) => {
-                    assert_eq!(self.description, s);
-                    vec![]
-                }
-                EventDescription::ConstantVariant(possibilities) => {
-                    vec![(possibilities
-                        .iter()
-                        .position(|&d| d == self.description)
-                        .unwrap_or_else(|| panic!("{}", self.etype))
-                        as u8)
-                        .to_be()]
-                }
-                EventDescription::ConstantMiddle(m) => {
-                    let (start, end) = self.description.split_once(m).unwrap();
-                    let (start, end) = (start.as_bytes().to_vec(), end.as_bytes().to_vec());
+        #[repr(transparent)]
+        struct RawValueWrapper<'a>(&'a str);
 
-                    [
-                        encode_varint(start.len() as u16),
-                        encode_varint(end.len() as u16),
-                        start,
-                        end,
-                    ]
-                    .concat()
-                }
-                EventDescription::VariableMiddle(possible_m) => {
-                    match possible_m
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, m)| {
-                            let maybe = self.description.split_once(m);
-                            if let Some((start, end)) = maybe {
-                                let (start, end) =
-                                    (start.as_bytes().to_vec(), end.as_bytes().to_vec());
-                                Some(
-                                    [
-                                        (i as u8).to_be_bytes().to_vec(),
-                                        encode_varint(start.len() as u16),
-                                        encode_varint(end.len() as u16),
-                                        start,
-                                        end,
-                                    ]
-                                    .concat(),
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                    {
-                        Some(bytes) => bytes,
-                        None => {
-                            let bytes = self.description.as_bytes().to_vec();
-                            [
-                                ((possible_m.len() + 1) as u8).to_be_bytes().to_vec(),
-                                encode_varint(bytes.len() as u16),
-                                bytes,
-                            ]
-                            .concat()
-                        }
-                    }
-                }
-                EventDescription::VariablePrefix(possible_pfx) => {
-                    match possible_pfx
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, pfx)| {
-                            let maybe = self.description.strip_prefix(pfx);
-                            if let Some(rest) = maybe {
-                                let rest = rest.as_bytes().to_vec();
-                                Some(
-                                    [
-                                        (i as u8).to_be_bytes().to_vec(),
-                                        encode_varint(rest.len() as u16),
-                                        rest,
-                                    ]
-                                    .concat(),
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                    {
-                        Some(bytes) => bytes,
-                        None => {
-                            let bytes = self.description.as_bytes().to_vec();
-                            [
-                                ((possible_pfx.len() + 1) as u8).to_be_bytes().to_vec(),
-                                encode_varint(bytes.len() as u16),
-                                bytes,
-                            ]
-                            .concat()
-                        }
-                    }
-                }
-                EventDescription::VariableSuffix(possible_sfx) => {
-                    match possible_sfx
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, sfx)| {
-                            let maybe = self.description.strip_suffix(sfx);
-                            if let Some(rest) = maybe {
-                                let rest = rest.as_bytes().to_vec();
-                                Some(
-                                    [
-                                        (i as u8).to_be_bytes().to_vec(),
-                                        encode_varint(rest.len() as u16),
-                                        rest,
-                                    ]
-                                    .concat(),
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                    {
-                        Some(bytes) => bytes,
-                        None => {
-                            let bytes = self.description.as_bytes().to_vec();
-                            [
-                                ((possible_sfx.len() + 1) as u8).to_be_bytes().to_vec(),
-                                encode_varint(bytes.len() as u16),
-                                bytes,
-                            ]
-                            .concat()
-                        }
-                    }
-                }
-                EventDescription::Suffix(s) => {
-                    let description = self
-                        .description
-                        .strip_suffix(s)
-                        .unwrap()
-                        .as_bytes()
-                        .to_vec();
-                    [encode_varint(description.len() as u16), description].concat()
-                }
-                EventDescription::Prefix(s) => {
-                    let description = self
-                        .description
-                        .strip_prefix(s)
-                        .unwrap()
-                        .as_bytes()
-                        .to_vec();
-                    [encode_varint(description.len() as u16), description].concat()
-                }
-                EventDescription::Variable => {
-                    let description = self.description.as_bytes().to_vec();
-                    [encode_varint(description.len() as u16), description].concat()
-                }
+        impl<'a> Serialize for RawValueWrapper<'a> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                let mut s = serializer.serialize_struct("$serde_json::private::RawValue", 1)?;
+                s.serialize_field("$serde_json::private::RawValue", &self.0)?;
+                s.end()
             }
-        };
+        }
 
-        (
-            feed_metadata::encode_metadata(self.etype, &self.metadata).len(),
-            description_bytes.len(),
-            player_tag_bytes.len() + team_tag_bytes.len() + game_tag_bytes.len(),
-        )
+        #[repr(transparent)]
+        struct PlayerTags<'a>(&'a [LittleEndian<u16>]);
+
+        impl<'a> Serialize for PlayerTags<'a> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                let mut s = serializer.serialize_seq(Some(self.0.len()))?;
+                for v in self.0 {
+                    s.serialize_element(&PLAYER_TO_UUID[v.value() as usize])?;
+                }
+                s.end()
+            }
+        }
+
+        #[repr(transparent)]
+        struct GameTags<'a>(&'a [LittleEndian<u16>]);
+
+        impl<'a> Serialize for GameTags<'a> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                let mut s = serializer.serialize_seq(Some(self.0.len()))?;
+                for v in self.0 {
+                    s.serialize_element(&GAME_TO_UUID[v.value() as usize])?;
+                }
+                s.end()
+            }
+        }
+
+        #[repr(transparent)]
+        struct TeamTags<'a>(&'a [u8]);
+
+        impl<'a> Serialize for TeamTags<'a> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                let mut s = serializer.serialize_seq(Some(self.0.len()))?;
+                for v in self.0 {
+                    s.serialize_element(&TEAM_TO_UUID[*v as usize])?;
+                }
+                s.end()
+            }
+        }
+
+        let mut event = serializer.serialize_struct("CompactedFeedEvent", 13)?;
+        event.serialize_field("id", self.id.as_ref().unwrap_or(&Uuid::nil()))?;
+        event.serialize_field("created", &Utc.timestamp_millis(self.created as i64))?;
+        event.serialize_field("category", &self.category)?;
+        event.serialize_field(
+            "day",
+            &(if self.day == 255 {
+                1522i16
+            } else {
+                self.day.into()
+            }),
+        )?;
+        event.serialize_field("type", &self.etype.value())?;
+        event.serialize_field("season", &self.season)?;
+        event.serialize_field("phase", &self.phase)?;
+        event.serialize_field("tournament", &self.tournament)?;
+        event.serialize_field("description", self.description.as_str())?;
+        event.serialize_field(
+            "metadata",
+            &self.metadata.as_ref().map(|m| RawValueWrapper(m.as_str())),
+        )?;
+        event.serialize_field("playerTags", &PlayerTags(self.player_tags.as_slice()))?;
+        event.serialize_field("gameTags", &GameTags(self.game_tags.as_slice()))?;
+        event.serialize_field("teamTags", &TeamTags(self.team_tags.as_slice()))?;
+        event.end()
     }
 }

@@ -1,36 +1,36 @@
-mod decode;
-mod desc;
-mod event;
-pub mod metadata;
-pub use decode::*;
-pub use desc::*;
-pub use event::*;
+pub mod event;
+#[rustfmt::skip]
+pub mod lookup_tables;
+pub mod block;
+pub mod db;
+pub mod recorder;
+/*
+the feed is split into blocks of 100 events each.
+
+each block has a header storing:
+- it's length in bytes when compressed and decompressed
+- the timestamp of the first event in the block
+- the positions of every event inside the block
+
+so, to get an event at time <x>, we find the block which contains that time via binary search
+we then decompress it, and find the event inside it with time <x>
+*/
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use uuid::Uuid;
 
-pub enum TagType {
-    Team,
-    Player,
-    Game,
+#[derive(Serialize, Deserialize)]
+pub struct EncodedBlockHeader {
+    pub compressed_len: u32,
+    pub decompressed_len: u32,
+    pub start_time: u64,
+    pub event_positions: Vec<(u64, u32)>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct MetaIndex {
-    pub player_tags: HashMap<u16, Uuid>,
-    pub game_tags: HashMap<u16, Uuid>,
-    pub team_tags: HashMap<u8, Uuid>,
-    pub reverse_player_tags: HashMap<Uuid, u16>,
-    pub reverse_game_tags: HashMap<Uuid, u16>,
-    pub reverse_team_tags: HashMap<Uuid, u8>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct EventIndex {
-    pub player_index: HashMap<u16, Vec<(u32, (u32, u16))>>,
-    pub game_index: HashMap<u16, Vec<(u32, (u32, u16))>>,
-    pub team_index: HashMap<u8, Vec<(u32, (u32, u16))>>,
-    pub etype_index: HashMap<i16, Vec<(u32, (u32, u16))>>,
-    pub phase_index: HashMap<(u8, u8), Vec<(i64, (u32, u16))>>,
+// same, but includes an offset field for ease of use
+pub struct BlockHeader {
+    pub compressed_len: u32,
+    pub decompressed_len: u32,
+    pub start_time: u64,
+    pub event_positions: Vec<(u64, u32)>,
+    pub offset: u32,
 }
