@@ -89,6 +89,21 @@ impl FeedDatabase {
         Ok(decompressor)
     }
 
+    pub fn get_block_by_index(&self, index: u16) -> VCRResult<EventBlock> {
+        let header = &self.headers[index as usize];
+
+        let data =
+            &self.inner[header.offset as usize..(header.offset + header.compressed_len) as usize];
+        let decompressed = self
+            .decompressor()?
+            .decompress(data, header.decompressed_len as usize)?;
+
+        Ok(EventBlock {
+            bytes: decompressed,
+            event_positions: header.event_positions.clone(),
+        })
+    }
+
     // returns (bytes, event_positions)
     pub fn get_block_by_time(&self, at: u64) -> VCRResult<EventBlock> {
         let index = match self.headers.binary_search_by_key(&at, |v| v.start_time) {
@@ -102,17 +117,6 @@ impl FeedDatabase {
             }
         };
 
-        let header = &self.headers[index];
-
-        let data =
-            &self.inner[header.offset as usize..(header.offset + header.compressed_len) as usize];
-        let decompressed = self
-            .decompressor()?
-            .decompress(data, header.decompressed_len as usize)?;
-
-        Ok(EventBlock {
-            bytes: decompressed,
-            event_positions: header.event_positions.clone(),
-        })
+        self.get_block_by_index(index as u16)
     }
 }

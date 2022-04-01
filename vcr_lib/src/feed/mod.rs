@@ -3,6 +3,7 @@ pub mod event;
 pub mod lookup_tables;
 pub mod block;
 pub mod db;
+pub mod index;
 pub mod recorder;
 /*
 the feed is split into blocks of 100 events each.

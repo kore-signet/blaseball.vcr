@@ -4,14 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-json-patch = "0.2.6"
-rmp-serde = "0.15.5"
-lru = "0.6.6"
+rmp-serde = "1"
 sha2 = "0.9.8"
 thiserror = "1.0"
-integer-encoding = "3.0.2"
 memmap2 = "0.5.0"
-moka = "0.6.1"
 anyhow = "1.0"
 rayon = "1.5.1"
 bsdiff = "0.1.6"
@@ -23,11 +19,13 @@ num_cpus = "1.13.1"
 type-map = "0.5.0"
 tempfile = "3.3.0"
 phf = "0.10.1"
+enum-map = "2.1.0"
+fst = "0.4.7"
 
 [dependencies.rkyv]
 version = "0.7.36"
 default-features = false
-features = ["archive_le", "size_16", "std", "uuid", "uuid_std"]
+features = ["archive_le", "size_16", "std", "uuid", "uuid_std", "strict"]
 
 [dependencies.zstd]
 version = "0.11"

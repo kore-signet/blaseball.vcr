@@ -22,8 +22,6 @@ pub enum VCRError {
     #[error(transparent)]
     MsgPackDecError(#[from] rmp_serde::decode::Error),
     #[error(transparent)]
-    JSONPatchError(#[from] json_patch::PatchError),
-    #[error(transparent)]
     IOError(#[from] io::Error),
     #[error(transparent)]
     SerdeJSONError(#[from] serde_json::Error),

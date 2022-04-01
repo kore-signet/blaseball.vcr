@@ -17,3 +17,5 @@ vhs-dicts/
 etypes.txt
 game.schema
 feed.json
+*.fst
+*.vhs

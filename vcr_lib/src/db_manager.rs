@@ -21,7 +21,7 @@ impl DatabaseManager {
         self.databases.insert(boxed_db);
     }
 
-    pub fn get_entity<E: 'static>(&self, id: &[u8; 16], at: u32) -> VCRResult<Option<(u32, E)>> {
+    pub fn get_entity<E: 'static>(&self, id: &[u8; 16], at: u32) -> VCRResult<Option<ChroniclerEntity<E>>> {
         if let Some(db) = self
             .databases
             .get::<Box<dyn EntityDatabase<Record = E> + Send + Sync>>()
@@ -36,7 +36,7 @@ impl DatabaseManager {
         &self,
         ids: &[[u8; 16]],
         at: u32,
-    ) -> VCRResult<Vec<Option<(u32, E)>>> {
+    ) -> VCRResult<Vec<Option<ChroniclerEntity<E>>>>  {
         if let Some(db) = self
             .databases
             .get::<Box<dyn EntityDatabase<Record = E> + Send + Sync>>()
@@ -47,7 +47,7 @@ impl DatabaseManager {
         Ok(Vec::with_capacity(0))
     }
 
-    pub fn all_entities<E: 'static>(&self, at: u32) -> VCRResult<Vec<Option<(u32, E)>>> {
+    pub fn all_entities<E: 'static>(&self, at: u32) -> VCRResult<Vec<Option<ChroniclerEntity<E>>>> {
         if let Some(db) = self
             .databases
             .get::<Box<dyn EntityDatabase<Record = E> + Send + Sync>>()

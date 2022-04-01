@@ -1,23 +1,29 @@
 use super::{event::*, EncodedBlockHeader};
 use crate::VCRResult;
 use rkyv::ser::{serializers::AllocSerializer, Serializer};
+use std::collections::HashMap;
 use std::io::Write;
+use uuid::Uuid;
 use zstd::bulk::Compressor;
 
-pub struct FeedRecorder<H: Write, M: Write> {
+pub struct FeedRecorder<H: Write, M: Write, A: Write> {
     header_out: H,
     feed_out: M,
+    aux_out: A,                                  // output for uuid_to_internal
+    uuid_to_internal: HashMap<Uuid, (u16, u16)>, // map of event id -> (block index, event index relative to block)
+    block_index: usize,
     compressor: Compressor<'static>,
     headers: Vec<EncodedBlockHeader>,
 }
 
-impl<H: Write, M: Write> FeedRecorder<H, M> {
+impl<H: Write, M: Write, A: Write> FeedRecorder<H, M, A> {
     pub fn new(
         header_out: H,
         feed_out: M,
+        aux_out: A,
         dict: Option<Vec<u8>>,
         compression_level: i32,
-    ) -> VCRResult<FeedRecorder<H, M>> {
+    ) -> VCRResult<FeedRecorder<H, M, A>> {
         let mut compressor = if let Some(ref d) = dict {
             Compressor::with_dictionary(compression_level, d)?
         } else {
@@ -30,7 +36,10 @@ impl<H: Write, M: Write> FeedRecorder<H, M> {
         Ok(FeedRecorder {
             header_out,
             feed_out,
+            aux_out,
             compressor,
+            uuid_to_internal: HashMap::with_capacity(5110062),
+            block_index: 0,
             headers: Vec::new(),
         })
     }
@@ -45,7 +54,15 @@ impl<H: Write, M: Write> FeedRecorder<H, M> {
 
         let start_time = chunk[0].created.timestamp_millis() as u64;
 
-        for event in chunk {
+        for (idx, event) in chunk.into_iter().enumerate() {
+            self.uuid_to_internal.insert(
+                event.id,
+                (
+                    self.block_index.try_into().unwrap(),
+                    idx.try_into().unwrap(),
+                ),
+            );
+
             let created = event.created.timestamp_millis() as u64;
             let compact: CompactedFeedEvent = CompactedFeedEvent::convert(event);
             event_positions.push((
@@ -53,6 +70,8 @@ impl<H: Write, M: Write> FeedRecorder<H, M> {
                 ser.serialize_value(&compact).unwrap() as u32,
             )); // infallible
         }
+
+        self.block_index += 1;
 
         event_positions.sort_by_key(|&(k, _)| k);
 
@@ -71,7 +90,7 @@ impl<H: Write, M: Write> FeedRecorder<H, M> {
         Ok(())
     }
 
-    pub fn finish(mut self) -> VCRResult<(H, M)> {
+    pub fn finish(mut self) -> VCRResult<(H, M, A)> {
         self.headers.sort_by_key(|v| v.start_time);
         let mut header_out = zstd::Encoder::new(self.header_out, 11)?;
         let header_bytes = rmp_serde::to_vec(&self.headers)?;
@@ -85,7 +104,9 @@ impl<H: Write, M: Write> FeedRecorder<H, M> {
         let header_handle = header_out.finish()?;
         self.feed_out.flush()?;
 
-        Ok((header_handle, self.feed_out))
+        rmp_serde::encode::write(&mut self.aux_out, &self.uuid_to_internal)?;
+
+        Ok((header_handle, self.feed_out, self.aux_out))
     }
 }
 

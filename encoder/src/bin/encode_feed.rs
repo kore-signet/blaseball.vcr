@@ -5,7 +5,7 @@ use blaseball_vcr::VCRResult;
 use clap::clap_app;
 use itertools::Itertools;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 
 fn main() -> VCRResult<()> {
     let matches = clap_app!(train_vhs_dict =>
@@ -16,6 +16,7 @@ fn main() -> VCRResult<()> {
         (@arg ZSTD_DICT: -d --dict [DICT] "set dict for tape")
         (@arg INPUT: +required -i --input [FILE] "feed file (ndjson)")
         (@arg OUTPUT: +required -o --output [FILE] "set output file for tape")
+        (@arg AUX_OUTPUT: +required -a --aux [FILE] "set output file for uuid -> internal id lookup table")
     )
     .get_matches();
 
@@ -25,9 +26,10 @@ fn main() -> VCRResult<()> {
         None
     };
 
-    let mut recorder: FeedRecorder<File, File> = FeedRecorder::new(
+    let mut recorder: FeedRecorder<File, File, File> = FeedRecorder::new(
         tempfile::tempfile()?,
         tempfile::tempfile()?,
+        File::create(matches.value_of("AUX_OUTPUT").unwrap())?,
         dict.clone(),
         matches
             .value_of("COMPRESSION_LEVEL")
@@ -49,8 +51,10 @@ fn main() -> VCRResult<()> {
         recorder.add_chunk(chunk)?;
     }
 
-    let (mut header, mut main) = recorder.finish()?;
+    let (mut header, mut main, mut aux) = recorder.finish()?;
     let out = std::fs::File::create(matches.value_of("OUTPUT").unwrap())?;
+
+    aux.flush()?;
 
     use std::io::Seek;
     header.rewind()?;

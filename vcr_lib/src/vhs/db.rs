@@ -114,7 +114,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
     }
 
     #[inline(always)]
-    pub fn get_all_entities(&self, at: u32) -> VCRResult<Vec<Option<(u32, T)>>> {
+    pub fn get_all_entities(&self, at: u32) -> VCRResult<Vec<ChroniclerEntity>>> {
         self.get_entities_parallel(&self.id_list, at)
     }
 
@@ -122,7 +122,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         &self,
         ids: &[[u8; 16]],
         at: u32,
-    ) -> VCRResult<Vec<Option<(u32, T)>>> {
+    ) -> VCRResult<Vec<Option<ChroniclerEntity>>> {
         crossbeam::scope(|s| {
             let chunks = ids.chunks(ids.len() / num_cpus::get());
             let n_chunks = chunks.len();
@@ -140,7 +140,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                         chunk
                             .iter()
                             .map(|id| self.get_entity_inner(id, at, &mut decompressor))
-                            .collect::<VCRResult<Vec<Option<(u32, T)>>>>(),
+                            .collect::<VCRResult<Vec<Option<ChroniclerEntity>>>>(),
                     )
                     .unwrap();
                 });
@@ -157,13 +157,12 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         .map_err(|_| VCRError::ParallelError)?
     }
 
-    #[inline(always)]
     fn get_entity_inner(
         &self,
         id: &[u8; 16],
         at: u32,
         decompressor: &mut Decompressor,
-    ) -> VCRResult<Option<(u32, T)>> {
+    ) -> VCRResult<Option<ChroniclerEntity>> {
         if let Some(header) = self.index.get(id) {
             let index = match header.times.binary_search(&at) {
                 Ok(i) => i,
@@ -211,12 +210,18 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 )?;
             }
 
-            return Ok(Some((entity_time, cur)));
+            return Ok(Some(ChroniclerEntity {
+                entity_id: *id,
+                valid_from: entity_time,
+                data: cur
+            }));
+
         }
 
         Ok(None)
     }
 
+    // TODO: we need to add times here
     fn get_versions_inner(
         &self,
         id: &[u8; 16],
@@ -360,12 +365,12 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
 {
     type Record = T;
 
-    fn get_entity(&self, id: &[u8; 16], at: u32) -> VCRResult<Option<(u32, T)>> {
+    fn get_entity(&self, id: &[u8; 16], at: u32) -> VCRResult<OptionalEntity<T>> {
         let mut decompressor = self.decompressor()?;
         self.get_entity_inner(id, at, &mut decompressor)
     }
 
-    fn get_entities(&self, ids: &[[u8; 16]], at: u32) -> VCRResult<Vec<Option<(u32, T)>>> {
+    fn get_entities(&self, ids: &[[u8; 16]], at: u32) -> VCRResult<Vec<OptionalEntity<T>>> {
         if ids.len() < num_cpus::get() {
             let mut decompressor = self.decompressor()?;
 

@@ -21,6 +21,10 @@ tempfile = "3.3.0"
 vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
 phf_codegen = "0.10.0"
 itertools = "0.10"
+fst = "0.4.7"
+rmp-serde = "1"
+easybench = "1.1.0"
+fastrand = "1.7.0"
 
 [dependencies.reqwest]
 version = "0.11"
