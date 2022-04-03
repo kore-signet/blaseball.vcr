@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use super::DataHeader;
-use crate::{ChroniclerEntity, VCRResult};
+use crate::{RawChroniclerEntity, VCRResult};
 use std::io::{self, Read, Write};
 use std::marker::PhantomData;
 use vhs_diff::*;
@@ -15,8 +15,8 @@ pub struct TapeEntity<T> {
     pub data: Vec<T>,
 }
 
-impl<T> From<Vec<ChroniclerEntity<T>>> for TapeEntity<T> {
-    fn from(entity: Vec<ChroniclerEntity<T>>) -> TapeEntity<T> {
+impl<T> From<Vec<RawChroniclerEntity<T>>> for TapeEntity<T> {
+    fn from(entity: Vec<RawChroniclerEntity<T>>) -> TapeEntity<T> {
         let id = *Uuid::parse_str(&entity[0].entity_id).unwrap().as_bytes();
         let times = entity
             .iter()
@@ -200,6 +200,15 @@ pub fn encode_entity<T: Diff + Serialize + Clone>(
             let mut cur_patches: Vec<u8> =
                 rmp_serde::to_vec(&patches.into_iter().collect::<Vec<OwnedPatch>>())?;
             bytes.append(&mut cur_patches);
+        }
+
+        // in this case, the last item will be missing since it won't be included in - so add a checkpoint
+        if data.len() % 2 != 0 {
+            // write position of checkpoint
+            checkpoint_positions.push(bytes.len());
+
+            let mut serialized_cur = rmp_serde::to_vec(&data.last().unwrap())?;
+            bytes.append(&mut serialized_cur);
         }
     // if an entity only has one version, just serialize that version and no patches
     } else if !data.is_empty() {

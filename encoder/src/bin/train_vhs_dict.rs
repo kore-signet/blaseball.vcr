@@ -107,7 +107,8 @@ async fn run<T: vhs_diff::Diff + Clone + serde::de::DeserializeOwned + serde::Se
             id: None,
             order: None,
             count: 1000,
-            before: String::from("2021-09-01T00:00:00Z"),
+            at: Some(String::from("2021-09-01T00:00:00Z")),
+            before: None,
         },
     )
     .await?
@@ -139,7 +140,8 @@ async fn run<T: vhs_diff::Diff + Clone + serde::de::DeserializeOwned + serde::Se
                 id: Some(id.clone()),
                 order: Some("asc".to_owned()),
                 count: 1000,
-                before: String::from("2021-09-01T00:00:00Z"),
+                at: None,
+                before: Some(String::from("2021-09-01T00:00:00Z")),
             },
         )
         .await?

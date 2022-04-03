@@ -1,8 +1,10 @@
-use blaseball_vcr::*;
+use blaseball_vcr::VCRResult;
+use chrono::{DateTime, Utc};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
-use chrono::{DateTime, Utc};
+
+pub use blaseball_vcr::RawChroniclerEntity as ChroniclerEntity;
 
 #[macro_export]
 macro_rules! etypes {
@@ -28,16 +30,6 @@ pub struct ChroniclerResponse<T> {
 pub struct ChroniclerV1Response<T> {
     pub next_page: Option<String>,
     pub data: Vec<T>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChroniclerEntity<T> {
-    pub entity_id: String,
-    pub hash: String,
-    pub valid_from: DateTime<Utc>,
-    pub valid_to: Option<String>,
-    pub data: T,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -81,7 +73,10 @@ pub struct ChroniclerParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<String>,
     pub count: u32,
-    pub before: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<String>,
 }
 
 pub async fn v2_paged_get(

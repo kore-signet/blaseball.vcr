@@ -7,3 +7,28 @@ edition = "2021"
 parking_lot = "0.12.0"
 moka = "0.8.0"
 erased-serde = "0.3.20"
+atomic-shim = "0.2.0"
+hex = "0.4.3"
+
+[dependencies.uuid]
+version = "0.8.2"
+features = ["serde"]
+
+[dependencies.chrono]
+version = "0.4"
+features = ["serde"]
+
+[dependencies.rocket]
+version = "0.5.0-rc.1"
+features = ["uuid", "json"]
+
+[dependencies.blaseball_vcr]
+path = "../vcr_lib"
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1.0.64"
+features = ["preserve_order", "raw_value"]

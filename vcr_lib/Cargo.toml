@@ -21,6 +21,7 @@ tempfile = "3.3.0"
 phf = "0.10.1"
 enum-map = "2.1.0"
 fst = "0.4.7"
+erased-serde = "0.3.20"
 
 [dependencies.rkyv]
 version = "0.7.36"

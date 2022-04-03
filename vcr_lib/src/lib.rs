@@ -8,7 +8,7 @@ pub mod db_manager;
 pub mod vhs;
 
 mod chron_types;
-pub use chron_tpes::*;
+pub use chron_types::*;
 
 // use chrono::{DateTime, Utc};
 // use rocket::FromFormField;

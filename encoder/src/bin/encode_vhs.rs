@@ -1,5 +1,5 @@
 use blaseball_vcr::vhs::recorder::*;
-use blaseball_vcr::{ChroniclerEntity, VCRResult};
+use blaseball_vcr::{RawChroniclerEntity, VCRResult};
 use clap::{clap_app, ArgMatches};
 use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressStyle};
 use new_encoder::*;
@@ -111,13 +111,15 @@ async fn run<
             id: None,
             order: None,
             count: 1000,
-            before: String::from("2021-09-01T00:00:00Z"),
+            at: Some(String::from("2021-09-01T00:00:00Z")),
+            before: None,
         },
     )
     .await?
     .into_iter()
     .map(|e| e.entity_id)
     .collect();
+    // let entity_ids = vec![String::from("4304bcf9-239a-4aa2-a410-56a487217a2a")];
 
     println!("| found {} entities", entity_ids.len());
 
@@ -143,12 +145,13 @@ async fn run<
                 id: Some(id.clone()),
                 order: Some("asc".to_owned()),
                 count: 1000,
-                before: String::from("2021-09-01T00:00:00Z"),
+                at: None,
+                before: Some(String::from("2021-09-01T00:00:00Z")),
             },
         )
         .await?
         .into_iter()
-        .map(|v| ChroniclerEntity {
+        .map(|v| RawChroniclerEntity {
             entity_id: v.entity_id,
             hash: v.hash,
             valid_from: v.valid_from,

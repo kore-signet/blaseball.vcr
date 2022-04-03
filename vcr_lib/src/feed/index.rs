@@ -1,6 +1,6 @@
 use enum_map::EnumMap;
-use fst::{Automaton, IntoStreamer, Streamer};
 use fst::automaton::{StartsWith, Str as StrAutomaton};
+use fst::{Automaton, IntoStreamer};
 
 #[repr(u8)]
 #[derive(enum_map::Enum)]
@@ -36,16 +36,17 @@ impl Index {
         before: u32,
     ) -> Option<fst::map::Stream<'_, StartsWith<StrAutomaton<'_>>>> {
         if let Some(idx) = &self.indexes[idx_kind] {
-            let lower_bound = make_index_key(&tag[..], after);
-            let upper_bound = make_index_key(&tag[..], before);
+            let lower_bound = make_index_key(&tag, after);
+            let upper_bound = make_index_key(&tag, before);
 
-            Some(idx.search(
-                    StrAutomaton::new(unsafe { std::str::from_utf8_unchecked(&tag[..]) })
-                        .starts_with(),
+            Some(
+                idx.search(
+                    StrAutomaton::new(unsafe { std::str::from_utf8_unchecked(&tag) }).starts_with(),
                 )
                 .ge(lower_bound)
                 .le(upper_bound)
-                .into_stream())
+                .into_stream(),
+            )
         } else {
             None
         }

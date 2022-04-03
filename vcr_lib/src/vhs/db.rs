@@ -1,5 +1,6 @@
 use super::DataHeader;
-use crate::{EntityDatabase, VCRError, VCRResult};
+use crate::chron_types::*;
+use crate::{EntityDatabase, OptionalEntity, VCRError, VCRResult};
 use memmap2::{Mmap, MmapOptions};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -114,7 +115,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
     }
 
     #[inline(always)]
-    pub fn get_all_entities(&self, at: u32) -> VCRResult<Vec<ChroniclerEntity>>> {
+    pub fn get_all_entities(&self, at: u32) -> VCRResult<Vec<OptionalEntity<T>>> {
         self.get_entities_parallel(&self.id_list, at)
     }
 
@@ -122,11 +123,11 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         &self,
         ids: &[[u8; 16]],
         at: u32,
-    ) -> VCRResult<Vec<Option<ChroniclerEntity>>> {
+    ) -> VCRResult<Vec<OptionalEntity<T>>> {
         crossbeam::scope(|s| {
             let chunks = ids.chunks(ids.len() / num_cpus::get());
             let n_chunks = chunks.len();
-            let (tx, rx) = channel::bounded(n_chunks);
+            let (tx, rx) = channel::unbounded();
 
             for chunk in chunks {
                 // unwraps inside scope will be caught, according to https://docs.rs/crossbeam/latest/crossbeam/fn.scope.html
@@ -136,13 +137,12 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 let tx = tx.clone();
 
                 s.spawn(move |_| {
-                    tx.send(
-                        chunk
-                            .iter()
-                            .map(|id| self.get_entity_inner(id, at, &mut decompressor))
-                            .collect::<VCRResult<Vec<Option<ChroniclerEntity>>>>(),
-                    )
-                    .unwrap();
+                    let data = chunk
+                        .iter()
+                        .map(|id| self.get_entity_inner(id, at, &mut decompressor))
+                        .collect::<VCRResult<Vec<OptionalEntity<T>>>>();
+
+                    tx.send(data)
                 });
             }
 
@@ -162,7 +162,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         id: &[u8; 16],
         at: u32,
         decompressor: &mut Decompressor,
-    ) -> VCRResult<Option<ChroniclerEntity>> {
+    ) -> VCRResult<OptionalEntity<T>> {
         if let Some(header) = self.index.get(id) {
             let index = match header.times.binary_search(&at) {
                 Ok(i) => i,
@@ -213,9 +213,8 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
             return Ok(Some(ChroniclerEntity {
                 entity_id: *id,
                 valid_from: entity_time,
-                data: cur
+                data: cur,
             }));
-
         }
 
         Ok(None)
@@ -371,16 +370,16 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
     }
 
     fn get_entities(&self, ids: &[[u8; 16]], at: u32) -> VCRResult<Vec<OptionalEntity<T>>> {
-        if ids.len() < num_cpus::get() {
-            let mut decompressor = self.decompressor()?;
+        // if ids.len() < num_cpus::get() {
+        let mut decompressor = self.decompressor()?;
 
-            return ids
-                .iter()
-                .map(|id| self.get_entity_inner(id, at, &mut decompressor))
-                .collect::<VCRResult<Vec<Option<(u32, Self::Record)>>>>();
-        }
+        return ids
+            .iter()
+            .map(|id| self.get_entity_inner(id, at, &mut decompressor))
+            .collect::<VCRResult<Vec<OptionalEntity<T>>>>();
+        // }
 
-        self.get_entities_parallel(ids, at)
+        // self.get_entities_parallel(ids, at)
     }
 
     fn get_versions(&self, id: &[u8; 16], before: u32, after: u32) -> VCRResult<Option<Vec<T>>> {
