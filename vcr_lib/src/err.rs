@@ -31,8 +31,6 @@ pub enum VCRError {
     Other(#[from] anyhow::Error),
     #[error("error occurred inside parallel processing block")]
     ParallelError,
-    #[error("missing data required from streamdata construction")]
-    MissingRequiredStreamData,
 }
 
 use rocket::{

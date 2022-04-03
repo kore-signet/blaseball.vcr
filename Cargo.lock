@@ -141,7 +141,6 @@ dependencies = [
  "crossbeam",
  "easybench",
  "enum-map",
- "erased-serde",
  "fst",
  "memmap2",
  "num_cpus",

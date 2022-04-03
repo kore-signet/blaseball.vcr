@@ -37,3 +37,93 @@ pub use risingstars::Risingstars;
 pub use shopsetup::Shopsetup;
 pub use teamelectionstats::Teamelectionstats;
 pub use vault::Vault;
+
+use serde::ser::{Serialize, Serializer};
+use std::str::FromStr;
+
+#[macro_export]
+macro_rules! etypes {
+    // "player" -> Player(Player)
+    // "fuelprogress" -> FuelProgress(FuelProgressWrapper)
+    ($($name:literal -> $variant:ident ($what:ty) ),*) => {
+        pub enum DynamicEntity {
+            $(
+                $variant($what),
+            )*
+        }
+
+        pub enum DynamicEntityType {
+            $(
+                $variant,
+            )*
+        }
+
+        $(
+            impl From<$what> for DynamicEntity {
+                fn from(t: $what) -> Self {
+                    DynamicEntity::$variant(t)
+                }
+            }
+        )*
+
+        impl Serialize for DynamicEntity {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, {
+                match self {
+                    $(
+                        DynamicEntity::$variant(data) => data.serialize(serializer),
+                    )*
+                }
+            }
+        }
+
+        impl FromStr for DynamicEntityType {
+            type Err = ();
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s.to_lowercase().as_str() {
+                    $(
+                        $name => Ok(DynamicEntityType::$variant),
+                    )*
+                    _ => Err(())
+                }
+            }
+        }
+    }
+}
+
+etypes! {
+    "bossfight" -> Bossfight(Bossfight),
+    "communitychestprogress" -> CommunityChestProgress(CommunityChestProgress),
+    "division" -> Division(Division),
+    "league" -> League(League),
+    "playoffmatchup" -> Playoffmatchup(Playoffmatchup),
+    "playoffround" -> Playoffround(Playoffround),
+    "playoffs" -> Playoffs(Playoffs),
+    "season" -> Season(Season),
+    "sim" -> Sim(Sim),
+    "stadium" -> Stadium(Stadium),
+    "standings" -> Standings(Standings),
+    "subleague" -> Subleague(Subleague),
+    "team" -> Team(Team),
+    "sunsun" -> Sunsun(Sunsun),
+    "temporal" -> Temporal(Temporal),
+    "tiebreakers" -> Tiebreakers(TiebreakerWrapper),
+    "tournament" -> Tournament(Tournament),
+    "bonusresult" -> Bonusresult(Bonusresult),
+    "decreeresult" -> Decreeresult(Decreeresult),
+    "eventresult" -> Eventresult(Eventresult),
+    "fuelprogress" -> FuelProgress(FuelprogressWrapper),
+    "giftprogress" -> Giftprogress(Giftprogress),
+    "globalevents" -> GlobalEvents(GlobaleventsWrapper),
+    "idols" -> Idols(IdolsWrapper),
+    "item" -> Item(Item),
+    "librarystory" -> LibraryStory(LibrarystoryWrapper),
+    "nullified" -> Nullified(NullifiedWrapper),
+    "offseasonrecap" -> Offseasonrecap(Offseasonrecap),
+    "offseasonsetup" -> Offseasonsetup(Offseasonsetup),
+    "player" -> Player(Player),
+    "renovationprogress" -> RenovationProgress(Renovationprogress),
+    "risingstars" -> RisingStars(Risingstars),
+    "shopsetup" -> ShopSetup(Shopsetup),
+    "teamelectionstats" -> TeamElectionStats(Teamelectionstats),
+    "vault" -> Vault(Vault)
+}

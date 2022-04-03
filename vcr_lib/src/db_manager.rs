@@ -51,6 +51,22 @@ impl DatabaseManager {
         Ok(Vec::with_capacity(0))
     }
 
+    pub fn get_versions<E: 'static>(
+        &self,
+        id: &[u8; 16],
+        before: u32,
+        after: u32,
+    ) -> VCRResult<Option<Vec<ChroniclerEntity<E>>>> {
+        if let Some(db) = self
+            .databases
+            .get::<Box<dyn EntityDatabase<Record = E> + Send + Sync>>()
+        {
+            return db.get_versions(id, before, after);
+        }
+
+        Ok(None)
+    }
+
     pub fn all_entities<E: 'static>(&self, at: u32) -> VCRResult<Vec<Option<ChroniclerEntity<E>>>> {
         if let Some(db) = self
             .databases

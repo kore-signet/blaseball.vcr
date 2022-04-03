@@ -1,12 +1,13 @@
 use atomic_shim::AtomicU64;
 use blaseball_vcr::db_manager::DatabaseManager;
+use blaseball_vcr::vhs::schemas::DynamicEntity;
 use blaseball_vcr::{ChroniclerEntity, VCRResult};
 use moka::sync::Cache;
 use parking_lot::Mutex;
 use std::sync::{atomic, Arc};
 use std::time::Duration;
 
-pub type DynamicChronEntity = ChroniclerEntity<Box<dyn erased_serde::Serialize + Send + Sync>>;
+pub type DynamicChronEntity = ChroniclerEntity<DynamicEntity>;
 
 // a page manager. page ids are simple, sequential integers, encoded in hex form
 pub struct PageManager {
@@ -66,12 +67,20 @@ impl Page {
         }
     }
 
+    pub fn versions(before: u32, after: u32, ids: Vec<[u8; 16]>) -> Page {
+        Page {
+            remaining_ids: ids,
+            remaining_data: Vec::new(),
+            parameters: PageFetchParameters::Versions { before, after },
+        }
+    }
+
     /// can we get any more data out of this pager?
     pub fn is_empty(&self) -> bool {
         self.remaining_data.is_empty() && self.remaining_ids.is_empty()
     }
 
-    pub fn take_n<T: 'static + serde::Serialize + Send + Sync>(
+    pub fn take_n<T: 'static + Into<DynamicEntity>>(
         &mut self,
         db: &DatabaseManager,
         count: usize,
@@ -85,21 +94,47 @@ impl Page {
             match self.parameters {
                 Entities { at } => {
                     // how many more entities do we need to fulfill the requested amount?
-                    if let Some(extra_count) = count.checked_sub(output.len()) {
-                        self.fetch_next_entities::<T>(db, extra_count, at)?;
-                        output.append(&mut self.remaining_data);
-                    }
+                    self.fetch_next_entities::<T>(db, count - output.len(), at)?;
+                    output.append(&mut self.remaining_data);
                 }
-                _ => unimplemented!(),
+                Versions { before, after } => {
+                    self.fetch_next_versions::<T>(db, count, before, after)?;
+                    output.append(&mut self.remaining_data);
+                }
             }
         }
 
         Ok(output)
     }
 
+    #[inline]
+    fn fetch_next_versions<T: 'static + Into<DynamicEntity>>(
+        &mut self,
+        db: &DatabaseManager,
+        total_needed: usize,
+        before: u32,
+        after: u32,
+    ) -> VCRResult<()> {
+        // TODO: add a clause for pre-allocating space via getting the total number of versions for an entity id
+
+        // while we're under our target for total amount of data, get the next id and fetch it's versions
+        while self.remaining_data.len() < total_needed {
+            if let Some(id) = self.remaining_ids.pop() {
+                if let Some(data) = db.get_versions::<T>(&id, before, after)? {
+                    self.remaining_data
+                        .extend(data.into_iter().map(ChroniclerEntity::erase))
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
     // fetch a block of n entites
     #[inline]
-    fn fetch_next_entities<T: 'static + serde::Serialize + Send + Sync>(
+    fn fetch_next_entities<T: 'static + Into<DynamicEntity>>(
         &mut self,
         db: &DatabaseManager,
         count: usize,

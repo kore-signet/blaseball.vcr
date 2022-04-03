@@ -227,7 +227,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         before: u32,
         after: u32,
         decompressor: &mut Decompressor,
-    ) -> VCRResult<Option<Vec<T>>> {
+    ) -> VCRResult<Option<Vec<ChroniclerEntity<T>>>> {
         if let Some(header) = self.index.get(id) {
             let end_index = match header.times.binary_search(&before) {
                 Ok(i) => i,
@@ -251,6 +251,8 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 }
             };
 
+            let times = &header.times[start_index..end_index];
+
             let start_checkpoint =
                 (start_index - (start_index % header.checkpoint_every)) / header.checkpoint_every;
             let end_checkpoint =
@@ -267,7 +269,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 let start_index = start_index % header.checkpoint_every;
                 let end_index = end_index % header.checkpoint_every;
 
-                let range = start_index..end_index;
+                let range = start_index..end_index - 1;
 
                 self.get_version_range(
                     header,
@@ -326,7 +328,16 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 self.get_version_range(header, &mut out, end_checkpoint, range, &decompressed[..])?
             }
 
-            return Ok(Some(out));
+            return Ok(Some(
+                out.into_iter()
+                    .enumerate()
+                    .map(|(i, entity_data)| ChroniclerEntity {
+                        entity_id: *id,
+                        valid_from: times[i],
+                        data: entity_data,
+                    })
+                    .collect(),
+            ));
         }
 
         Ok(None)
@@ -353,6 +364,8 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         let mut deserializer = rmp_serde::Deserializer::from_read_ref(slice);
         let cur = T::deserialize(&mut deserializer)?;
 
+        out.push(cur.clone());
+
         PatchesToVec::apply_range(cur, out, range, &mut deserializer)?;
 
         Ok(())
@@ -370,19 +383,24 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
     }
 
     fn get_entities(&self, ids: &[[u8; 16]], at: u32) -> VCRResult<Vec<OptionalEntity<T>>> {
-        // if ids.len() < num_cpus::get() {
-        let mut decompressor = self.decompressor()?;
+        if ids.len() < num_cpus::get() {
+            let mut decompressor = self.decompressor()?;
 
-        return ids
-            .iter()
-            .map(|id| self.get_entity_inner(id, at, &mut decompressor))
-            .collect::<VCRResult<Vec<OptionalEntity<T>>>>();
-        // }
+            return ids
+                .iter()
+                .map(|id| self.get_entity_inner(id, at, &mut decompressor))
+                .collect::<VCRResult<Vec<OptionalEntity<T>>>>();
+        }
 
-        // self.get_entities_parallel(ids, at)
+        self.get_entities_parallel(ids, at)
     }
 
-    fn get_versions(&self, id: &[u8; 16], before: u32, after: u32) -> VCRResult<Option<Vec<T>>> {
+    fn get_versions(
+        &self,
+        id: &[u8; 16],
+        before: u32,
+        after: u32,
+    ) -> VCRResult<Option<Vec<ChroniclerEntity<T>>>> {
         let mut decompressor = self.decompressor()?;
 
         self.get_versions_inner(id, before, after, &mut decompressor)

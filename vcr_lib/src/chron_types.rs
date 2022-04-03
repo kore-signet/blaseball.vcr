@@ -1,3 +1,4 @@
+use crate::vhs::schemas::DynamicEntity;
 use chrono::{DateTime, TimeZone, Utc};
 use serde::ser::{SerializeStruct, Serializer};
 use serde::{Deserialize, Serialize};
@@ -11,13 +12,13 @@ pub struct ChroniclerEntity<T> {
     pub data: T,
 }
 
-impl<T: 'static + serde::Serialize + Send + Sync> ChroniclerEntity<T> {
+impl<T: Into<DynamicEntity>> ChroniclerEntity<T> {
     #[inline(always)]
-    pub fn erase(self) -> ChroniclerEntity<Box<dyn erased_serde::Serialize + Send + Sync>> {
+    pub fn erase(self) -> ChroniclerEntity<DynamicEntity> {
         ChroniclerEntity {
             entity_id: self.entity_id,
             valid_from: self.valid_from,
-            data: Box::new(self.data),
+            data: self.data.into(),
         }
     }
 }

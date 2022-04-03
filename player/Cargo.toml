@@ -31,4 +31,4 @@ features = ["derive"]
 
 [dependencies.serde_json]
 version = "1.0.64"
-features = ["preserve_order", "raw_value"]
+

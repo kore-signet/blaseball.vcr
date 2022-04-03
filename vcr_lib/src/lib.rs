@@ -38,7 +38,7 @@ pub trait EntityDatabase {
         id: &[u8; 16],
         before: u32,
         after: u32,
-    ) -> VCRResult<Option<Vec<Self::Record>>>;
+    ) -> VCRResult<Option<Vec<ChroniclerEntity<Self::Record>>>>;
 
     fn all_ids(&self) -> &[[u8; 16]];
 }
