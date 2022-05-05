@@ -12,6 +12,12 @@ pub struct ChroniclerEntity<T> {
     pub data: T,
 }
 
+impl<T> ChroniclerEntity<T> {
+    pub fn as_game_update(self) -> GameUpdateWrapper<T> {
+        GameUpdateWrapper { inner: self }
+    }
+}
+
 impl<T: Into<DynamicEntity>> ChroniclerEntity<T> {
     #[inline(always)]
     pub fn erase(self) -> ChroniclerEntity<DynamicEntity> {
@@ -36,6 +42,27 @@ impl<T: Serialize> Serialize for ChroniclerEntity<T> {
         ser.serialize_field("hash", "")?; // there's probably a way to add hashing here behind a compile feature - i'm not sure it's worth it, tho
                                           // -
         ser.serialize_field("data", &self.data)?;
+        ser.end()
+    }
+}
+
+// wrapper to serialize game updates in the way chron v1 does
+#[repr(transparent)]
+pub struct GameUpdateWrapper<T> {
+    inner: ChroniclerEntity<T>,
+}
+
+impl<T: Serialize> Serialize for GameUpdateWrapper<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut ser = serializer.serialize_struct("GameUpdateWrapper", 4)?;
+        ser.serialize_field("gameId", &Uuid::from_bytes(self.inner.entity_id))?;
+        ser.serialize_field("timestamp", &Utc.timestamp(self.inner.valid_from as i64, 0))?;
+        ser.serialize_field("hash", "")?; // there's probably a way to add hashing here behind a compile feature - i'm not sure it's worth it, tho
+                                          // -
+        ser.serialize_field("data", &self.inner.data)?;
         ser.end()
     }
 }

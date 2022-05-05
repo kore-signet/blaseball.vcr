@@ -48,11 +48,13 @@ use blaseball_vcr::vhs::{db::*, schemas::*};
 use std::time::Duration;
 
 #[derive(Serialize)]
-pub struct ChronResponse {
+pub struct ChronResponse<T> {
     #[serde(rename = "nextPage")]
     next_page: Option<String>,
-    data: Vec<DynamicChronEntity>,
+    data: Vec<T>,
 }
+
+pub type DynChronResponse = ChronResponse<DynamicChronEntity>;
 
 #[launch]
 fn rocket() -> _ {
@@ -68,5 +70,8 @@ fn rocket() -> _ {
         .manage(db_manager)
         .attach(RequestTimer)
         .manage(PageManager::new(256, Duration::from_secs(10 * 60)))
-        .mount("/", routes![entities, versions, v1::games])
+        .mount(
+            "/",
+            routes![entities, versions, v1::games, v1::game_updates],
+        )
 }

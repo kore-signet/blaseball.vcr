@@ -1,4 +1,5 @@
 use super::*;
+use crate::*;
 use blaseball_vcr::db_manager::*;
 use blaseball_vcr::feed::lookup_tables::*;
 use blaseball_vcr::game_lookup_tables::*;
@@ -74,12 +75,126 @@ pub fn games(
         .as_any()
         .downcast_ref::<blaseball_vcr::vhs::db::Database<GameUpdate>>()
         .unwrap();
+
+    let ids = filter_games(&req, game_db);
+    let before = req
+        .before
+        .and_then(|v| DateTime::parse_from_rfc3339(v).ok());
+
+    let games = game_db
+        .get_entities(
+            &ids,
+            before.map(|v| v.timestamp() as u32).unwrap_or(u32::MAX),
+        )?
+        .into_iter()
+        .filter_map(|game| {
+            game.map(|game| FinishedGame {
+                game_id: Uuid::from_bytes(game.entity_id),
+                start_time: game_db.index[&game.entity_id]
+                    .times
+                    .first()
+                    .map(|timestamp| Utc.timestamp(*timestamp as i64, 0)),
+                end_time: game_db.index[&game.entity_id]
+                    .times
+                    .last()
+                    .map(|timestamp| Utc.timestamp(*timestamp as i64, 0)),
+                data: game.data,
+            })
+        })
+        .collect();
+
+    Ok(RocketJSON(GamesResponse { data: games }))
+}
+
+#[get("/v1/games/updates?<req..>")]
+pub fn game_updates(
+    req: GamesReq<'_>,
+    db_manager: &State<DatabaseManager>,
+    page_manager: &State<PageManager>,
+) -> VCRResult<RocketJSON<ChronResponse<GameUpdateWrapper<DynamicEntity>>>> {
+    if let Some(page_token) = req
+        .page
+        .as_ref()
+        .and_then(|v| u64::from_str_radix(v, 16).ok())
+    {
+        let page_mutex = page_manager
+            .get_page(&page_token)
+            .ok_or(VCRError::InvalidPageToken)?;
+        let mut page = page_mutex.lock();
+        let data = page
+            .take_n::<GameUpdate>(db_manager, req.count.unwrap_or(100))?
+            .into_iter()
+            .map(|v| v.as_game_update())
+            .collect();
+
+        Ok(RocketJSON(ChronResponse {
+            next_page: if page.is_empty() {
+                None
+            } else {
+                Some(req.page.unwrap())
+            },
+            data,
+        }))
+    } else {
+        let before = req
+            .before
+            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|v| v.timestamp() as u32)
+            .unwrap_or(u32::MAX);
+        let after = req
+            .after
+            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|v| v.timestamp() as u32)
+            .unwrap_or(0);
+        let ids = if let Some(id_list) = req.game {
+            id_list
+                .split_terminator(',')
+                .filter_map(|id_s| Uuid::parse_str(id_s).ok().map(|v| *v.as_bytes()))
+                .collect()
+        } else {
+            let game_db = db_manager
+                .get_db::<GameUpdate>()
+                .ok_or(VCRError::EntityTypeNotFound)?
+                .as_any()
+                .downcast_ref::<blaseball_vcr::vhs::db::Database<GameUpdate>>()
+                .unwrap();
+
+            filter_games(&req, game_db)
+        };
+
+        let mut page = Page::versions(before, after, ids);
+        let data: Vec<GameUpdateWrapper<DynamicEntity>> = page
+            .take_n::<GameUpdate>(db_manager, req.count.unwrap_or(100))?
+            .into_iter()
+            .map(|v| v.as_game_update())
+            .collect();
+
+        println!("{}", req.count.unwrap_or(100));
+
+        // if the page isn't empty, add it to the manager
+        let token = if !page.is_empty() {
+            Some(page_manager.add_page(page))
+        } else {
+            None
+        };
+
+        Ok(RocketJSON(ChronResponse {
+            next_page: token.map(|v| format!("{:X}", v)),
+            data,
+        }))
+    }
+}
+
+fn filter_games(
+    req: &GamesReq<'_>,
+    db: &blaseball_vcr::vhs::db::Database<GameUpdate>,
+) -> Vec<[u8; 16]> {
     let before = req
         .before
         .and_then(|v| DateTime::parse_from_rfc3339(v).ok());
     let after = req.after.and_then(|v| DateTime::parse_from_rfc3339(v).ok());
 
-    let game_ids: Vec<Uuid> = game_db
+    let game_ids: Vec<Uuid> = db
         .index
         .values()
         .filter_map(|game_header| {
@@ -164,31 +279,8 @@ pub fn games(
         WEATHER_TO_GAMES
     );
 
-    let ids: Vec<[u8; 16]> = game_tags
+    game_tags
         .into_iter()
         .map(|tag| *GAME_TO_UUID[tag as usize].as_bytes())
-        .collect();
-    let games = game_db
-        .get_entities(
-            &ids,
-            before.map(|v| v.timestamp() as u32).unwrap_or(u32::MAX),
-        )?
-        .into_iter()
-        .filter_map(|game| {
-            game.map(|game| FinishedGame {
-                game_id: Uuid::from_bytes(game.entity_id),
-                start_time: game_db.index[&game.entity_id]
-                    .times
-                    .first()
-                    .map(|timestamp| Utc.timestamp(*timestamp as i64, 0)),
-                end_time: game_db.index[&game.entity_id]
-                    .times
-                    .last()
-                    .map(|timestamp| Utc.timestamp(*timestamp as i64, 0)),
-                data: game.data,
-            })
-        })
-        .collect();
-
-    Ok(RocketJSON(GamesResponse { data: games }))
+        .collect()
 }

@@ -91,6 +91,7 @@ macro_rules! etypes {
 }
 
 etypes! {
+    "gameupdate" -> GameUpdate(GameUpdate),
     "bossfight" -> Bossfight(Bossfight),
     "communitychestprogress" -> CommunityChestProgress(CommunityChestProgress),
     "division" -> Division(Division),

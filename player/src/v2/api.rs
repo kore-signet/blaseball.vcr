@@ -15,7 +15,7 @@ pub fn entities(
     req: EntitiesRequest<'_>,
     db_manager: &State<DatabaseManager>,
     page_manager: &State<PageManager>,
-) -> VCRResult<RocketJSON<ChronResponse>> {
+) -> VCRResult<RocketJSON<DynChronResponse>> {
     if let Some(page_token) = req
         .page
         .as_ref()
@@ -72,7 +72,7 @@ pub fn versions(
     req: VersionsRequest<'_>,
     db_manager: &State<DatabaseManager>,
     page_manager: &State<PageManager>,
-) -> VCRResult<RocketJSON<ChronResponse>> {
+) -> VCRResult<RocketJSON<DynChronResponse>> {
     if let Some(page_token) = req
         .page
         .as_ref()
