@@ -69,6 +69,10 @@ fn main() -> VCRResult<()> {
             .map(|v| (v.timestamp.timestamp() as u32, v.data))
             .unzip();
 
+        if times.is_empty() {
+            continue;
+        }
+
         let entity = TapeEntity {
             times,
             data,

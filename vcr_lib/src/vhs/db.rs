@@ -251,7 +251,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 }
             };
 
-            let times = &header.times[start_index..end_index];
+            let times = &header.times[start_index..=end_index];
 
             let start_checkpoint =
                 (start_index - (start_index % header.checkpoint_every)) / header.checkpoint_every;

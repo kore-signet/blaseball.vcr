@@ -19,3 +19,4 @@ game.schema
 feed.json
 *.fst
 *.vhs
+vcr_v2.tar

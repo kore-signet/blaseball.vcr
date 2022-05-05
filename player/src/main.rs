@@ -43,7 +43,7 @@ use v2::*;
 
 use blaseball_vcr::db_manager::DatabaseManager;
 
-use blaseball_vcr::vhs::{schemas::*};
+use blaseball_vcr::vhs::schemas::*;
 
 use std::time::Duration;
 

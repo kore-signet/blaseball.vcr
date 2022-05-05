@@ -85,7 +85,7 @@ impl Page {
         db: &DatabaseManager,
         count: usize,
     ) -> VCRResult<Vec<DynamicChronEntity>> {
-        let mut output: Vec<DynamicChronEntity> = Vec::with_capacity(count);
+        let mut output: Vec<DynamicChronEntity> = Vec::with_capacity(std::cmp::min(1000, count));
         output.append(&mut self.remaining_data);
 
         // if we have less entities than requested cached, get some more
