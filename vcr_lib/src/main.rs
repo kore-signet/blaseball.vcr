@@ -1,10 +1,6 @@
 use blaseball_vcr::vhs::schemas::*;
-use blaseball_vcr::{
-    db_manager,
-    vhs::{self, db},
-    EntityDatabase, VCRResult,
-};
-use std::time::Instant;
+use blaseball_vcr::{vhs::db, EntityDatabase, VCRResult};
+
 use uuid::Uuid;
 
 fn main() -> VCRResult<()> {

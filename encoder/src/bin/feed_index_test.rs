@@ -1,14 +1,13 @@
 use blaseball_vcr::feed::db::*;
-use blaseball_vcr::feed::event::*;
+
 use blaseball_vcr::feed::lookup_tables::*;
 use blaseball_vcr::*;
 use fst::{automaton::Str as StrAutomaton, Automaton, IntoStreamer, Map as FstMap, Streamer};
-use memmap2::Mmap;
-use std::fs::File;
+
 use uuid::Uuid;
 
 fn main() -> VCRResult<()> {
-    let db = FeedDatabase::from_single("./vhs_tapes/feed.vhs")?;
+    let _db = FeedDatabase::from_single("./vhs_tapes/feed.vhs")?;
 
     let memory = std::fs::read("feed_playertags.fst")?;
     let idx = FstMap::new(memory).unwrap();
@@ -30,11 +29,11 @@ fn main() -> VCRResult<()> {
                         .starts_with(),
                 )
                 .into_stream();
-            while let Some((k, v)) = stream.next() {
+            while let Some((_k, v)) = stream.next() {
                 let v = v.to_le();
 
-                let block_idx = (v >> 16) as u16;
-                let event_idx = (v & (u16::MAX as u64)) as usize;
+                let _block_idx = (v >> 16) as u16;
+                let _event_idx = (v & (u16::MAX as u64)) as usize;
 
                 // let block = db.get_block_by_index(block_idx).unwrap();
                 // let event = block.event_at_index(event_idx);

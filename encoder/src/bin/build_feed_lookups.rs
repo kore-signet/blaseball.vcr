@@ -3,15 +3,14 @@ use clap::clap_app;
 use phf_codegen::Map as PhfMap;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Write};
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct FeedEvent {
-    player_tags: Option<Vec<Uuid>>,
-    game_tags: Option<Vec<Uuid>>,
-    team_tags: Option<Vec<Uuid>>,
+struct IdIndex {
+    games: Vec<Uuid>,
+    teams: Vec<Uuid>,
+    players: Vec<Uuid>,
 }
 
 fn main() -> VCRResult<()> {
@@ -19,7 +18,7 @@ fn main() -> VCRResult<()> {
         (version: "1.0")
         (author: "emily signet <emily@sibr.dev>")
         (about: "blaseball.vcr feed lookup table generator")
-        (@arg INPUT: +required -i --input [FILE] "feed file")
+        (@arg INPUT: +required -i --input [FILE] "id index file")
         (@arg OUTPUT: +required -o --output [FILE] "output file for indexes")
     )
     .get_matches();
@@ -28,26 +27,25 @@ fn main() -> VCRResult<()> {
     let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
     let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
 
-    let reader = BufReader::new(File::open(matches.value_of("INPUT").unwrap())?);
+    let index: IdIndex = serde_json::from_reader(BufReader::new(File::open(
+        matches.value_of("INPUT").unwrap(),
+    )?))?;
 
-    for line in reader.lines() {
-        let event: FeedEvent = serde_json::from_str(&line?)?;
-        for player in event.player_tags.unwrap_or(vec![]) {
-            if !player_tag_table.contains_key(&player) {
-                player_tag_table.insert(player, player_tag_table.len() as u16);
-            }
+    for game in index.games {
+        if !game_tag_table.contains_key(&game) {
+            game_tag_table.insert(game, game_tag_table.len() as u16);
         }
+    }
 
-        for game in event.game_tags.unwrap_or(vec![]) {
-            if !game_tag_table.contains_key(&game) {
-                game_tag_table.insert(game, game_tag_table.len() as u16);
-            }
+    for team in index.teams {
+        if !team_tag_table.contains_key(&team) {
+            team_tag_table.insert(team, team_tag_table.len() as u8);
         }
+    }
 
-        for team in event.team_tags.unwrap_or(vec![]) {
-            if !team_tag_table.contains_key(&team) {
-                team_tag_table.insert(team, team_tag_table.len() as u8);
-            }
+    for player in index.players {
+        if !player_tag_table.contains_key(&player) {
+            player_tag_table.insert(player, player_tag_table.len() as u16);
         }
     }
 

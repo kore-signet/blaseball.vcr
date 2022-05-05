@@ -1,4 +1,3 @@
-use blaseball_vcr::VCRResult;
 use chrono::{DateTime, Utc};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};

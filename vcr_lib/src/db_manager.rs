@@ -88,4 +88,9 @@ impl DatabaseManager {
             None
         }
     }
+
+    pub fn get_db<E: 'static>(&self) -> Option<&Box<dyn EntityDatabase<Record = E> + Send + Sync>> {
+        self.databases
+            .get::<Box<dyn EntityDatabase<Record = E> + Send + Sync>>()
+    }
 }

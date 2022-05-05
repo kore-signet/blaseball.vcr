@@ -16,8 +16,8 @@ use zstd::dict::DecoderDictionary;
 use crossbeam::channel;
 
 pub struct Database<T: Clone + Patch + Send + Sync> {
-    index: HashMap<[u8; 16], DataHeader>,
-    id_list: Vec<[u8; 16]>,
+    pub index: HashMap<[u8; 16], DataHeader>,
+    pub id_list: Vec<[u8; 16]>,
     inner: Mmap,
     decoder: Option<DecoderDictionary<'static>>,
     _record_type: PhantomData<T>,
@@ -372,8 +372,8 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
     }
 }
 
-impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize> EntityDatabase
-    for Database<T>
+impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize + 'static>
+    EntityDatabase for Database<T>
 {
     type Record = T;
 
@@ -408,5 +408,9 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
 
     fn all_ids(&self) -> &[[u8; 16]] {
         &self.id_list
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

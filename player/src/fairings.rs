@@ -1,7 +1,3 @@
-use rocket::{
-    http::{Header, Status},
-    options,
-};
 use std::time::Instant;
 
 pub struct RequestTimer;

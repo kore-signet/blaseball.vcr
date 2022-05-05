@@ -23,7 +23,7 @@
 // }
 
 use blaseball_vcr::feed::db::*;
-use blaseball_vcr::feed::event::*;
+
 use blaseball_vcr::feed::index::{unpack_event_index, Index as FeedIndex, IndexType};
 use blaseball_vcr::feed::lookup_tables::*;
 use blaseball_vcr::*;
