@@ -1342,6 +1342,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+ "vhs-diff",
  "xxhash-rust",
 ]
 

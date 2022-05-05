@@ -169,8 +169,6 @@ pub fn game_updates(
             .map(|v| v.as_game_update())
             .collect();
 
-        println!("{}", req.count.unwrap_or(100));
-
         // if the page isn't empty, add it to the manager
         let token = if !page.is_empty() {
             Some(page_manager.add_page(page))

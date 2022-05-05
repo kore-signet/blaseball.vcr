@@ -16,6 +16,8 @@ pub fn entities(
     db_manager: &State<DatabaseManager>,
     page_manager: &State<PageManager>,
 ) -> VCRResult<RocketJSON<DynChronResponse>> {
+    let ety = req.ty.to_lowercase();
+
     if let Some(page_token) = req
         .page
         .as_ref()
@@ -25,7 +27,12 @@ pub fn entities(
             .get_page(&page_token)
             .ok_or(VCRError::InvalidPageToken)?;
         let mut page = page_mutex.lock();
-        let data = page.take_n::<Player>(db_manager, req.count.unwrap_or(100))?;
+        let data = call_method_by_type!(
+            page.take_n,
+            (db_manager, req.count.unwrap_or(100)),
+            ety.as_str(),
+            { return Err(VCRError::EntityTypeNotFound) }
+        )?;
 
         Ok(RocketJSON(ChronResponse {
             next_page: if page.is_empty() {
@@ -44,14 +51,20 @@ pub fn entities(
         let ids = if let Some(id) = req.id {
             vec![*id.as_bytes()]
         } else {
-            db_manager
-                .all_entity_ids::<Player>()
-                .ok_or(VCRError::EntityTypeNotFound)?
-                .to_vec()
+            call_method_by_type!(db_manager.all_entity_ids, (), ety.as_str(), {
+                return Err(VCRError::EntityTypeNotFound);
+            })
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .to_vec()
         };
 
         let mut page = Page::entities(at, ids);
-        let data = page.take_n::<Player>(db_manager, req.count.unwrap_or(100))?;
+        let data = call_method_by_type!(
+            page.take_n,
+            (db_manager, req.count.unwrap_or(100)),
+            ety.as_str(),
+            { return Err(VCRError::EntityTypeNotFound) }
+        )?;
 
         // if the page isn't empty, add it to the manager
         let token = if !page.is_empty() {
@@ -73,6 +86,8 @@ pub fn versions(
     db_manager: &State<DatabaseManager>,
     page_manager: &State<PageManager>,
 ) -> VCRResult<RocketJSON<DynChronResponse>> {
+    let ety = req.ty.to_lowercase();
+
     if let Some(page_token) = req
         .page
         .as_ref()
@@ -82,7 +97,12 @@ pub fn versions(
             .get_page(&page_token)
             .ok_or(VCRError::InvalidPageToken)?;
         let mut page = page_mutex.lock();
-        let data = page.take_n::<Player>(db_manager, req.count.unwrap_or(100))?;
+        let data = call_method_by_type!(
+            page.take_n,
+            (db_manager, req.count.unwrap_or(100)),
+            ety.as_str(),
+            { return Err(VCRError::EntityTypeNotFound) }
+        )?;
 
         Ok(RocketJSON(ChronResponse {
             next_page: if page.is_empty() {
@@ -106,14 +126,20 @@ pub fn versions(
         let ids = if let Some(id) = req.id {
             vec![*id.as_bytes()]
         } else {
-            db_manager
-                .all_entity_ids::<Player>()
-                .ok_or(VCRError::EntityTypeNotFound)?
-                .to_vec()
+            call_method_by_type!(db_manager.all_entity_ids, (), ety.as_str(), {
+                return Err(VCRError::EntityTypeNotFound);
+            })
+            .ok_or(VCRError::EntityTypeNotFound)?
+            .to_vec()
         };
 
         let mut page = Page::versions(before, after, ids);
-        let data = page.take_n::<Player>(db_manager, req.count.unwrap_or(100))?;
+        let data = call_method_by_type!(
+            page.take_n,
+            (db_manager, req.count.unwrap_or(100)),
+            ety.as_str(),
+            { return Err(VCRError::EntityTypeNotFound) }
+        )?;
 
         // if the page isn't empty, add it to the manager
         let token = if !page.is_empty() {

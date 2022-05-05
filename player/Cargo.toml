@@ -9,6 +9,7 @@ moka = "0.8.0"
 erased-serde = "0.3.20"
 atomic-shim = "0.2.0"
 hex = "0.4.3"
+vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
 
 [dependencies.xxhash-rust]
 version = "0.8.5"
