@@ -11,4 +11,5 @@ pub struct GamesReq<'r> {
     pub team: Option<&'r str>,
     pub weather: Option<&'r str>,
     pub page: Option<String>,
+    pub sim: Option<&'r str>,
 }

@@ -118,9 +118,17 @@ mod db_wrapper {
 }
 
 #[derive(Serialize)]
+pub struct ChronV1Response<T> {
+    #[serde(rename = "nextPage")]
+    next_page: Option<String>,
+    data: Vec<T>,
+}
+
+#[derive(Serialize)]
 pub struct ChronResponse<T> {
     #[serde(rename = "nextPage")]
     next_page: Option<String>,
+    #[serde(rename = "items")]
     data: Vec<T>,
 }
 

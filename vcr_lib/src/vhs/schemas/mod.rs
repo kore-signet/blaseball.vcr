@@ -35,6 +35,7 @@ pub use player::Player;
 pub use renovationprogress::Renovationprogress;
 pub use risingstars::Risingstars;
 pub use shopsetup::Shopsetup;
+pub use stream_data::*;
 pub use teamelectionstats::Teamelectionstats;
 pub use vault::Vault;
 
@@ -126,5 +127,6 @@ etypes! {
     "risingstars" -> RisingStars(Risingstars),
     "shopsetup" -> ShopSetup(Shopsetup),
     "teamelectionstats" -> TeamElectionStats(Teamelectionstats),
-    "vault" -> Vault(Vault)
+    "vault" -> Vault(Vault),
+    "stream" -> StreamData(StreamDataWrapper)
 }

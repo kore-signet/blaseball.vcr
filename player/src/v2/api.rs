@@ -113,6 +113,42 @@ pub fn versions(
             data,
         }))
     } else {
+        let step = 3;
+
+        if ety == "stream" {
+            let start_time = req.after.as_ref().map_or(
+                req.before.as_ref().map_or(u32::MAX, |x| {
+                    DateTime::parse_from_rfc3339(x).unwrap().timestamp() as u32
+                }) - ((req.count.unwrap_or(1) as u32) * step),
+                |y| DateTime::parse_from_rfc3339(y).unwrap().timestamp() as u32,
+            );
+
+            let end_time = req.before.map_or(
+                req.after.map_or(u32::MIN, |x| {
+                    DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+                }) + ((req.count.unwrap_or(1) as u32) * step),
+                |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+            );
+
+            let stream_samples = (start_time..end_time)
+                .into_iter()
+                .step_by(step as usize)
+                .map(|at| {
+                    Ok((ChroniclerEntity {
+                        entity_id: *uuid::Uuid::nil().as_bytes(),
+                        valid_from: at,
+                        data: blaseball_vcr::stream_data::stream_data(&db_manager, at)?,
+                    })
+                    .erase())
+                })
+                .collect::<VCRResult<Vec<DynamicChronEntity>>>()?;
+
+            return Ok(RocketJSON(ChronResponse {
+                next_page: None,
+                data: stream_samples,
+            }));
+        }
+
         let before = req
             .before
             .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
@@ -123,6 +159,7 @@ pub fn versions(
             .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
             .map(|v| v.timestamp() as u32)
             .unwrap_or(0);
+
         let ids = if let Some(id) = req.id {
             vec![*id.as_bytes()]
         } else {

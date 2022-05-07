@@ -99,7 +99,15 @@ impl Page {
                 }
                 Versions { before, after } => {
                     self.fetch_next_versions::<T>(db, count, before, after)?;
-                    output.append(&mut self.remaining_data);
+                    let remainder = output.len().saturating_sub(count);
+
+                    // if we have more data than fits in the requested count, use Vec::drain
+                    if self.remaining_data.len() > remainder {
+                        output.extend(self.remaining_data.drain(..remainder));
+                    // else, use Vec::append
+                    } else {
+                        output.append(&mut self.remaining_data);
+                    }
                 }
             }
         }

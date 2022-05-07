@@ -12,6 +12,8 @@ pub mod game_lookup_tables;
 mod chron_types;
 pub use chron_types::*;
 
+pub mod stream_data;
+
 // use chrono::{DateTime, Utc};
 // use rocket::FromFormField;
 // use serde::{Deserialize, Serialize};
@@ -24,6 +26,10 @@ pub trait EntityDatabase {
     type Record;
 
     fn get_entity(&self, id: &[u8; 16], at: u32) -> VCRResult<OptionalEntity<Self::Record>>;
+
+    fn get_first_entity(&self, id: &[u8; 16]) -> VCRResult<OptionalEntity<Self::Record>>;
+
+    fn get_first_entities(&self, ids: &[[u8; 16]]) -> VCRResult<Vec<OptionalEntity<Self::Record>>>;
 
     fn get_entities(
         &self,

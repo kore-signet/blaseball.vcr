@@ -138,6 +138,7 @@ dependencies = [
  "automod",
  "bsdiff",
  "chrono",
+ "compiled-uuid",
  "crossbeam",
  "easybench",
  "enum-map",
@@ -299,6 +300,19 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
+]
+
+[[package]]
+name = "compiled-uuid"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18c9f404cbbb38aeaaa6a0cfe4039df817377926183d278098cdfe96dd015610"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "thiserror",
+ "uuid",
 ]
 
 [[package]]

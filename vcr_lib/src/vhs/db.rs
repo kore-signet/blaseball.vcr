@@ -220,6 +220,18 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         Ok(None)
     }
 
+    fn get_first_entity_inner(
+        &self,
+        id: &[u8; 16],
+        decompressor: &mut Decompressor,
+    ) -> VCRResult<OptionalEntity<T>> {
+        if let Some(first_time) = self.index.get(id).and_then(|header| header.times.first()) {
+            self.get_entity_inner(id, *first_time, decompressor)
+        } else {
+            Ok(None)
+        }
+    }
+
     // TODO: we need to add times here
     fn get_versions_inner(
         &self,
@@ -380,6 +392,21 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
     fn get_entity(&self, id: &[u8; 16], at: u32) -> VCRResult<OptionalEntity<T>> {
         let mut decompressor = self.decompressor()?;
         self.get_entity_inner(id, at, &mut decompressor)
+    }
+
+    fn get_first_entity(&self, id: &[u8; 16]) -> VCRResult<OptionalEntity<Self::Record>> {
+        let mut decompressor = self.decompressor()?;
+        self.get_first_entity_inner(id, &mut decompressor)
+    }
+
+    fn get_first_entities(&self, ids: &[[u8; 16]]) -> VCRResult<Vec<OptionalEntity<Self::Record>>> {
+        let mut decompressor = self.decompressor()?;
+        let mut result = Vec::with_capacity(ids.len());
+        for id in ids {
+            result.push(self.get_first_entity_inner(id, &mut decompressor)?);
+        }
+
+        Ok(result)
     }
 
     fn get_entities(&self, ids: &[[u8; 16]], at: u32) -> VCRResult<Vec<OptionalEntity<T>>> {

@@ -30,7 +30,7 @@ for game in chronicler.get_games(before="2021-09-01T00:00:00Z"):
     teams = [data["awayTeam"], data["homeTeam"]]
     season = data["season"]
     day = data["day"]
-    tournament = data.get("tournament", 0)
+    tournament = data.get("tournament", -1)
     weather = data["weather"]
 
     for pitcher in pitchers:

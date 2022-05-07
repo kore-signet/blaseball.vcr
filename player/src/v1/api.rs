@@ -111,7 +111,7 @@ pub fn game_updates(
     req: GamesReq<'_>,
     db_manager: &State<DatabaseManager>,
     page_manager: &State<PageManager>,
-) -> VCRResult<RocketJSON<ChronResponse<GameUpdateWrapper<DynamicEntity>>>> {
+) -> VCRResult<RocketJSON<ChronV1Response<GameUpdateWrapper<DynamicEntity>>>> {
     if let Some(page_token) = req
         .page
         .as_ref()
@@ -127,7 +127,7 @@ pub fn game_updates(
             .map(|v| v.as_game_update())
             .collect();
 
-        Ok(RocketJSON(ChronResponse {
+        Ok(RocketJSON(ChronV1Response {
             next_page: if page.is_empty() {
                 None
             } else {
@@ -176,7 +176,7 @@ pub fn game_updates(
             None
         };
 
-        Ok(RocketJSON(ChronResponse {
+        Ok(RocketJSON(ChronV1Response {
             next_page: token.map(|v| format!("{:X}", v)),
             data,
         }))
