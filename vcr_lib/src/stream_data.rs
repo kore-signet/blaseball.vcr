@@ -1,21 +1,10 @@
 use crate::db_manager::*;
 use crate::feed::lookup_tables::GAME_TO_UUID;
 use crate::game_lookup_tables::*;
-use crate::vhs::schemas::*;
+use crate::vhs::schemas::{self, *};
 use crate::*;
 use compiled_uuid::uuid;
-use serde::Serialize;
 use uuid::Uuid;
-
-pub struct PlayoffData {
-    round: Option<Playoffround>,
-    matchups: Vec<Playoffmatchup>,
-    playoffs: Playoffs,
-    all_rounds: Vec<Playoffround>,
-    all_matchups: Vec<Playoffmatchup>,
-    tomorrow_round: Option<Playoffround>,
-    tomorrow_matchups: Vec<Playoffmatchup>,
-}
 
 macro_rules! fetch_batch {
     (all of $what:ty; from $db:expr; at $at:expr) => {
@@ -49,21 +38,6 @@ fn clamp<T: std::cmp::Ord>(val: T, min: T, max: T) -> T {
     }
 }
 
-fn games_by_date(
-    db: &impl EntityDatabase<Record = GameUpdate>,
-    date: &GameDate,
-) -> VCRResult<Vec<OptionalEntity<GameUpdate>>> {
-    if let Some(ids) = DATES_TO_GAMES.get(&date.to_bytes()) {
-        let game_ids: Vec<[u8; 16]> = ids
-            .into_iter()
-            .map(|tag| *(GAME_TO_UUID[*tag as usize]).as_bytes())
-            .collect();
-        db.get_first_entities(&game_ids)
-    } else {
-        Ok(vec![])
-    }
-}
-
 fn games_by_date_and_time(
     db: &impl EntityDatabase<Record = GameUpdate>,
     date: &GameDate,
@@ -74,7 +48,42 @@ fn games_by_date_and_time(
             .into_iter()
             .map(|tag| *(GAME_TO_UUID[*tag as usize]).as_bytes())
             .collect();
-        db.get_first_entities(&game_ids)
+        db.get_entities(&game_ids, at)
+    } else {
+        Ok(vec![])
+    }
+}
+
+fn games_for_bets(
+    db: &impl EntityDatabase<Record = GameUpdate>,
+    date: &GameDate,
+    at: u32,
+) -> VCRResult<Vec<OptionalEntity<GameUpdate>>> {
+    if let Some(ids) = DATES_TO_GAMES.get(&date.to_bytes()) {
+        let game_ids: Vec<[u8; 16]> = ids
+            .into_iter()
+            .map(|tag| *(GAME_TO_UUID[*tag as usize]).as_bytes())
+            .collect();
+
+        let mut res = Vec::with_capacity(game_ids.len());
+
+        'outer: for id in game_ids {
+            let mut game = match db.get_entity(&id, at)?.or(db.get_first_entity(&id)?) {
+                Some(v) => v,
+                None => continue 'outer,
+            };
+
+            let mut time = game.valid_from;
+
+            while game.data.away_odds == 0f64 && game.data.home_odds == 0f64 {
+                time = db.get_next_time(&id, time).unwrap();
+                game = db.get_entity(&id, time)?.unwrap();
+            }
+
+            res.push(Some(game));
+        }
+
+        Ok(res)
     } else {
         Ok(vec![])
     }
@@ -200,8 +209,7 @@ pub fn stream_data(db: &DatabaseManager, at: u32) -> VCRResult<StreamDataWrapper
 
     working_date.day += 1;
 
-    // todo: replace with a games_for_bets equivalent
-    let tomorrow_schedule: Vec<GameUpdate> = games_by_date(game_db, &working_date)?
+    let tomorrow_schedule: Vec<GameUpdate> = games_for_bets(game_db, &working_date, at)?
         .into_iter()
         .filter_map(|v| v.map(|a| a.data))
         .collect();
@@ -281,6 +289,33 @@ pub fn stream_data(db: &DatabaseManager, at: u32) -> VCRResult<StreamDataWrapper
         None
     };
 
+    let mut postseason: Option<PlayoffData> = None;
+    let mut postseasons: Option<Vec<PlayoffData>> = None;
+
+    if let Some(ref tourn) = tournament {
+        postseason = Some(playoffs(
+            &db,
+            tourn.playoffs.as_bytes(),
+            sim.tournament_round,
+            at,
+        )?);
+    } else {
+        match sim.playoffs {
+            schemas::sim::Playoffs::String(ref id) => {
+                postseason = Some(playoffs(&db, id.as_bytes(), sim.play_off_round, at)?);
+            }
+            schemas::sim::Playoffs::StringArray(ref ids) => {
+                let mut res = Vec::with_capacity(ids.len());
+
+                for id in ids {
+                    res.push(playoffs(&db, id.as_bytes(), sim.play_off_round, at)?);
+                }
+
+                postseasons.replace(res);
+            }
+        };
+    };
+
     Ok(StreamDataWrapper {
         value: StreamData {
             games: GameData {
@@ -290,6 +325,8 @@ pub fn stream_data(db: &DatabaseManager, at: u32) -> VCRResult<StreamDataWrapper
                 tomorrow_schedule,
                 tournament,
                 standings,
+                postseason,
+                postseasons,
             },
             leagues: LeagueData {
                 teams,

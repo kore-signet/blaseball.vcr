@@ -125,23 +125,28 @@ pub fn versions(
 
             let end_time = req.before.map_or(
                 req.after.map_or(u32::MIN, |x| {
-                    DateTime::parse_from_rfc3339(&x).unwrap().timestamp() as u32
+                    DateTime::parse_from_rfc3339(x).unwrap().timestamp() as u32
                 }) + ((req.count.unwrap_or(1) as u32) * step),
-                |y| DateTime::parse_from_rfc3339(&y).unwrap().timestamp() as u32,
+                |y| DateTime::parse_from_rfc3339(y).unwrap().timestamp() as u32,
             );
 
-            let stream_samples = (start_time..end_time)
+            let mut stream_samples = (start_time..end_time)
                 .into_iter()
                 .step_by(step as usize)
                 .map(|at| {
                     Ok((ChroniclerEntity {
                         entity_id: *uuid::Uuid::nil().as_bytes(),
                         valid_from: at,
-                        data: blaseball_vcr::stream_data::stream_data(&db_manager, at)?,
+                        data: blaseball_vcr::stream_data::stream_data(db_manager, at)?,
                     })
                     .erase())
                 })
                 .collect::<VCRResult<Vec<DynamicChronEntity>>>()?;
+
+            stream_samples.sort_by_key(|x| x.valid_from);
+            if let Some(Order::Desc) = req.order {
+                stream_samples.reverse();
+            }
 
             return Ok(RocketJSON(ChronResponse {
                 next_page: None,

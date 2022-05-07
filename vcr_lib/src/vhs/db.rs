@@ -409,6 +409,18 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
         Ok(result)
     }
 
+    fn get_next_time(&self, id: &[u8; 16], at: u32) -> Option<u32> {
+        self.index.get(id).and_then(|header| {
+            header
+                .times
+                .get(match header.times.binary_search(&at) {
+                    Ok(idx) => idx,
+                    Err(idx) => idx,
+                })
+                .copied()
+        })
+    }
+
     fn get_entities(&self, ids: &[[u8; 16]], at: u32) -> VCRResult<Vec<OptionalEntity<T>>> {
         if ids.len() < num_cpus::get() {
             let mut decompressor = self.decompressor()?;

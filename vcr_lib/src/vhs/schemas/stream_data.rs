@@ -3,6 +3,18 @@ use super::*;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct PlayoffData {
+    pub round: Option<Playoffround>,
+    pub matchups: Vec<Playoffmatchup>,
+    pub playoffs: Playoffs,
+    pub all_rounds: Vec<Playoffround>,
+    pub all_matchups: Vec<Playoffmatchup>,
+    pub tomorrow_round: Option<Playoffround>,
+    pub tomorrow_matchups: Vec<Playoffmatchup>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 #[repr(transparent)]
 pub struct StreamDataWrapper {
     pub value: StreamData
@@ -25,7 +37,11 @@ pub struct GameData {
     pub schedule: Vec<GameUpdate>,
     pub tomorrow_schedule: Vec<GameUpdate>,
     pub tournament: Option<Tournament>,
-    pub standings: Option<Standings>
+    pub standings: Option<Standings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub postseason: Option<PlayoffData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub postseasons: Option<Vec<PlayoffData>>
 }
 
 #[derive(Serialize, Clone)]

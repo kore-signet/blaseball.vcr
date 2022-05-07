@@ -19,4 +19,11 @@ pub struct VersionsRequest<'r> {
     pub before: Option<&'r str>,
     pub after: Option<&'r str>,
     pub count: Option<usize>,
+    pub order: Option<Order>,
+}
+
+#[derive(FromFormField)]
+pub enum Order {
+    Asc,
+    Desc,
 }

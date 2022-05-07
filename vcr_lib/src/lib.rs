@@ -41,6 +41,8 @@ pub trait EntityDatabase {
             .collect::<VCRResult<Vec<OptionalEntity<Self::Record>>>>()
     }
 
+    fn get_next_time(&self, id: &[u8; 16], at: u32) -> Option<u32>;
+
     fn get_versions(
         &self,
         id: &[u8; 16],
