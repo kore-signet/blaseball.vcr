@@ -289,6 +289,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                     start_checkpoint,
                     range,
                     &decompressed[..],
+                    true,
                 )?;
             // else, if the versions are spread across two consecutive ranges,
             } else if start_checkpoint + 1 == end_checkpoint {
@@ -301,12 +302,20 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                     start_checkpoint,
                     range,
                     &decompressed[..],
+                    true,
                 )?;
 
                 // then, we get the ending range, sliced from it's start to the end index
                 let end_index = end_index % header.checkpoint_every;
                 let range = 0..end_index;
-                self.get_version_range(header, &mut out, end_checkpoint, range, &decompressed[..])?
+                self.get_version_range(
+                    header,
+                    &mut out,
+                    end_checkpoint,
+                    range,
+                    &decompressed[..],
+                    false,
+                )?
             // else, if the versions are spread across multiple checkpoint ranges
             } else if end_checkpoint > start_checkpoint {
                 // we make an iterator of all the indices
@@ -321,6 +330,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                     start_checkpoint,
                     range,
                     &decompressed[..],
+                    true,
                 )?;
 
                 // we apply all the middle ranges fully
@@ -331,13 +341,21 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                         check_idx,
                         0..usize::MAX,
                         &decompressed[..],
+                        false,
                     )?;
                 }
 
                 // we apply the last range
                 let end_index = end_index % header.checkpoint_every;
                 let range = 0..end_index + 1;
-                self.get_version_range(header, &mut out, end_checkpoint, range, &decompressed[..])?
+                self.get_version_range(
+                    header,
+                    &mut out,
+                    end_checkpoint,
+                    range,
+                    &decompressed[..],
+                    false,
+                )?
             }
 
             return Ok(Some(
@@ -362,6 +380,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         checkpoint_index: usize,
         range: Range<usize>,
         decompressed: &[u8],
+        add_cur: bool,
     ) -> VCRResult<()> {
         let slice = if let Some(start_pos) = header.checkpoint_positions.get(checkpoint_index) {
             if let Some(next) = header.checkpoint_positions.get(start_pos + 1) {
@@ -376,7 +395,9 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         let mut deserializer = rmp_serde::Deserializer::from_read_ref(slice);
         let cur = T::deserialize(&mut deserializer)?;
 
-        out.push(cur.clone());
+        if add_cur {
+            out.push(cur.clone());
+        }
 
         PatchesToVec::apply_range(cur, out, range, &mut deserializer)?;
 

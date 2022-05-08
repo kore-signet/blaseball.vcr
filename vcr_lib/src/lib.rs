@@ -2,6 +2,7 @@ mod err;
 pub mod site;
 #[macro_use]
 pub mod utils;
+pub use utils::*;
 pub mod feed;
 pub use err::*;
 pub mod db_manager;
@@ -78,5 +79,30 @@ impl GameDate {
             season: i8::from_le_bytes([season]),
             tournament: i8::from_le_bytes([tournament]),
         }
+    }
+}
+
+// hack so we can use call_method_by_type for Database::from_single
+pub mod db_wrapper {
+    use crate::db_manager::*;
+    use crate::vhs::db::Database;
+    use crate::VCRResult;
+
+    pub fn from_single_and_insert<
+        T: Clone
+            + vhs_diff::Patch
+            + vhs_diff::Diff
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + serde::Serialize
+            + 'static,
+    >(
+        manager: &mut DatabaseManager,
+        path: &std::path::Path,
+    ) -> VCRResult<()> {
+        let v: Database<T> = Database::from_single(path)?;
+        manager.insert(v);
+        Ok(())
     }
 }

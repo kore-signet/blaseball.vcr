@@ -23,6 +23,10 @@ enum-map = "2.1.0"
 fst = "0.4.7"
 compiled-uuid = "0.1.2"
 
+[dependencies.rusty_pool]
+default-features = false
+version = "0.7"
+
 [dependencies.rkyv]
 version = "0.7.36"
 default-features = false
@@ -51,4 +55,10 @@ features = ["derive"]
 version = "1.0.64"
 features = ["preserve_order", "raw_value"]
 
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "stream_data"
+harness = false
 

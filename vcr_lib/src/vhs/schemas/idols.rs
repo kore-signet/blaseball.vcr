@@ -4,13 +4,13 @@ use vhs_diff::{Diff, Patch};
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Idol {
-    #[serde(rename = "id")]
+    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
 
     #[serde(rename = "playerId")]
     pub player_id: String,
 
-    #[serde(rename = "total")]
+    #[serde(rename = "total", skip_serializing_if = "Option::is_none")]
     pub total: Option<i64>,
 }
 
