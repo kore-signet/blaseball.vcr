@@ -1,7 +1,9 @@
 use super::DataHeader;
 use crate::chron_types::*;
 use crate::{EntityDatabase, OptionalEntity, VCRError, VCRResult};
+use crossbeam::channel;
 use memmap2::{Mmap, MmapOptions};
+use moka::sync::Cache;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::fs::File;
@@ -9,17 +11,21 @@ use std::io::Read;
 use std::marker::PhantomData;
 use std::ops::Range;
 use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
 use vhs_diff::{patch_seq::*, Diff, Patch};
+use xxhash_rust::xxh3;
 use zstd::bulk::Decompressor;
 use zstd::dict::DecoderDictionary;
 
-use crossbeam::channel;
+type RangeTuple = (usize, usize);
 
 pub struct Database<T: Clone + Patch + Send + Sync> {
     pub index: HashMap<[u8; 16], DataHeader>,
     pub id_list: Vec<[u8; 16]>,
     inner: Mmap,
     decoder: Option<DecoderDictionary<'static>>,
+    cache: Cache<RangeTuple, Arc<Vec<u8>>, xxh3::Xxh3Builder>,
     _record_type: PhantomData<T>,
 }
 
@@ -65,6 +71,11 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
             id_list,
             decoder: dict,
             inner,
+            cache: Cache::builder()
+                .max_capacity(100)
+                .time_to_live(Duration::from_secs(20 * 60))
+                .time_to_idle(Duration::from_secs(10 * 60))
+                .build_with_hasher(xxh3::Xxh3Builder::new()),
             _record_type: PhantomData,
         })
     }
@@ -97,6 +108,11 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
             id_list,
             decoder: Some(DecoderDictionary::copy(&dict)),
             inner,
+            cache: Cache::builder()
+                .max_capacity(100)
+                .time_to_live(Duration::from_secs(20 * 60))
+                .time_to_idle(Duration::from_secs(10 * 60))
+                .build_with_hasher(xxh3::Xxh3Builder::new()),
             _record_type: PhantomData,
         })
     }
@@ -157,6 +173,27 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
         .map_err(|_| VCRError::ParallelError)?
     }
 
+    #[inline(always)]
+    fn get_data_range(
+        &self,
+        range: Range<usize>,
+        decompressed_len: usize,
+        decompressor: &mut Decompressor,
+    ) -> VCRResult<Arc<Vec<u8>>> {
+        let range = (range.start, range.end);
+        if let Some(data) = self.cache.get(&range) {
+            return Ok(data);
+        }
+
+        let data = &self.inner[Range {
+            start: range.0,
+            end: range.1,
+        }];
+        let decompressed = Arc::new(decompressor.decompress(data, decompressed_len)?);
+        self.cache.insert(range, Arc::clone(&decompressed));
+        Ok(decompressed)
+    }
+
     fn get_entity_inner(
         &self,
         id: &[u8; 16],
@@ -181,9 +218,11 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
                 return Ok(None);
             }
 
-            let data = &self.inner
-                [header.offset as usize..(header.offset + header.compressed_len) as usize];
-            let decompressed = decompressor.decompress(data, header.decompressed_len as usize)?;
+            let decompressed = self.get_data_range(
+                header.offset as usize..(header.offset + header.compressed_len) as usize,
+                header.decompressed_len as usize,
+                decompressor,
+            )?;
 
             let checkpoint_index =
                 (index - (index % header.checkpoint_every)) / header.checkpoint_every;
@@ -270,9 +309,11 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
             let end_checkpoint =
                 (end_index - (end_index % header.checkpoint_every)) / header.checkpoint_every;
 
-            let data = &self.inner
-                [header.offset as usize..(header.offset + header.compressed_len) as usize];
-            let decompressed = decompressor.decompress(data, header.decompressed_len as usize)?;
+            let decompressed = self.get_data_range(
+                header.offset as usize..(header.offset + header.compressed_len) as usize,
+                header.decompressed_len as usize,
+                decompressor,
+            )?;
 
             let mut out = Vec::with_capacity(end_index - start_index);
 

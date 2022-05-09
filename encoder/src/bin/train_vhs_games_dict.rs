@@ -1,6 +1,7 @@
 use blaseball_vcr::vhs::recorder::*;
 use blaseball_vcr::vhs::schemas::game::GameUpdate;
-use blaseball_vcr::{ChronV1GameUpdate, VCRResult};
+use blaseball_vcr::VCRResult;
+use new_encoder::ChronV1GameUpdate;
 
 use std::fs::File;
 use std::io::{self, BufReader, Read};

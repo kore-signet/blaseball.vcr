@@ -23,7 +23,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("stream data");
 
     group.bench_function("single threaded", |b| {
-        b.iter(|| blaseball_vcr::stream_data::stream_data(&db_manager, 1605889380))
+        b.iter(|| {
+            for i in 0..10 {
+                blaseball_vcr::stream_data::stream_data(&db_manager, 1600113866 + i * 4);
+            }
+        })
     });
 
     group.finish();
@@ -31,7 +35,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
-    config = Criterion::default().sample_size(200).measurement_time(std::time::Duration::from_secs(20)).warm_up_time(std::time::Duration::from_secs(5));
+    config = Criterion::default().sample_size(200).measurement_time(std::time::Duration::from_secs(40)).warm_up_time(std::time::Duration::from_secs(5));
     targets = criterion_benchmark
 }
 criterion_main!(benches);
