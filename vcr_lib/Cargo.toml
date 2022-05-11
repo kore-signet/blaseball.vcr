@@ -20,6 +20,7 @@ enum-map = "2.1.0"
 fst = "0.4.7"
 compiled-uuid = "0.1.2"
 moka = "0.8.2"
+hex = "0.4.3"
 
 [dependencies.xxhash-rust]
 version = "0.8.5"

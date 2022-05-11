@@ -24,6 +24,8 @@ fst = "0.4.7"
 rmp-serde = "1"
 easybench = "1.1.0"
 fastrand = "1.7.0"
+bsdiff = "0.1.6"
+sha2 = "0.10.2"
 
 [dependencies.reqwest]
 version = "0.11"

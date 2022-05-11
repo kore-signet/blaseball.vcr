@@ -20,3 +20,8 @@ feed.json
 *.fst
 *.vhs
 vcr_v2.tar
+site-assets.tar.gz
+site-assets/2js
+site-assets/indexhtml
+site-assets/maincss
+site-assets/mainjs

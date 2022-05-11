@@ -17,6 +17,8 @@ pub enum VCRError {
     InvalidOpCode,
     #[error("data not indexed during tapes build")]
     IndexMissing,
+    #[error("invalid asset kind")]
+    InvalidAssetKind,
     #[error(transparent)]
     MsgPackEncError(#[from] rmp_serde::encode::Error),
     #[error(transparent)]

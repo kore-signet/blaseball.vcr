@@ -30,10 +30,12 @@
 #[macro_use]
 extern crate rocket;
 
+use blaseball_vcr::site::AssetManager;
 use serde::Serialize;
 
 mod fairings;
 mod paging;
+mod site;
 mod v1;
 mod v2;
 
@@ -82,12 +84,22 @@ fn rocket() -> _ {
         }
     }
 
+    let site_manager = AssetManager::from_single("vhs_tapes/site_assets.vhs").unwrap();
+
     rocket::build()
         .manage(db_manager)
         .attach(RequestTimer)
+        .manage(site_manager)
         .manage(PageManager::new(256, Duration::from_secs(10 * 60)))
         .mount(
             "/",
-            routes![entities, versions, v1::games, v1::game_updates],
+            routes![
+                entities,
+                versions,
+                v1::games,
+                v1::game_updates,
+                site::site_updates,
+                site::site_download
+            ],
         )
 }
