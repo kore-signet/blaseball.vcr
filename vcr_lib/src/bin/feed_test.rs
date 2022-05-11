@@ -47,19 +47,26 @@ fn main() -> VCRResult<()> {
 
     let after = 1617837026; // 2021-04-07T23:10:26.874Z
     let before = 1617858011; // 2021-04-08T05:00:11.241Z
-
-    let mut stream = idx_manager
-        .get_by_tag_and_time(IndexType::PlayerTags, &player_tag[..], after, before)
-        .unwrap();
-
-    while let Some((_, key)) = stream.next() {
-        let (block_index, event_index) = unpack_event_index(key);
-        let block = db.get_block_by_index(block_index)?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&block.event_at_index(event_index))?
-        );
-    }
+                             // println!("uwu");
+    let after_ms: u64 = after as u64 * 1000;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&db.get_events_after(after_ms, 201).into_serializable())?
+    );
 
     Ok(())
+    // let mut stream = idx_manager
+    //     .get_by_tag_and_time(IndexType::PlayerTags, &player_tag[..], after, before)
+    //     .unwrap();
+
+    // while let Some((_, key)) = stream.next() {
+    //     let (block_index, event_index) = unpack_event_index(key);
+    //     let block = db.get_block_by_index(block_index)?;
+    //     println!(
+    //         "{}",
+    //         serde_json::to_string_pretty(&block.event_at_index(event_index))?
+    //     );
+    // }
+
+    // Ok(())
 }

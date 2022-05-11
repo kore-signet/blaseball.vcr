@@ -78,7 +78,7 @@ impl CompactedFeedEvent {
 
 // a simple wrapper around a the archived version that allows for serialization, and adds the event timestamp timestamp
 pub struct ArchivedEventWithTimestamp<'a> {
-    created: u64,
+    pub(crate) created: u64,
     inner: &'a ArchivedCompactedFeedEvent,
 }
 

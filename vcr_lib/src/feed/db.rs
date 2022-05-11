@@ -2,9 +2,15 @@ use super::block::*;
 use super::{BlockHeader, EncodedBlockHeader};
 use crate::VCRResult;
 use memmap2::{Mmap, MmapOptions};
+use moka::sync::Cache;
+use serde::ser::{Error, Serialize, SerializeSeq, Serializer};
+use std::cell::Cell;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+use xxhash_rust::xxh3;
 use zstd::bulk::Decompressor;
 use zstd::dict::DecoderDictionary;
 
@@ -12,6 +18,7 @@ pub struct FeedDatabase {
     inner: Mmap,
     dict: Option<DecoderDictionary<'static>>,
     headers: Vec<BlockHeader>,
+    cache: Cache<u16, Arc<EventBlock>, xxh3::Xxh3Builder>,
 }
 
 impl FeedDatabase {
@@ -73,6 +80,11 @@ impl FeedDatabase {
             headers,
             dict,
             inner,
+            cache: Cache::builder()
+                .max_capacity(100)
+                .time_to_live(Duration::from_secs(20 * 60))
+                .time_to_idle(Duration::from_secs(10 * 60))
+                .build_with_hasher(xxh3::Xxh3Builder::new()),
         })
     }
 
@@ -89,7 +101,11 @@ impl FeedDatabase {
         Ok(decompressor)
     }
 
-    pub fn get_block_by_index(&self, index: u16) -> VCRResult<EventBlock> {
+    pub fn get_block_by_index(&self, index: u16) -> VCRResult<Arc<EventBlock>> {
+        if let Some(cached) = self.cache.get(&index) {
+            return Ok(cached);
+        }
+
         let header = &self.headers[index as usize];
 
         let data =
@@ -98,14 +114,17 @@ impl FeedDatabase {
             .decompressor()?
             .decompress(data, header.decompressed_len as usize)?;
 
-        Ok(EventBlock {
+        let block = Arc::new(EventBlock {
             bytes: decompressed,
             event_positions: header.event_positions.clone(),
-        })
+        });
+
+        self.cache.insert(index, Arc::clone(&block));
+
+        Ok(block)
     }
 
-    // returns (bytes, event_positions)
-    pub fn get_block_by_time(&self, at: u64) -> VCRResult<EventBlock> {
+    pub fn get_block_by_time(&self, at: u64) -> VCRResult<Arc<EventBlock>> {
         let index = match self.headers.binary_search_by_key(&at, |v| v.start_time) {
             Ok(i) => i,
             Err(i) => {
@@ -118,5 +137,126 @@ impl FeedDatabase {
         };
 
         self.get_block_by_index(index as u16)
+    }
+
+    pub fn get_events_after(&self, after: u64, count: usize) -> EventRangeSerializer<'_> {
+        let block_index = match self.headers.binary_search_by_key(&after, |v| v.start_time) {
+            Ok(i) => i,
+            Err(i) => {
+                if i > 0 {
+                    i - 1
+                } else {
+                    i
+                }
+            }
+        } as u16;
+
+        EventRangeSerializer {
+            inner: Cell::new(Some(EventRangeIter {
+                db: self,
+                block_index,
+                go_up: true,
+                count_left: count,
+            })),
+            before: u64::MAX,
+            after,
+        }
+    }
+
+    pub fn get_events_before(&self, before: u64, count: usize) -> EventRangeSerializer<'_> {
+        let block_index = match self.headers.binary_search_by_key(&before, |v| v.start_time) {
+            Ok(i) => i,
+            Err(i) => {
+                if i > 0 {
+                    i - 1
+                } else {
+                    i
+                }
+            }
+        } as u16;
+
+        EventRangeSerializer {
+            inner: Cell::new(Some(EventRangeIter {
+                db: self,
+                block_index,
+                go_up: false,
+                count_left: count,
+            })),
+            before,
+            after: 0,
+        }
+    }
+}
+
+pub struct EventRangeSerializer<'a> {
+    inner: Cell<Option<EventRangeIter<'a>>>,
+    before: u64,
+    after: u64,
+}
+
+impl<'a> Serialize for EventRangeSerializer<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut iter = self.inner.take().ok_or(S::Error::custom(
+            "NEventsAfterSerializer: inner iterator already consumed",
+        ))?;
+        let mut seq = serializer.serialize_seq(Some(iter.count_left))?;
+
+        while let Some(block) = iter.next() {
+            let block = block.map_err(|e| S::Error::custom(e))?;
+            let mut events = block.all_events();
+
+            if !iter.go_up {
+                events.retain(|v| v.created < self.before);
+            } else {
+                events.retain(|v| v.created > self.after);
+            }
+
+            if !iter.go_up {
+                events.reverse();
+            }
+
+            events.truncate(iter.count_left);
+
+            iter.count_left -= events.len();
+
+            for event in events {
+                seq.serialize_element(&event)?;
+            }
+        }
+
+        seq.end()
+    }
+}
+
+pub struct EventRangeIter<'a> {
+    db: &'a FeedDatabase,
+    block_index: u16,
+    go_up: bool, // if true, increment block_index every step; else, subtract
+    count_left: usize,
+}
+
+impl<'a> Iterator for EventRangeIter<'a> {
+    type Item = VCRResult<Arc<EventBlock>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.go_up && self.block_index as usize >= self.db.headers.len() {
+            return None;
+        }
+
+        let block = match self.db.get_block_by_index(self.block_index) {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e)),
+        };
+
+        if self.go_up {
+            self.block_index = self.block_index.checked_add(1)?;
+        } else {
+            self.block_index = self.block_index.checked_sub(1)?;
+        }
+
+        Some(Ok(block))
     }
 }

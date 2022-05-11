@@ -30,10 +30,12 @@
 #[macro_use]
 extern crate rocket;
 
+use blaseball_vcr::feed::db::FeedDatabase;
 use blaseball_vcr::site::AssetManager;
 use serde::Serialize;
 
 mod fairings;
+mod feed;
 mod paging;
 mod site;
 mod v1;
@@ -85,11 +87,25 @@ fn rocket() -> _ {
     }
 
     let site_manager = AssetManager::from_single("vhs_tapes/site_assets.vhs").unwrap();
+    if false {
+        for asset_kind in site_manager.assets.keys() {
+            let (total, failures) = site_manager.check_asset(asset_kind).unwrap();
+            println!(
+                "{} ~ {} checksum matches ({} failures)",
+                asset_kind,
+                total - failures.len(),
+                failures.len()
+            );
+        }
+    }
+
+    let feed_db = FeedDatabase::from_single("./vhs_tapes/feed.vhs").unwrap();
 
     rocket::build()
         .manage(db_manager)
         .attach(RequestTimer)
         .manage(site_manager)
+        .manage(feed_db)
         .manage(PageManager::new(256, Duration::from_secs(10 * 60)))
         .mount(
             "/",
@@ -99,7 +115,8 @@ fn rocket() -> _ {
                 v1::games,
                 v1::game_updates,
                 site::site_updates,
-                site::site_download
+                site::site_download,
+                feed::api::feed
             ],
         )
 }

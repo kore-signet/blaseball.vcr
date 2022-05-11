@@ -6,10 +6,11 @@ use serde::{
     ser::{SerializeStruct, Serializer},
     Deserialize, Serialize,
 };
+use sha2::{Digest, Sha224};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::Read;
 use std::mem;
 use std::path::Path;
 use std::str::FromStr;
@@ -104,7 +105,7 @@ impl Serialize for ChronSiteUpdate {
 }
 
 pub struct AssetManager {
-    assets: BTreeMap<AssetType, PatchSet>,
+    pub assets: BTreeMap<AssetType, PatchSet>,
     inner: Mmap,
 }
 
@@ -157,25 +158,61 @@ impl AssetManager {
         let mut decompressor = Decompressor::new()?;
 
         for patch in &patch_set.patches[..=idx] {
-            let patch_data = decompressor.decompress(
-                &self.inner[patch.offset as usize..patch.offset as usize + patch.length as usize],
-                patch.uncompressed_patch_length as usize,
-            )?;
-
-            // pre-allocate extra space if needed
-            working_copy.clear();
-            unsafe {
-                working_copy.reserve(patch.uncompressed_length as usize);
-                working_copy.set_len(patch.uncompressed_length as usize);
-            }
-            // working_copy.append(&mut vec![0; patch.uncompressed_length as usize]);
-
-            // apply patch to cur, saving result to working_copy
-            patch::patch(&cur, &mut io::Cursor::new(patch_data), &mut working_copy)?;
-
-            mem::swap(&mut cur, &mut working_copy); // swap the result with the current working copy (which contains the result)
+            self.read_patch_inner(&mut decompressor, patch, &mut cur, &mut working_copy)?;
         }
 
         Ok(cur)
+    }
+
+    #[inline(always)]
+    fn read_patch_inner<'a>(
+        &self,
+        decompressor: &mut Decompressor,
+        patch: &PatchHeader,
+        cur: &'a mut Vec<u8>,
+        working_copy: &'a mut Vec<u8>,
+    ) -> VCRResult<()> {
+        let patch_data = decompressor.decompress(
+            &self.inner[patch.offset as usize..patch.offset as usize + patch.length as usize],
+            patch.uncompressed_patch_length as usize,
+        )?;
+
+        // pre-allocate extra space if needed
+        working_copy.clear();
+        unsafe {
+            working_copy.reserve(patch.uncompressed_length as usize);
+            working_copy.set_len(patch.uncompressed_length as usize);
+        }
+        // working_copy.append(&mut vec![0; patch.uncompressed_length as usize]);
+
+        // apply patch to cur, saving result to working_copy
+        patch::patch(&cur, &mut patch_data.as_slice(), working_copy)?;
+
+        mem::swap(cur, working_copy); // swap the result with the current working copy (which contains the result)
+
+        Ok(())
+    }
+
+    // reads asset, checks it, and returns (TOTAL_ASSETS, Vec<usize>); where Vec<usize> is the index of the failures
+    pub fn check_asset(&self, asset: &AssetType) -> VCRResult<(usize, Vec<usize>)> {
+        let patch_set = &self.assets[asset];
+        let mut cur = patch_set.initial.clone();
+        let mut working_copy = Vec::new();
+        let mut decompressor = Decompressor::new()?;
+        let mut hasher = Sha224::new();
+        let mut failures: Vec<usize> = Vec::new();
+
+        for (i, patch) in patch_set.patches.iter().enumerate() {
+            self.read_patch_inner(&mut decompressor, patch, &mut cur, &mut working_copy)?;
+            // calculate checksum of patched result
+            hasher.update(&cur);
+            let hash = hasher.finalize_reset();
+
+            if hash[..] != patch.hash[..] {
+                failures.push(i);
+            }
+        }
+
+        Ok((patch_set.patches.len(), failures))
     }
 }
