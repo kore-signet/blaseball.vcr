@@ -48,6 +48,10 @@ use v2::*;
 use blaseball_vcr::db_manager::DatabaseManager;
 use blaseball_vcr::vhs::schemas::*;
 use blaseball_vcr::{call_method_by_type, db_wrapper};
+use rocket::figment::{
+    providers::{Env, Format, Toml},
+    Figment, Profile,
+};
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -67,8 +71,41 @@ pub struct ChronResponse<T> {
 
 pub type DynChronResponse = ChronResponse<DynamicChronEntity>;
 
-#[launch]
-fn rocket() -> _ {
+#[cfg(not(feature = "bundle_before"))]
+async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+    rocket::custom(figment)
+}
+
+#[cfg(feature = "bundle_before")]
+async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
+    use rocket::figment::{providers::Serialized, util::map};
+
+    let profile = Profile::from_env_or("VCR_PROFILE", "default");
+    let figment = figment
+        .merge(Serialized::from(
+            &map![
+                "chronicler_base_url" => "{addr}/vcr/",
+                "upnuts_base_url" => "{addr}/vcr/",
+            ],
+            profile.as_str(),
+        ))
+        .merge(Serialized::from(
+            &map![
+                "siesta_mode" => true,
+                "chronplete" => true,
+            ],
+            profile.as_str(),
+        ));
+    before::build(&figment).await.unwrap()
+}
+
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
+    let figment = Figment::from(rocket::Config::default())
+        .merge(Toml::file("Vcr.toml").nested())
+        .merge(Env::prefixed("VCR_"))
+        .select(Profile::from_env_or("VCR_PROFILE", "default"));
+    let mut rocket = build_rocket(figment).await;
     let mut db_manager = DatabaseManager::new();
 
     for entry in std::fs::read_dir("./vhs_tapes").unwrap() {
@@ -101,14 +138,14 @@ fn rocket() -> _ {
 
     let feed_db = FeedDatabase::from_single("./vhs_tapes/feed.vhs").unwrap();
 
-    rocket::build()
+    let rocket = rocket
         .manage(db_manager)
         .attach(RequestTimer)
         .manage(site_manager)
         .manage(feed_db)
         .manage(PageManager::new(256, Duration::from_secs(10 * 60)))
         .mount(
-            "/",
+            "/vcr",
             routes![
                 entities,
                 versions,
@@ -118,5 +155,7 @@ fn rocket() -> _ {
                 site::site_download,
                 feed::api::feed
             ],
-        )
+        );
+    rocket.launch().await?;
+    Ok(())
 }

@@ -10,6 +10,9 @@ erased-serde = "0.3.20"
 atomic-shim = "0.2.0"
 vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
 
+[features]
+bundle_before = ["before"]
+
 [dependencies.xxhash-rust]
 version = "0.8.5"
 features = ["xxh3"]
@@ -36,3 +39,8 @@ features = ["derive"]
 [dependencies.serde_json]
 version = "1.0.64"
 
+[dependencies.before]
+git = "https://github.com/iliana/before.git"
+branch = "main"
+optional = true
+default-features = false
