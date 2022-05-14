@@ -11,7 +11,7 @@ zstd = { version = "0.11", features = ["experimental", "zdict_builder"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1.0.64", features = ["raw_value"] }
 anyhow = "1"
-uuid = "0.8.2"
+uuid = "1.0"
 memmap2 = "0.5.3"
 blaseball_vcr = { path = "../vcr_lib" }
 indicatif = "0.17.0-beta.1"
