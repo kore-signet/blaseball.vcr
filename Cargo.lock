@@ -205,7 +205,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "before"
 version = "0.2.0"
-source = "git+https://github.com/iliana/before.git?branch=main#540a49d3bf05932523f62e79aefb9faebd1f601b"
+source = "git+https://github.com/emily-signet/before.git?branch=main#ca31fe769194b4a9aeb3da3d7b8e193152fbdb17"
 dependencies = [
  "anyhow",
  "askama",

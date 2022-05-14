@@ -40,7 +40,7 @@ features = ["derive"]
 version = "1.0.64"
 
 [dependencies.before]
-git = "https://github.com/iliana/before.git"
+git = "https://github.com/emily-signet/before.git"
 branch = "main"
 optional = true
 default-features = false
