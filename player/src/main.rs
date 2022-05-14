@@ -101,6 +101,17 @@ async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
+    if let Some((_, path)) = std::env::vars().find(|(k, _)| k == "APPDIR") {
+        std::env::set_current_dir(path).unwrap();
+    } else {
+        // traverse from the directory where we live up until we find a Vcr.toml, then chdir there.
+        if let Ok(dir) = std::env::current_exe() {
+            if let Some(new_dir) = dir.ancestors().find(|d| d.join("Vcr.toml").exists()) {
+                std::env::set_current_dir(new_dir).unwrap();
+            }
+        }
+    };
+
     let figment = Figment::from(rocket::Config::default())
         .merge(Toml::file("Vcr.toml").nested())
         .merge(Env::prefixed("VCR_"))
