@@ -96,7 +96,8 @@ async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
             ],
             profile.as_str(),
         ));
-    before::build(&figment).await.unwrap()
+
+    before::build(&figment).await.map_err(|e| e.downcast::<rocket::figment::Error>()).unwrap()
 }
 
 #[rocket::main]
@@ -114,8 +115,8 @@ async fn main() -> Result<(), rocket::Error> {
 
     let figment = Figment::from(rocket::Config::default())
         .merge(Toml::file("Vcr.toml").nested())
-        .merge(Env::prefixed("VCR_"))
-        .select(Profile::from_env_or("VCR_PROFILE", "default"));
+        .merge(Env::prefixed("VCR_"));
+    // let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
     let mut rocket = build_rocket(figment).await;
     let mut db_manager = DatabaseManager::new();
 

@@ -37,7 +37,7 @@ version = "0.11"
 features = ["experimental", "zdict_builder"]
 
 [dependencies.rocket]
-version = "0.5.0-rc.1"
+version = "0.5.0-rc.2"
 
 [dependencies.uuid]
 version = "1.0"
