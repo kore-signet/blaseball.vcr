@@ -1,0 +1,4 @@
+[default.vcr]
+tape_folder = "./vhs_tapes"
+feed_tape = "./vhs_tapes/feed.vhs"
+site_tape = "./vhs_tapes/site_assets.vhs"

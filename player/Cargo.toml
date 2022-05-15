@@ -9,6 +9,7 @@ moka = "0.8.2"
 erased-serde = "0.3.20"
 atomic-shim = "0.2.0"
 vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
+humantime-serde = "1.1.1"
 
 [features]
 bundle_before = ["before"]

@@ -50,8 +50,10 @@ use blaseball_vcr::vhs::schemas::*;
 use blaseball_vcr::{call_method_by_type, db_wrapper};
 use rocket::figment::{
     providers::{Env, Format, Toml},
+    value::magic::RelativePathBuf,
     Figment, Profile,
 };
+use std::path::PathBuf;
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -97,7 +99,10 @@ async fn build_rocket(figment: Figment) -> rocket::Rocket<rocket::Build> {
             profile.as_str(),
         ));
 
-    before::build(&figment).await.map_err(|e| e.downcast::<rocket::figment::Error>()).unwrap()
+    before::build(&figment)
+        .await
+        .map_err(|e| e.downcast::<rocket::figment::Error>())
+        .unwrap()
 }
 
 #[rocket::main]
@@ -113,14 +118,53 @@ async fn main() -> Result<(), rocket::Error> {
         }
     };
 
+    #[derive(serde::Deserialize, Debug)]
+    struct VCRConfig {
+        tapes_folder: Option<RelativePathBuf>,
+        feed_tape: Option<RelativePathBuf>,
+        site_tape: Option<RelativePathBuf>,
+        #[serde(default)]
+        check_site_tapes: bool,
+        #[serde(default)]
+        time_requests: bool,
+        #[serde(default)]
+        cache: CacheConfig,
+    }
+
+    #[derive(serde::Deserialize, Debug)]
+    struct CacheConfig {
+        size: u64,
+        #[serde(with = "humantime_serde")]
+        time_to_idle: Duration,
+    }
+
+    impl Default for CacheConfig {
+        fn default() -> CacheConfig {
+            CacheConfig {
+                size: 256,
+                time_to_idle: Duration::from_secs(10 * 60),
+            }
+        }
+    }
+
     let figment = Figment::from(rocket::Config::default())
         .merge(Toml::file("Vcr.toml").nested())
-        .merge(Env::prefixed("VCR_"));
-    // let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
+        .merge(Env::prefixed("VCR_"))
+        .select(Profile::from_env_or("VCR_PROFILE", "default"));
+
+    let config: VCRConfig = figment.extract_inner("vcr").expect("missing vcr config!");
+
     let mut rocket = build_rocket(figment).await;
     let mut db_manager = DatabaseManager::new();
 
-    for entry in std::fs::read_dir("./vhs_tapes").unwrap() {
+    for entry in std::fs::read_dir(
+        config
+            .tapes_folder
+            .map(|v| v.relative())
+            .unwrap_or(PathBuf::from("./vhs_tapes")),
+    )
+    .unwrap()
+    {
         if let Ok(entry) = entry {
             let path = entry.path();
             let stem = path.file_stem().unwrap().to_string_lossy().to_owned();
@@ -135,27 +179,42 @@ async fn main() -> Result<(), rocket::Error> {
         }
     }
 
-    let site_manager = AssetManager::from_single("vhs_tapes/site_assets.vhs").unwrap();
-    if false {
-        for asset_kind in site_manager.assets.keys() {
-            let (total, failures) = site_manager.check_asset(asset_kind).unwrap();
-            println!(
-                "{} ~ {} checksum matches ({} failures)",
-                asset_kind,
-                total - failures.len(),
-                failures.len()
-            );
+    if let Some(site_path) = config.site_tape {
+        let site_manager = AssetManager::from_single(site_path.relative()).unwrap();
+        if config.check_site_tapes {
+            for asset_kind in site_manager.assets.keys() {
+                let (total, failures) = site_manager.check_asset(asset_kind).unwrap();
+                println!(
+                    "{} ~ {} checksum matches ({} failures)",
+                    asset_kind,
+                    total - failures.len(),
+                    failures.len()
+                );
+            }
         }
+
+        rocket = rocket
+            .manage(site_manager)
+            .mount("/vcr", routes![site::site_updates, site::site_download]);
     }
 
-    let feed_db = FeedDatabase::from_single("./vhs_tapes/feed.vhs").unwrap();
+    if let Some(feed_path) = config.feed_tape {
+        let feed_db = FeedDatabase::from_single(feed_path.relative()).unwrap();
+        rocket = rocket
+            .manage(feed_db)
+            .mount("/vcr", routes![feed::api::feed]);
+    }
+
+    if config.time_requests {
+        rocket = rocket.attach(RequestTimer);
+    }
 
     let rocket = rocket
         .manage(db_manager)
-        .attach(RequestTimer)
-        .manage(site_manager)
-        .manage(feed_db)
-        .manage(PageManager::new(256, Duration::from_secs(10 * 60)))
+        .manage(PageManager::new(
+            config.cache.size,
+            config.cache.time_to_idle,
+        ))
         .mount(
             "/vcr",
             routes![
