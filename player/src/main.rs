@@ -217,12 +217,7 @@ async fn main() -> Result<(), rocket::Error> {
         ))
         .mount(
             "/vcr",
-            routes![
-                entities,
-                versions,
-                v1::games,
-                v1::game_updates,
-            ],
+            routes![entities, versions, v1::games, v1::game_updates,],
         );
     rocket.launch().await?;
     Ok(())

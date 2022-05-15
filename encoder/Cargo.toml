@@ -21,7 +21,7 @@ vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
 phf_codegen = "0.10.0"
 itertools = "0.10"
 fst = "0.4.7"
-rmp-serde = "1"
+rmp-serde = "=1.0.0"
 easybench = "1.1.0"
 fastrand = "1.7.0"
 bsdiff = "0.1.6"

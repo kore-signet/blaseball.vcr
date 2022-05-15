@@ -117,7 +117,7 @@ impl AssetManager {
         let header_len = u32::from_le_bytes(len) as u64;
         let mut header_buffer = vec![0; header_len as usize];
         input.read_exact(&mut header_buffer)?;
-        let header: BTreeMap<AssetType, PatchSet> = rmp_serde::from_read_ref(&header_buffer)?;
+        let header: BTreeMap<AssetType, PatchSet> = rmp_serde::from_slice(&header_buffer)?;
         let total_len = input.metadata()?.len();
 
         Ok(AssetManager {
