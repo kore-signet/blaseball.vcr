@@ -8,5 +8,5 @@ members = [
 
 [profile.release]
 # # opt-level = 'z'
-# lto = "thin"
+lto = true
 # strip = true

@@ -222,9 +222,6 @@ async fn main() -> Result<(), rocket::Error> {
                 versions,
                 v1::games,
                 v1::game_updates,
-                site::site_updates,
-                site::site_download,
-                feed::api::feed
             ],
         );
     rocket.launch().await?;
