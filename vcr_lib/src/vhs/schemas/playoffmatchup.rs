@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use crate::UuidShell;
 use vhs_diff::{Diff, Patch};
 
 #[derive(Diff, Patch, Clone, Serialize, Deserialize)]
@@ -14,7 +15,7 @@ pub struct Playoffmatchup {
 
     pub away_seed: Option<i64>,
 
-    pub away_team: Option<Uuid>,
+    pub away_team: Option<UuidShell>,
 
     pub away_wins: i64,
 
@@ -24,7 +25,7 @@ pub struct Playoffmatchup {
 
     pub home_seed: i64,
 
-    pub home_team: Uuid,
+    pub home_team: UuidShell,
 
     pub home_wins: i64,
 

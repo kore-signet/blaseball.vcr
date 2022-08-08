@@ -1,15 +1,16 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vhs_diff::{Diff, Patch};
+use crate::UuidShell;
 
 #[derive(Diff, Patch, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Team {
     #[serde(rename = "_id")]
-    pub old_id: Option<Uuid>,
-    pub id: Option<Uuid>,
-    pub bench: Option<Vec<Uuid>>,
-    pub bullpen: Option<Vec<Uuid>>,
+    pub old_id: Option<UuidShell>,
+    pub id: Option<UuidShell>,
+    pub bench: Option<Vec<UuidShell>>,
+    pub bullpen: Option<Vec<UuidShell>>,
     pub card: Option<i64>,
     pub championships: i64,
     pub deceased: Option<bool>,
@@ -21,20 +22,20 @@ pub struct Team {
     pub game_attr: Option<Vec<String>>,
     pub im_position: Option<ImPosition>,
     pub level: Option<i64>,
-    pub lineup: Vec<Uuid>,
+    pub lineup: Vec<UuidShell>,
     pub location: String,
     pub main_color: String,
     pub nickname: String,
     pub permanent_attributes: Option<Vec<Option<serde_json::Value>>>,
     pub perm_attr: Option<Vec<String>>,
-    pub rotation: Vec<Uuid>,
+    pub rotation: Vec<UuidShell>,
     pub rotation_slot: Option<i64>,
     pub seas_attr: Option<Vec<String>>,
     pub season_attributes: Option<Vec<String>>,
     pub season_shames: i64,
     pub season_shamings: i64,
     pub secondary_color: String,
-    pub shadows: Option<Vec<Uuid>>,
+    pub shadows: Option<Vec<UuidShell>>,
     pub shame_runs: f64,
     pub shorthand: String,
     pub slogan: String,
@@ -51,7 +52,7 @@ pub struct Team {
 
 impl Team {
     pub fn id(&self) -> Option<Uuid> {
-        self.id.or(self.old_id)
+        self.id.or(self.old_id).map(|v| *v.as_uuid())
     }
 }
 

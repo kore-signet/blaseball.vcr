@@ -10,6 +10,9 @@ pub mod vhs;
 #[rustfmt::skip]
 pub mod game_lookup_tables;
 
+mod uuid_shell;
+pub use uuid_shell::*;
+
 mod chron_types;
 pub use chron_types::*;
 

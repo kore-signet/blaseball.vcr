@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use vhs_diff::{Diff, Patch};
+use crate::UuidShell;
 
 #[derive(Diff, Patch, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Player {
     #[serde(rename = "_id")]
-    pub id: Option<String>,
+    pub id: Option<UuidShell>,
 
     pub a_baserunning_rating: Option<i64>,
 
@@ -62,7 +63,7 @@ pub struct Player {
     pub hitting_rating: Option<f64>,
 
     #[serde(rename = "id")]
-    pub player_id: Option<String>,
+    pub player_id: Option<UuidShell>,
 
     pub indulgence: f64,
 

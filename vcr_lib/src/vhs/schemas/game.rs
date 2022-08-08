@@ -1,28 +1,31 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use crate::UuidShell;
 use vhs_diff::{Diff, Patch};
 
 #[derive(Clone, Serialize, Deserialize, Patch, Diff)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GameUpdate {
     #[serde(rename = "_id")]
-    pub old_id: Option<Uuid>,
-    pub id: Option<Uuid>,
+    pub old_id: Option<UuidShell>,
+    pub id: Option<UuidShell>,
     pub at_bat_balls: i64,
     pub at_bat_strikes: i64,
     pub away_balls: Option<i64>,
     pub away_bases: Option<i64>,
-    pub away_batter: Option<String>,
+    #[serde(deserialize_with = "crate::uuid_shell::empty_string_as_none")]
+    pub away_batter: Option<UuidShell>,
     pub away_batter_mod: Option<String>,
     pub away_batter_name: Option<String>,
     pub away_odds: f64,
     pub away_outs: Option<i64>,
-    pub away_pitcher: Option<String>,
+    #[serde(deserialize_with = "crate::uuid_shell::empty_string_as_none")]
+    pub away_pitcher: Option<UuidShell>,
     pub away_pitcher_mod: Option<String>,
     pub away_pitcher_name: Option<String>,
     pub away_score: f64,
     pub away_strikes: Option<i64>,
-    pub away_team: String,
+    pub away_team: UuidShell,
     pub away_team_batter_count: i64,
     pub away_team_color: String,
     pub away_team_emoji: String,
@@ -32,7 +35,7 @@ pub struct GameUpdate {
     pub baserunner_count: i64,
     pub base_runner_mods: Option<Vec<String>>,
     pub base_runner_names: Option<Vec<String>>,
-    pub base_runners: Vec<String>,
+    pub base_runners: Vec<UuidShell>,
     pub bases_occupied: Vec<i64>,
     pub bottom_inning_score: Option<f64>,
     pub day: i64,
@@ -45,17 +48,19 @@ pub struct GameUpdate {
     pub half_inning_score: f64,
     pub home_balls: Option<i64>,
     pub home_bases: Option<i64>,
-    pub home_batter: Option<String>,
+    #[serde(deserialize_with = "crate::uuid_shell::empty_string_as_none")]
+    pub home_batter: Option<UuidShell>,
     pub home_batter_mod: Option<String>,
     pub home_batter_name: Option<String>,
     pub home_odds: f64,
     pub home_outs: Option<i64>,
-    pub home_pitcher: Option<String>,
+    #[serde(deserialize_with = "crate::uuid_shell::empty_string_as_none")]
+    pub home_pitcher: Option<UuidShell>,
     pub home_pitcher_mod: Option<String>,
     pub home_pitcher_name: Option<String>,
     pub home_score: f64,
     pub home_strikes: Option<i64>,
-    pub home_team: String,
+    pub home_team: UuidShell,
     pub home_team_batter_count: i64,
     pub home_team_color: String,
     pub home_team_emoji: String,
@@ -93,7 +98,7 @@ pub struct GameUpdate {
 
 impl GameUpdate {
     pub fn id(&self) -> Option<Uuid> {
-        self.id.or(self.old_id)
+        self.id.or(self.old_id).map(|v| *v.as_uuid())
     }
 }
 

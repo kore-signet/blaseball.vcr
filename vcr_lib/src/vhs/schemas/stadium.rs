@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vhs_diff::{Diff, Patch};
+use crate::UuidShell;
 
 #[derive(Diff, Patch, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -29,7 +30,7 @@ pub struct Stadium {
     pub reno_log: RenoLog,
     pub secondary_color: String,
     pub state: State,
-    pub team_id: Uuid,
+    pub team_id: UuidShell,
     pub tertiary_color: String,
     pub viscosity: f64,
     pub weather: Weather,

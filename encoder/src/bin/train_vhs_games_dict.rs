@@ -44,8 +44,19 @@ fn main() -> VCRResult<()> {
         reader.read_exact(&mut buf)?;
         let decompressed = decompressor.decompress(&buf, decompressed_len as usize)?;
 
+        let deser_mrow = &mut serde_json::Deserializer::from_slice(&decompressed[..]);
+
+        // let game_data: Vec<ChronV1GameUpdate<GameUpdate>> =
+        // serde_json::from_slice(&decompressed[..]).unwrap();
+
         let game_data: Vec<ChronV1GameUpdate<GameUpdate>> =
-            serde_json::from_slice(&decompressed[..]).unwrap();
+            match serde_path_to_error::deserialize(deser_mrow) {
+                Ok(v) => v,
+                Err(e) => {
+                    println!("{}", e.path().to_string());
+                    panic!()
+                }
+            };
 
         let data: Vec<GameUpdate> = game_data.into_iter().map(|v| v.data).collect();
 
