@@ -1,4 +1,3 @@
-use crate::feed::lookup_tables::*;
 use modular_bitfield::prelude::*;
 use serde::{
     de::{self, Deserialize, IntoDeserializer, Visitor},
@@ -6,6 +5,8 @@ use serde::{
 };
 use std::hash::Hash;
 use uuid::Uuid;
+
+use crate::lookups::{PLAYER_ID_TABLE, GAME_ID_TABLE, TEAM_ID_TABLE};
 
 #[derive(Clone, Debug, Copy)]
 pub enum UuidShell {
@@ -31,12 +32,11 @@ impl UuidShell {
     pub fn find_tag(self) -> UuidShell {
         match self {
             Self::RawUuid(id) => {
-                let v = id.as_bytes();
-                if let Some(tag) = UUID_TO_PLAYER.get(v) {
+                if let Some(tag) = PLAYER_ID_TABLE.map(&id) {
                     UuidShell::Tagged(UuidTag::Player(*tag))
-                } else if let Some(tag) = UUID_TO_GAME.get(v) {
+                } else if let Some(tag) = GAME_ID_TABLE.map(&id) {
                     UuidShell::Tagged(UuidTag::Game(*tag))
-                } else if let Some(tag) = UUID_TO_TEAM.get(v) {
+                } else if let Some(tag) = TEAM_ID_TABLE.map(&id) {
                     UuidShell::Tagged(UuidTag::Team(*tag))
                 } else {
                     UuidShell::RawUuid(id)
@@ -46,9 +46,9 @@ impl UuidShell {
         }
     }
 
-    pub fn as_uuid(&self) -> &Uuid {
+    pub fn as_uuid(&self) -> Uuid {
         match self {
-            UuidShell::RawUuid(id) => id,
+            UuidShell::RawUuid(id) => *id,
             UuidShell::Tagged(v) => v.as_uuid(),
         }
     }
@@ -94,19 +94,18 @@ impl<'de> Deserialize<'de> for UuidShell {
 
 #[derive(Copy, Clone, Debug)]
 pub enum UuidTag {
-    Team(u8),
-    Player(u16),
-    Game(u16),
+    Team(u32),
+    Player(u32),
+    Game(u32),
 }
 
 impl UuidTag {
-    pub fn as_uuid(&self) -> &Uuid {
+    pub fn as_uuid(&self) -> Uuid {
         (match self {
-            UuidTag::Team(val) => TEAM_TO_UUID.get((*val) as usize),
-            UuidTag::Player(val) => PLAYER_TO_UUID.get((*val) as usize),
-            UuidTag::Game(val) => GAME_TO_UUID.get((*val) as usize),
+            UuidTag::Team(val) => TEAM_ID_TABLE.inverter[*val as usize],
+            UuidTag::Player(val) => PLAYER_ID_TABLE.inverter[*val as usize],
+            UuidTag::Game(val) => GAME_ID_TABLE.inverter[*val as usize]
         })
-        .unwrap()
     }
 }
 
@@ -116,14 +115,19 @@ impl Serialize for UuidTag {
         S: Serializer,
     {
         match self {
-            UuidTag::Team(val) => serializer.serialize_u8(*val),
-            UuidTag::Player(val) => serializer.serialize_u16(u16::from_ne_bytes(
+            UuidTag::Team(val) => serializer.serialize_u32(u32::from_ne_bytes(
+                PackedTag::new()
+                    .with_tag_val(*val)
+                    .with_kind(PackedTagKind::Team)
+                    .into_bytes(),
+            )),
+            UuidTag::Player(val) => serializer.serialize_u32(u32::from_ne_bytes(
                 PackedTag::new()
                     .with_tag_val(*val)
                     .with_kind(PackedTagKind::Player)
                     .into_bytes(),
             )),
-            UuidTag::Game(val) => serializer.serialize_u16(u16::from_ne_bytes(
+            UuidTag::Game(val) => serializer.serialize_u32(u32::from_ne_bytes(
                 PackedTag::new()
                     .with_tag_val(*val)
                     .with_kind(PackedTagKind::Game)
@@ -135,15 +139,17 @@ impl Serialize for UuidTag {
 
 #[bitfield]
 struct PackedTag {
-    tag_val: B15,
+    tag_val: B30,
     kind: PackedTagKind,
 }
 
 #[derive(BitfieldSpecifier)]
-#[bits = 1]
+#[bits = 2]
 enum PackedTagKind {
     Player,
     Game,
+    Team,
+    Other
 }
 
 struct UuidShellVisitor;
@@ -152,17 +158,17 @@ impl<'de> Visitor<'de> for UuidShellVisitor {
     type Value = UuidShell;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a uuid tag (either u8 or u16)")
+        formatter.write_str("a uuid tag (u32))")
     }
 
-    fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        Ok(UuidShell::Tagged(UuidTag::Team(value)))
-    }
+    // fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
+    // where
+    //     E: de::Error,
+    // {
+    //     Ok(UuidShell::Tagged(UuidTag::Team(value)))
+    // }
 
-    fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
+    fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
@@ -171,6 +177,8 @@ impl<'de> Visitor<'de> for UuidShellVisitor {
         Ok(UuidShell::Tagged(match tag.kind() {
             PackedTagKind::Player => UuidTag::Player(tag.tag_val()),
             PackedTagKind::Game => UuidTag::Game(tag.tag_val()),
+            PackedTagKind::Team => UuidTag::Team(tag.tag_val()),
+            _ => unreachable!()
         }))
     }
 

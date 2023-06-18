@@ -1,8 +1,7 @@
 use super::*;
 use crate::*;
 use blaseball_vcr::db_manager::*;
-use blaseball_vcr::feed::lookup_tables::*;
-use blaseball_vcr::game_lookup_tables::*;
+use blaseball_vcr::lookups::{DATES_TO_GAMES, GAME_ID_TABLE, PLAYER_ID_TABLE, PITCHER_TO_GAMES, TEAM_ID_TABLE, TEAMS_TO_GAMES, WEATHER_TO_GAMES};
 use blaseball_vcr::vhs::schemas::GameUpdate;
 use blaseball_vcr::*;
 use chrono::{DateTime, TimeZone, Utc};
@@ -35,7 +34,7 @@ macro_rules! filter_by_table {
         if let Some(list) = $list_exp {
             for item in list
                 .split_terminator(',')
-                .filter_map(|id| $parser(id).ok().and_then(|v| $id_mapper.get(v.as_bytes())))
+                .filter_map(|id| $parser(id).ok().and_then(|v| $id_mapper.map(&v)))
             {
                 if let Some(games) = $game_table.get(item) {
                     $game_tags_out.retain(|tag| games.contains(tag));
@@ -218,13 +217,13 @@ fn filter_games(
         })
         .collect();
 
-    let games_that_match_date: XxSet<u16> =
+    let games_that_match_date: XxSet<u32> =
         if req.tournament.is_some() || req.day.is_some() || req.season.is_some() {
             let mut hash_set =
                 HashSet::with_capacity_and_hasher(game_ids.len(), Xxh3Builder::new());
             hash_set.extend(
                 DATES_TO_GAMES
-                    .into_iter()
+                    .keys_values()
                     .filter_map(|(date, games)| {
                         let date = GameDate::from_bytes(*date);
 
@@ -232,7 +231,7 @@ fn filter_games(
                             && contents_eq_or_is_none!(req.day, date.day)
                             && contents_eq_or_is_none!(req.season, date.season)
                         {
-                            Some(*games)
+                            Some(games)
                         } else {
                             None
                         }
@@ -244,9 +243,9 @@ fn filter_games(
             XxSet::with_capacity_and_hasher(0, Xxh3Builder::new())
         };
 
-    let mut game_tags: Vec<u16> = game_ids
+    let mut game_tags: Vec<u32> = game_ids
         .iter()
-        .map(|id| UUID_TO_GAME[id.as_bytes()])
+        .map(|id| GAME_ID_TABLE.mapper[id])
         .filter(|tag| {
             if games_that_match_date.is_empty() {
                 true
@@ -260,14 +259,14 @@ fn filter_games(
         Uuid::parse_str,
         game_tags,
         req.pitcher,
-        UUID_TO_PLAYER,
+        PLAYER_ID_TABLE,
         PITCHER_TO_GAMES
     );
     filter_by_table!(
         Uuid::parse_str,
         game_tags,
         req.team,
-        UUID_TO_TEAM,
+        TEAM_ID_TABLE,
         TEAMS_TO_GAMES
     );
     filter_by_table!(
@@ -279,6 +278,6 @@ fn filter_games(
 
     game_tags
         .into_iter()
-        .map(|tag| *GAME_TO_UUID[tag as usize].as_bytes())
+        .map(|tag| *GAME_ID_TABLE.inverter[tag as usize].as_bytes())
         .collect()
 }

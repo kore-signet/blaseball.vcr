@@ -1,25 +1,29 @@
-use serde::{Deserialize, Serialize};
-use vhs_diff::{Diff, Patch};
 
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[serde(rename_all = "camelCase")]
 pub struct Renovationprogress {
     pub progress: Option<Progress>,
+
     pub stats: Option<Vec<Stat>>,
+
     pub to_next: Option<f64>,
+
     pub total: Option<i64>,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Progress {
     pub to_next: f64,
+
     pub total: i64,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Stat {
     pub id: String,
+
     pub percent: String,
 }

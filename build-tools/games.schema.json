@@ -1,0 +1,302 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "definitions": {
+    "Game": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "day": { "type": "integer" },
+          "phase": { "type": "integer" },
+          "rules": { "type": "string" },
+          "shame": { "type": "boolean" },
+          "inning": { "type": "integer" },
+          "season": { "type": "integer" },
+          "weather": { "type": ["integer", "null"] },
+          "awayOdds": { "type": ["null", "number"] },
+          "awayOuts": { "type": "integer" },
+          "awayTeam": { "type": "string" },
+          "homeOdds": { "type": ["null", "number"] },
+          "homeOuts": { "type": "integer" },
+          "homeTeam": { "type": "string" },
+          "outcomes": { "type": "array", "items": { "type": "string" } },
+          "awayBalls": { "type": "integer" },
+          "awayBases": { "type": "integer" },
+          "awayScore": { "type": ["null", "number"] },
+          "finalized": { "type": "boolean" },
+          "gameStart": { "type": "boolean" },
+          "homeBalls": { "type": "integer" },
+          "homeBases": { "type": "integer" },
+          "homeScore": { "type": ["null", "number"] },
+          "playCount": { "type": "integer" },
+          "statsheet": { "type": "string" },
+          "atBatBalls": { "type": "integer" },
+          "awayBatter": { "type": ["null", "string"] },
+          "homeBatter": { "type": ["null", "string"] },
+          "lastUpdate": { "type": "string" },
+          "tournament": { "type": "integer" },
+          "awayPitcher": { "type": ["null", "string"] },
+          "awayStrikes": { "type": ["integer", "null"] },
+          "baseRunners": { "type": "array", "items": { "type": "string" } },
+          "homePitcher": { "type": ["null", "string"] },
+          "homeStrikes": { "type": ["integer", "null"] },
+          "repeatCount": { "type": "integer" },
+          "scoreLedger": { "type": "string" },
+          "scoreUpdate": { "type": "string" },
+          "seriesIndex": { "type": "integer" },
+          "terminology": { "type": "string" },
+          "topOfInning": { "type": "boolean" },
+          "atBatStrikes": { "type": "integer" },
+          "awayTeamName": { "type": "string" },
+          "gameComplete": { "type": "boolean" },
+          "homeTeamName": { "type": "string" },
+          "isPostseason": { "type": "boolean" },
+          "seriesLength": { "type": "integer" },
+          "awayBatterMod": { "type": "string" },
+          "awayTeamColor": { "type": "string" },
+          "awayTeamEmoji": { "type": "string" },
+          "basesOccupied": { "type": "array", "items": { "type": "integer" } },
+          "homeBatterMod": { "type": "string" },
+          "homeTeamColor": { "type": "string" },
+          "homeTeamEmoji": { "type": "string" },
+          "awayBatterName": { "type": ["null", "string"] },
+          "awayPitcherMod": { "type": "string" },
+          "baseRunnerMods": { "type": "array", "items": { "type": "string" } },
+          "halfInningOuts": { "type": "integer" },
+          "homeBatterName": { "type": ["null", "string"] },
+          "homePitcherMod": { "type": "string" },
+          "awayPitcherName": { "type": ["null", "string"] },
+          "baseRunnerNames": { "type": "array", "items": { "type": "string" } },
+          "baserunnerCount": { "type": "integer" },
+          "halfInningScore": { "type": "number" },
+          "homePitcherName": { "type": ["null", "string"] },
+          "awayTeamNickname": { "type": "string" },
+          "homeTeamNickname": { "type": "string" },
+          "awayTeamBatterCount": { "type": ["integer", "null"] },
+          "homeTeamBatterCount": { "type": "integer" },
+          "awayTeamSecondaryColor": { "type": "string" },
+          "homeTeamSecondaryColor": { "type": "string" },
+          "sim": { "type": "string" },
+          "loser": { "type": ["null", "string"] },
+          "state": {
+            "type": "object",
+            "properties": {
+              "snowfallEvents": { "type": "integer" },
+              "prizeMatch": {
+                "type": "object",
+                "properties": {
+                  "itemId": { "type": "string" },
+                  "itemName": { "type": "string" },
+                  "winner": { "type": "string" }
+                },
+                "required": ["itemId", "itemName"]
+              },
+              "postseason": {
+                "type": "object",
+                "properties": {
+                  "bracket": { "type": "integer" },
+                  "matchup": { "type": "string" },
+                  "playoffId": { "type": "string" }
+                },
+                "required": ["bracket", "matchup", "playoffId"]
+              },
+              "holidayInning": { "type": "boolean" },
+              "reload": {
+                "type": "object",
+                "properties": {
+                  "Batter": { "type": "string" },
+                  "Baserunners": { "type": "array", "items": { "type": "string" } },
+                  "BasesOccupied": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                  },
+                  "BaserunnerCount": { "type": "integer" }
+                },
+                "required": [
+                  "BaserunnerCount",
+                  "Baserunners",
+                  "BasesOccupied",
+                  "Batter"
+                ]
+              },
+              "ego_player_data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "team": { "type": "string" },
+                    "location": { "type": "integer" },
+                    "hallPlayer": { "type": "boolean" }
+                  },
+                  "required": ["hallPlayer", "id"]
+                }
+              },
+              "game_cancelled": { "type": "boolean" }
+            }
+          },
+          "winner": { "type": ["null", "string"] },
+          "endPhase": { "type": "integer" },
+          "seasonId": { "type": ["null", "string"] },
+          "stadiumId": { "type": ["null", "string"] },
+          "awayTeamRuns": { "type": "null" },
+          "homeTeamRuns": { "type": "null" },
+          "isTitleMatch": { "type": "boolean" },
+          "queuedEvents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "integer" },
+                "delay": { "type": "integer" },
+                "outcomes": { "type": "array" },
+                "isSpecial": { "type": "boolean" },
+                "logUpdates": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["delay", "isSpecial", "logUpdates", "outcomes", "type"]
+            }
+          },
+          "gameStartPhase": { "type": "integer" },
+          "lastUpdateFull": {
+            "anyOf": [
+              { "type": "null" },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "day": { "type": "integer" },
+                    "nuts": { "type": "integer" },
+                    "type": { "type": "integer" },
+                    "blurb": { "type": "string" },
+                    "phase": { "type": "integer" },
+                    "season": { "type": "integer" },
+                    "created": { "type": "string" },
+                    "category": { "type": "integer" },
+                    "gameTags": { "type": "array" },
+                    "teamTags": { "type": "array", "items": { "type": "string" } },
+                    "playerTags": { "type": "array", "items": { "type": "string" } },
+                    "tournament": { "type": "integer" },
+                    "description": { "type": "string" },
+                    "metadata": {
+                      "type": "object",
+                      "properties": {
+                        "ledger": { "type": "string" },
+                        "update": { "type": "string" },
+                        "awayEmoji": { "type": "string" },
+                        "awayScore": { "type": "integer" },
+                        "homeEmoji": { "type": "string" },
+                        "homeScore": { "type": "integer" },
+                        "mod": { "type": "string" },
+                        "type": { "type": "integer" },
+                        "winner": { "type": "string" },
+                        "after": { "type": "number" },
+                        "lines": { "type": "array" },
+                        "amount": { "type": "integer" },
+                        "before": { "type": "number" },
+                        "away": { "type": "string" },
+                        "home": { "type": "string" },
+                        "weather": { "type": "integer" },
+                        "teamId": { "type": "string" },
+                        "teamName": { "type": "string" },
+                        "aLocation": { "type": "integer" },
+                        "aPlayerId": { "type": "string" },
+                        "bLocation": { "type": "integer" },
+                        "bPlayerId": { "type": "string" },
+                        "aPlayerName": { "type": "string" },
+                        "bPlayerName": { "type": "string" },
+                        "effect": { "type": "string" },
+                        "source": { "type": "string" },
+                        "id": { "type": "string" },
+                        "location": { "type": "integer" },
+                        "inPlayerId": { "type": "string" },
+                        "outPlayerId": { "type": "string" },
+                        "inPlayerName": { "type": "string" },
+                        "outPlayerName": { "type": "string" },
+                        "aTeamId": { "type": "string" },
+                        "bTeamId": { "type": "string" },
+                        "aTeamName": { "type": "string" },
+                        "bTeamName": { "type": "string" }
+                      }
+                    }
+                  },
+                  "required": [
+                    "blurb",
+                    "category",
+                    "created",
+                    "day",
+                    "description",
+                    "gameTags",
+                    "id",
+                    "nuts",
+                    "phase",
+                    "playerTags",
+                    "season",
+                    "teamTags",
+                    "tournament",
+                    "type"
+                  ]
+                }
+              }
+            ]
+          },
+          "newInningPhase": { "type": "integer" },
+          "topInningScore": { "type": "number" },
+          "tournamentRound": { "type": ["integer", "null"] },
+          "secretBaserunner": { "type": ["null", "string"] },
+          "bottomInningScore": { "type": "number" },
+          "newHalfInningPhase": { "type": "integer" },
+          "tournamentRoundGameIndex": { "type": ["integer", "null"] },
+          "isPrizeMatch": { "type": "boolean" },
+          "_id": { "type": "string" }
+        },
+        "required": [
+          "atBatBalls",
+          "atBatStrikes",
+          "awayBatter",
+          "awayBatterName",
+          "awayOdds",
+          "awayPitcher",
+          "awayPitcherName",
+          "awayScore",
+          "awayStrikes",
+          "awayTeam",
+          "awayTeamBatterCount",
+          "awayTeamColor",
+          "awayTeamEmoji",
+          "awayTeamName",
+          "awayTeamNickname",
+          "baseRunners",
+          "baserunnerCount",
+          "basesOccupied",
+          "day",
+          "gameComplete",
+          "gameStart",
+          "halfInningOuts",
+          "halfInningScore",
+          "homeBatter",
+          "homeBatterName",
+          "homeOdds",
+          "homePitcher",
+          "homePitcherName",
+          "homeScore",
+          "homeStrikes",
+          "homeTeam",
+          "homeTeamBatterCount",
+          "homeTeamColor",
+          "homeTeamEmoji",
+          "homeTeamName",
+          "homeTeamNickname",
+          "inning",
+          "isPostseason",
+          "phase",
+          "season",
+          "seriesIndex",
+          "seriesLength",
+          "shame",
+          "topOfInning",
+          "weather"
+        ]
+      }
+    }
+}

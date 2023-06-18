@@ -1,16 +1,18 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use vhs_diff::{Diff, Patch};
 
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[repr(transparent)]
 #[serde(transparent)]
-pub struct FuelprogressWrapper {
-    inner: Vec<FuelprogressElement>,
+pub struct FuelProgressWrapper {
+    inner: Fuelprogress
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+pub type Fuelprogress = Vec<FuelprogressElement>;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
 pub struct FuelprogressElement {
     pub amount: f64,
-    pub id: Uuid,
+
+    pub id: String,
 }

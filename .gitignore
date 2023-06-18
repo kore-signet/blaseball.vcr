@@ -25,3 +25,6 @@ site-assets/2js
 site-assets/indexhtml
 site-assets/maincss
 site-assets/mainjs
+feed.aux
+all_games.zstd
+.vscode

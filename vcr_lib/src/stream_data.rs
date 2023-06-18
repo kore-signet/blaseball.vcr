@@ -1,9 +1,9 @@
 use crate::db_manager::*;
-use crate::feed::lookup_tables::GAME_TO_UUID;
-use crate::game_lookup_tables::*;
+
+
 use crate::vhs::schemas::{self, *};
 use crate::*;
-use compiled_uuid::uuid;
+
 use uuid::Uuid;
 
 macro_rules! fetch_batch {
@@ -38,56 +38,56 @@ fn clamp<T: std::cmp::Ord>(val: T, min: T, max: T) -> T {
     }
 }
 
-fn games_by_date_and_time(
-    db: &impl EntityDatabase<Record = GameUpdate>,
-    date: &GameDate,
-    at: u32,
-) -> VCRResult<Vec<OptionalEntity<GameUpdate>>> {
-    if let Some(ids) = DATES_TO_GAMES.get(&date.to_bytes()) {
-        let game_ids: Vec<[u8; 16]> = ids
-            .into_iter()
-            .map(|tag| *(GAME_TO_UUID[*tag as usize]).as_bytes())
-            .collect();
-        db.get_entities(&game_ids, at)
-    } else {
-        Ok(vec![])
-    }
-}
+// fn games_by_date_and_time(
+//     db: &impl EntityDatabase<Record = GameUpdate>,
+//     date: &GameDate,
+//     at: u32,
+// ) -> VCRResult<Vec<OptionalEntity<GameUpdate>>> {
+//     if let Some(ids) = DATES_TO_GAMES.get(&date.to_bytes()) {
+//         let game_ids: Vec<[u8; 16]> = ids
+//             .into_iter()
+//             .map(|tag| *(GAME_TO_UUID[*tag as usize]).as_bytes())
+//             .collect();
+//         db.get_entities(&game_ids, at)
+//     } else {
+//         Ok(vec![])
+//     }
+// }
 
-fn games_for_bets(
-    db: &impl EntityDatabase<Record = GameUpdate>,
-    date: &GameDate,
-    at: u32,
-) -> VCRResult<Vec<OptionalEntity<GameUpdate>>> {
-    if let Some(ids) = DATES_TO_GAMES.get(&date.to_bytes()) {
-        let game_ids: Vec<[u8; 16]> = ids
-            .into_iter()
-            .map(|tag| *(GAME_TO_UUID[*tag as usize]).as_bytes())
-            .collect();
+// fn games_for_bets(
+//     db: &impl EntityDatabase<Record = GameUpdate>,
+//     date: &GameDate,
+//     at: u32,
+// ) -> VCRResult<Vec<OptionalEntity<GameUpdate>>> {
+//     if let Some(ids) = DATES_TO_GAMES.get(&date.to_bytes()) {
+//         let game_ids: Vec<[u8; 16]> = ids
+//             .into_iter()
+//             .map(|tag| *(GAME_TO_UUID[*tag as usize]).as_bytes())
+//             .collect();
 
-        let mut res = Vec::with_capacity(game_ids.len());
+//         let mut res = Vec::with_capacity(game_ids.len());
 
-        'outer: for id in game_ids {
-            let mut game = match db.get_entity(&id, at)?.or(db.get_first_entity(&id)?) {
-                Some(v) => v,
-                None => continue 'outer,
-            };
+//         'outer: for id in game_ids {
+//             let mut game = match db.get_entity(&id, at)?.or(db.get_first_entity(&id)?) {
+//                 Some(v) => v,
+//                 None => continue 'outer,
+//             };
 
-            let mut time = game.valid_from;
+//             let mut time = game.valid_from;
 
-            while game.data.away_odds == 0f64 && game.data.home_odds == 0f64 {
-                time = db.get_next_time(&id, time).unwrap();
-                game = db.get_entity(&id, time)?.unwrap();
-            }
+//             while game.data.away_odds == 0f64 && game.data.home_odds == 0f64 {
+//                 time = db.get_next_time(&id, time).unwrap();
+//                 game = db.get_entity(&id, time)?.unwrap();
+//             }
 
-            res.push(Some(game));
-        }
+//             res.push(Some(game));
+//         }
 
-        Ok(res)
-    } else {
-        Ok(vec![])
-    }
-}
+//         Ok(res)
+//     } else {
+//         Ok(vec![])
+//     }
+// }
 
 fn playoffs(
     db: &DatabaseManager,
@@ -181,39 +181,40 @@ pub fn stream_data(db: &DatabaseManager, at: u32) -> VCRResult<StreamDataWrapper
         working_date.season = -1;
     }
 
-    let game_db = db
+    let _game_db = db
         .get_db::<GameUpdate>()
         .ok_or(VCRError::EntityTypeNotFound)?
         .as_any()
         .downcast_ref::<crate::vhs::db::Database<GameUpdate>>()
         .unwrap();
 
-    let schedule: Vec<GameUpdate> = if sim.phase == 14 && working_date.season == 22 {
-        if let Some(data) = db
-            .get_entity::<GameUpdate>(
-                &uuid!("d162b23a-9832-4e78-8d78-5d131393fd61").as_bytes(),
-                at,
-            )?
-            .map(|v| v.data)
-        {
-            vec![data]
-        } else {
-            vec![]
-        }
-    } else {
-        games_by_date_and_time(game_db, &working_date, at)?
-            .into_iter()
-            .filter_map(|v| v.map(|a| a.data))
-            .collect()
-    };
+    let schedule = vec![];
+    // let schedule: Vec<GameUpdate> = if sim.phase == 14 && working_date.season == 22 {
+    //     if let Some(data) = db
+    //         .get_entity::<GameUpdate>(
+    //             &uuid!("d162b23a-9832-4e78-8d78-5d131393fd61").as_bytes(),
+    //             at,
+    //         )?
+    //         .map(|v| v.data)
+    //     {
+    //         vec![data]
+    //     } else {
+    //         vec![]
+    //     }
+    // } else {
+    //     games_by_date_and_time(game_db, &working_date, at)?
+    //         .into_iter()
+    //         .filter_map(|v| v.map(|a| a.data))
+    //         .collect()
+    // };
 
     working_date.day += 1;
 
-    let tomorrow_schedule: Vec<GameUpdate> = games_for_bets(game_db, &working_date, at)?
-        .into_iter()
-        .filter_map(|v| v.map(|a| a.data))
-        .collect();
-
+    // let tomorrow_schedule: Vec<GameUpdate> = games_for_bets(game_db, &working_date, at)?
+    //     .into_iter()
+    //     .filter_map(|v| v.map(|a| a.data))
+    //     .collect();
+    let tomorrow_schedule = vec![];
     let season = db
         .get_entities::<Season>(
             db.all_entity_ids::<Season>()
@@ -246,8 +247,8 @@ pub fn stream_data(db: &DatabaseManager, at: u32) -> VCRResult<StreamDataWrapper
         .map(|league| *league.tiebreakers.as_bytes())
         .collect();
 
-    let tiebreakers: Vec<TiebreakerWrapper> =
-        fetch_batch!(TiebreakerWrapper; from db; with &tiebreaker_ids; at at; clamped);
+    let tiebreakers: Vec<Tiebreakers> =
+        fetch_batch!(Tiebreakers; from db; with &tiebreaker_ids; at at; clamped);
     let subleagues: Vec<Subleague> =
         fetch_batch!(Subleague; from db; with &subleague_ids; at at; clamped);
 
@@ -301,10 +302,10 @@ pub fn stream_data(db: &DatabaseManager, at: u32) -> VCRResult<StreamDataWrapper
         )?);
     } else {
         match sim.playoffs {
-            schemas::sim::Playoffs::String(ref id) => {
+            Some(schemas::sim::Playoffs::String(ref id)) => {
                 postseason = Some(playoffs(&db, id.as_bytes(), sim.play_off_round, at)?);
             }
-            schemas::sim::Playoffs::StringArray(ref ids) => {
+            Some(schemas::sim::Playoffs::StringArray(ref ids)) => {
                 let mut res = Vec::with_capacity(ids.len());
 
                 for id in ids {
@@ -312,7 +313,8 @@ pub fn stream_data(db: &DatabaseManager, at: u32) -> VCRResult<StreamDataWrapper
                 }
 
                 postseasons.replace(res);
-            }
+            },
+            None => {}
         };
     };
 

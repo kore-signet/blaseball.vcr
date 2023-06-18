@@ -7,12 +7,11 @@ pub mod feed;
 pub use err::*;
 pub mod db_manager;
 pub mod vhs;
-#[rustfmt::skip]
-pub mod game_lookup_tables;
+
 
 mod uuid_shell;
 pub use uuid_shell::*;
-
+pub mod lookups;
 mod chron_types;
 pub use chron_types::*;
 

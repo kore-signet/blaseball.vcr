@@ -1,8 +1,22 @@
-use serde::{Deserialize, Serialize};
-use vhs_diff::{Diff, Patch};
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct Nullified {
+    inner: NullifiedInner
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum NullifiedInner {
+    NullifiedClass(NullifiedClass),
+
+    StringArray(Vec<String>),
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct NullifiedClass {
     pub history: Option<Vec<History>>,
 
@@ -11,26 +25,11 @@ pub struct NullifiedClass {
     pub size: Option<f64>,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct History {
     pub day: i64,
 
     pub season: i64,
 
     pub size: f64,
-}
-
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Nullified {
-    NullifiedClass(NullifiedClass),
-
-    StringArray(Vec<String>),
-}
-
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct NullifiedWrapper {
-    inner: Nullified,
 }

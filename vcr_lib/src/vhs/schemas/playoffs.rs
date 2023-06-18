@@ -1,17 +1,20 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use vhs_diff::{Diff, Patch};
 
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[serde(rename_all = "camelCase")]
 pub struct Playoffs {
     #[serde(rename = "__v")]
     pub v: Option<i64>,
+
     #[serde(rename = "_id")]
-    pub old_id: Option<Uuid>,
     pub id: Option<Uuid>,
 
     pub bracket: Option<i64>,
+
+    #[serde(rename = "id")]
+    pub playoffs_id: Option<Uuid>,
 
     pub name: String,
 
@@ -30,10 +33,4 @@ pub struct Playoffs {
     pub tournament: Option<i64>,
 
     pub winner: Option<Uuid>,
-}
-
-impl Playoffs {
-    pub fn id(&self) -> Option<Uuid> {
-        self.id.or(self.old_id)
-    }
 }

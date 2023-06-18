@@ -51,7 +51,7 @@ pub struct LeagueData {
     pub subleagues: Vec<Subleague>,
     pub divisions: Vec<Division>,
     pub leagues: Vec<League>,
-    pub tiebreakers: Vec<TiebreakerWrapper>,
+    pub tiebreakers: Vec<Tiebreakers>,
     pub stadiums: Vec<Stadium>,
     pub stats: StatData
 }

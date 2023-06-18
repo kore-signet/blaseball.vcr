@@ -1,7 +1,7 @@
 import requests
 import json
 
-updates = requests.get("https://api.sibr.dev/chronicler/v1/site/updates?before=2021-09-01T00:00:00Z").json()["data"]
+updates = requests.get("https://api.sibr.dev/chronicler/v1/site/updates").json()["data"]
 files = {
     'maincss': [],
     'mainjs': [],

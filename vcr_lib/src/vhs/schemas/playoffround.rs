@@ -1,27 +1,29 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use vhs_diff::{Diff, Patch};
 
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[serde(rename_all = "camelCase")]
 pub struct Playoffround {
     #[serde(rename = "__v")]
     pub v: Option<i64>,
-    #[serde(rename = "_id")]
-    pub old_id: Option<Uuid>,
-    pub id: Option<Uuid>,
-    pub game_index: i64,
-    pub games: Vec<Vec<String>>,
-    pub matchups: Vec<Uuid>,
-    pub name: String,
-    pub round_number: i64,
-    pub special: bool,
-    pub winners: Vec<String>,
-    pub winner_seeds: Vec<i64>,
-}
 
-impl Playoffround {
-    pub fn id(&self) -> Option<Uuid> {
-        self.id.or(self.old_id)
-    }
+    #[serde(alias = "_id")]
+    pub id: Option<Uuid>,
+
+    pub game_index: i64,
+
+    pub games: Vec<Vec<String>>,
+
+    pub matchups: Vec<Uuid>,
+
+    pub name: String,
+
+    pub round_number: i64,
+
+    pub special: bool,
+
+    pub winners: Vec<String>,
+
+    pub winner_seeds: Vec<i64>,
 }

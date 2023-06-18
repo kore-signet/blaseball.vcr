@@ -15,14 +15,14 @@ automod = "1"
 num_cpus = "1.13.1"
 type-map = "0.5.0"
 tempfile = "3.3.0"
-phf = "0.10.1"
 enum-map = "2.1.0"
 fst = "0.4.7"
-compiled-uuid = "0.1.2"
 moka = "0.8.2"
 hex = "0.4.3"
 sha2 = "0.10.2"
 modular-bitfield = "0.11.2"
+perfect-map = { git = "https://github.com/emily-signet/perfect-map.git", version = "0.1.0" }
+static_init = "1.0.3"
 
 [dependencies.xxhash-rust]
 version = "0.8.5"

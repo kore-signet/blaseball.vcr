@@ -23,9 +23,9 @@ fn main() -> VCRResult<()> {
     )
     .get_matches();
 
-    let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
-    let mut team_tag_table: HashMap<Uuid, u8> = HashMap::new();
-    let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
+    let mut player_tag_table: HashMap<Uuid, u32> = HashMap::new();
+    let mut team_tag_table: HashMap<Uuid, u32> = HashMap::new();
+    let mut game_tag_table: HashMap<Uuid, u32> = HashMap::new();
 
     let index: IdIndex = serde_json::from_reader(BufReader::new(File::open(
         matches.value_of("INPUT").unwrap(),
@@ -33,19 +33,19 @@ fn main() -> VCRResult<()> {
 
     for game in index.games {
         if !game_tag_table.contains_key(&game) {
-            game_tag_table.insert(game, game_tag_table.len() as u16);
+            game_tag_table.insert(game, game_tag_table.len() as u32);
         }
     }
 
     for team in index.teams {
         if !team_tag_table.contains_key(&team) {
-            team_tag_table.insert(team, team_tag_table.len() as u8);
+            team_tag_table.insert(team, team_tag_table.len() as u32);
         }
     }
 
     for player in index.players {
         if !player_tag_table.contains_key(&player) {
-            player_tag_table.insert(player, player_tag_table.len() as u16);
+            player_tag_table.insert(player, player_tag_table.len() as u32);
         }
     }
 
@@ -53,13 +53,13 @@ fn main() -> VCRResult<()> {
     let mut phf_games: PhfMap<[u8; 16]> = PhfMap::new();
     let mut phf_teams: PhfMap<[u8; 16]> = PhfMap::new();
 
-    let mut player_tag_table: Vec<(Uuid, u16)> = player_tag_table.into_iter().collect();
+    let mut player_tag_table: Vec<(Uuid, u32)> = player_tag_table.into_iter().collect();
     player_tag_table.sort_by_key(|&(_, v)| v);
 
-    let mut game_tag_table: Vec<(Uuid, u16)> = game_tag_table.into_iter().collect();
+    let mut game_tag_table: Vec<(Uuid, u32)> = game_tag_table.into_iter().collect();
     game_tag_table.sort_by_key(|&(_, v)| v);
 
-    let mut team_tag_table: Vec<(Uuid, u8)> = team_tag_table.into_iter().collect();
+    let mut team_tag_table: Vec<(Uuid, u32)> = team_tag_table.into_iter().collect();
     team_tag_table.sort_by_key(|&(_, v)| v);
 
     let mut player_tag_array: Vec<Uuid> = Vec::new();
@@ -96,17 +96,17 @@ fn main() -> VCRResult<()> {
 
     writeln!(
         &mut out,
-        "pub static UUID_TO_PLAYER: phf::Map<[u8; 16], u16> = {};\n",
+        "pub static UUID_TO_PLAYER: phf::Map<[u8; 16], u32> = {};\n",
         phf_players.build()
     )?;
     writeln!(
         &mut out,
-        "pub static UUID_TO_GAME: phf::Map<[u8; 16], u16> = {};\n",
+        "pub static UUID_TO_GAME: phf::Map<[u8; 16], u32> = {};\n",
         phf_games.build()
     )?;
     writeln!(
         &mut out,
-        "pub static UUID_TO_TEAM: phf::Map<[u8; 16], u8> = {};\n",
+        "pub static UUID_TO_TEAM: phf::Map<[u8; 16], u32> = {};\n",
         phf_teams.build()
     )?;
 

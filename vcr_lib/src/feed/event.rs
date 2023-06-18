@@ -1,4 +1,5 @@
-use super::lookup_tables::*;
+use crate::lookups::{PLAYER_ID_TABLE, GAME_ID_TABLE, TEAM_ID_TABLE};
+
 use chrono::{DateTime, TimeZone, Utc};
 use std::ops::Deref;
 use uuid::Uuid;
@@ -8,6 +9,7 @@ use uuid::Uuid;
 pub struct FeedEvent {
     pub id: Uuid,
     pub category: i8,
+    #[serde(deserialize_with = "deserialize_timestamp")]
     pub created: DateTime<Utc>,
     pub day: i16,
     pub description: String,
@@ -20,9 +22,15 @@ pub struct FeedEvent {
     #[serde(rename = "type")]
     pub etype: i16,
     pub tournament: i8,
-    pub season: u8,
+    pub season: i8,
     #[serde(default)]
     pub metadata: Option<Box<serde_json::value::RawValue>>,
+}
+
+fn deserialize_timestamp<'de, D>(deser: D) -> Result<DateTime<Utc>, D::Error> where D: serde::Deserializer<'de> {
+    use serde::Deserialize;
+    let v: i64 = i64::deserialize(deser)?;
+    Ok(Utc.timestamp_opt(v, 0).unwrap())
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize)]
@@ -34,11 +42,11 @@ pub struct CompactedFeedEvent {
     pub description: String,
     pub player_tags: Vec<u16>,
     pub game_tags: Vec<u16>,
-    pub team_tags: Vec<u8>,
+    pub team_tags: Vec<u16>,
     pub etype: i16,
     pub tournament: i8,
     pub metadata: Option<String>,
-    pub season: u8,
+    pub season: i8,
     pub phase: u8,
 }
 
@@ -58,19 +66,24 @@ impl CompactedFeedEvent {
                 .player_tags
                 .unwrap_or_default()
                 .into_iter()
-                .map(|id| UUID_TO_PLAYER[id.as_bytes()])
+                .map(|id| PLAYER_ID_TABLE.mapper[&id] as u16)
                 .collect(),
             game_tags: ev
                 .game_tags
                 .unwrap_or_default()
                 .into_iter()
-                .map(|id| UUID_TO_GAME[id.as_bytes()])
+                .map(|id| {
+                    match GAME_ID_TABLE.map(&id) {
+                        Some(v) => *v as u16,
+                        None => panic!("{}",  id)
+                    }
+                })
                 .collect(),
             team_tags: ev
                 .team_tags
                 .unwrap_or_default()
                 .into_iter()
-                .map(|id| UUID_TO_TEAM[id.as_bytes()])
+                .map(|id| TEAM_ID_TABLE.mapper[&id] as u16)
                 .collect(),
         }
     }
@@ -131,7 +144,7 @@ impl<'a> serde::Serialize for ArchivedEventWithTimestamp<'a> {
             {
                 let mut s = serializer.serialize_seq(Some(self.0.len()))?;
                 for v in self.0 {
-                    s.serialize_element(&PLAYER_TO_UUID[v.value() as usize])?;
+                    s.serialize_element(&PLAYER_ID_TABLE.inverter[v.value() as usize])?;
                 }
                 s.end()
             }
@@ -147,14 +160,14 @@ impl<'a> serde::Serialize for ArchivedEventWithTimestamp<'a> {
             {
                 let mut s = serializer.serialize_seq(Some(self.0.len()))?;
                 for v in self.0 {
-                    s.serialize_element(&GAME_TO_UUID[v.value() as usize])?;
+                    s.serialize_element(&GAME_ID_TABLE.inverter[v.value() as usize])?;
                 }
                 s.end()
             }
         }
 
         #[repr(transparent)]
-        struct TeamTags<'a>(&'a [u8]);
+        struct TeamTags<'a>(&'a [LittleEndian<u16>]);
 
         impl<'a> Serialize for TeamTags<'a> {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -163,7 +176,7 @@ impl<'a> serde::Serialize for ArchivedEventWithTimestamp<'a> {
             {
                 let mut s = serializer.serialize_seq(Some(self.0.len()))?;
                 for v in self.0 {
-                    s.serialize_element(&TEAM_TO_UUID[*v as usize])?;
+                    s.serialize_element(&TEAM_ID_TABLE.inverter[v.value() as usize])?;
                 }
                 s.end()
             }

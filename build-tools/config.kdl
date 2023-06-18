@@ -1,0 +1,62 @@
+target {
+    tapes "../vhs_tapes/"
+    dicts "../vhs-dicts/"
+    schemas "../vcr_lib/src/vhs/schemas/"
+    binaries "../target/release/"
+}
+
+entities {
+    // dict-using
+    player use-dict=true checkpoint=100
+    item use-dict=true checkpoint=100
+    renovationprogress use-dict=true checkpoint=100
+    bonusresult use-dict=true checkpoint=100
+    stadium use-dict=true checkpoint=100
+    team use-dict=true checkpoint=100
+    // normal but checkpointed
+    temporal checkpoint=100
+    standings checkpoint=100
+    communitychestprogress checkpoint=100
+    fuelprogress checkpoint=100
+    idols checkpoint=100
+    sim checkpoint=100
+    sunsun checkpoint=100
+    bossfight checkpoint=100
+    playoffs checkpoint=100
+    playoffround checkpoint=100
+    playoffmatchup checkpoint=100
+    season checkpoint=100
+    teamelectionstats checkpoint=100
+    // normal
+    subleague
+    league
+    vault
+    division
+    tournament
+    tiebreakers
+    nullified
+    decreeresult
+    eventresult
+    globalevents
+    shopsetup
+    offseasonrecap
+    // gamma
+    attributes
+    availablechampionbets
+    championcallout
+    dayssincelastincineration
+    fanart
+    feedseasonlist
+    gammabracket
+    gammaelection checkpoint=100
+    gammaelections
+    gammaelectiondetails
+    gammaelectionresults
+    gammasim checkpoint=100
+    glossarywords
+    peanutpower
+    sponsordata
+    stadiumprefabs
+    thebeat
+    thebook
+}

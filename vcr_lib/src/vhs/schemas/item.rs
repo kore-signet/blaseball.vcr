@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
-use vhs_diff::{Diff, Patch};
 
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[serde(rename_all = "camelCase")]
 pub struct Item {
     pub baserunning_rating: Option<f64>,
 
@@ -28,7 +28,7 @@ pub struct Item {
 
     pub prefixes: Option<Vec<Prefix>>,
 
-    pub pre_prefix: Option<serde_json::Value>,
+    pub pre_prefix: Option<PrePrefix>,
 
     pub root: Root,
 
@@ -38,7 +38,6 @@ pub struct Item {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct PostPrefix {
     pub adjustments: Vec<PostPrefixAdjustment>,
 
@@ -46,7 +45,6 @@ pub struct PostPrefix {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct PostPrefixAdjustment {
     #[serde(rename = "mod")]
     pub adjustment_mod: Option<String>,
@@ -60,38 +58,14 @@ pub struct PostPrefixAdjustment {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct Prefix {
-    pub adjustments: Vec<PrefixAdjustment>,
+pub struct PrePrefix {
+    pub adjustments: Vec<PrePrefixAdjustment>,
 
     pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct PrefixAdjustment {
-    #[serde(rename = "mod")]
-    pub adjustment_mod: Option<String>,
-
-    pub stat: Option<i64>,
-
-    #[serde(rename = "type")]
-    pub adjustment_type: i64,
-
-    pub value: Option<f64>,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct Root {
-    pub adjustments: Vec<RootAdjustment>,
-
-    pub name: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct RootAdjustment {
+pub struct PrePrefixAdjustment {
     pub stat: i64,
 
     #[serde(rename = "type")]
@@ -101,13 +75,48 @@ pub struct RootAdjustment {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
+pub struct Prefix {
+    pub adjustments: Vec<PrefixAdjustment>,
+
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct PrefixAdjustment {
+    #[serde(rename = "mod")]
+    pub adjustment_mod: Option<String>,
+
+    pub stat: Option<i64>,
+
+    #[serde(rename = "type")]
+    pub adjustment_type: Option<i64>,
+
+    pub value: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct Root {
+    pub adjustments: Vec<RootAdjustment>,
+
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct RootAdjustment {
+    pub stat: i64,
+
+    #[serde(rename = "type")]
+    pub adjustment_type: Option<i64>,
+
+    pub value: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct State {
     pub original: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct Suffix {
     pub adjustments: Vec<SuffixAdjustment>,
 
@@ -115,7 +124,6 @@ pub struct Suffix {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct SuffixAdjustment {
     #[serde(rename = "mod")]
     pub adjustment_mod: Option<String>,
@@ -123,7 +131,7 @@ pub struct SuffixAdjustment {
     pub stat: Option<i64>,
 
     #[serde(rename = "type")]
-    pub adjustment_type: i64,
+    pub adjustment_type: Option<i64>,
 
     pub value: Option<f64>,
 }

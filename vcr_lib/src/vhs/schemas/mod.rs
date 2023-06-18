@@ -16,19 +16,19 @@ pub use subleague::Subleague;
 pub use sunsun::Sunsun;
 pub use team::Team;
 pub use temporal::Temporal;
-pub use tiebreakers::TiebreakerWrapper;
+pub use tiebreakers::Tiebreakers;
 pub use tournament::Tournament;
 
 pub use bonusresult::Bonusresult;
 pub use decreeresult::Decreeresult;
 pub use eventresult::Eventresult;
-pub use fuelprogress::FuelprogressWrapper;
+pub use fuelprogress::FuelProgressWrapper;
 pub use giftprogress::Giftprogress;
 pub use globalevents::GlobaleventsWrapper;
-pub use idols::IdolsWrapper;
+pub use idols::Idols;
 pub use item::Item;
 pub use librarystory::LibrarystoryWrapper;
-pub use nullified::NullifiedWrapper;
+pub use nullified::Nullified;
 pub use offseasonrecap::Offseasonrecap;
 pub use offseasonsetup::Offseasonsetup;
 pub use player::Player;
@@ -39,8 +39,34 @@ pub use stream_data::*;
 pub use teamelectionstats::Teamelectionstats;
 pub use vault::Vault;
 
+pub use attributes::*;
+pub use availablechampionbets::*;
+pub use championcallout::*;
+pub use dayssincelastincineration::*;
+pub use fanart::*;
+pub use feedseasonlist::*;
+pub use gamestatsheet::*;
+pub use gammabracket::*;
+pub use gammaelection::*;
+pub use gammaelections::Gammaelections;
+pub use gammaelectiondetails::*;
+pub use gammaelectionresults::*;
+pub use gammasim::*;
+pub use glossarywords::*;
+pub use peanutpower::*;
+pub use playerstatsheet::*;
+pub use seasonstatsheet::*;
+pub use sponsordata::*;
+pub use stadiumprefabs::*;
+pub use teamstatsheet::*;
+pub use thebeat::*;
+pub use thebook::*;
+// pub use
+
 use serde::ser::{Serialize, Serializer};
 use std::str::FromStr;
+
+// use self::globalevents::GlobaleventsWrapper;
 
 #[macro_export]
 macro_rules! etypes {
@@ -108,18 +134,18 @@ etypes! {
     "team" -> Team(Team),
     "sunsun" -> Sunsun(Sunsun),
     "temporal" -> Temporal(Temporal),
-    "tiebreakers" -> Tiebreakers(TiebreakerWrapper),
+    "tiebreakers" -> Tiebreakers(Tiebreakers),
     "tournament" -> Tournament(Tournament),
     "bonusresult" -> Bonusresult(Bonusresult),
     "decreeresult" -> Decreeresult(Decreeresult),
     "eventresult" -> Eventresult(Eventresult),
-    "fuelprogress" -> FuelProgress(FuelprogressWrapper),
+    "fuelprogress" -> FuelProgress(FuelProgressWrapper),
     "giftprogress" -> Giftprogress(Giftprogress),
     "globalevents" -> GlobalEvents(GlobaleventsWrapper),
-    "idols" -> Idols(IdolsWrapper),
+    "idols" -> Idols(Idols),
     "item" -> Item(Item),
     "librarystory" -> LibraryStory(LibrarystoryWrapper),
-    "nullified" -> Nullified(NullifiedWrapper),
+    "nullified" -> Nullified(Nullified),
     "offseasonrecap" -> Offseasonrecap(Offseasonrecap),
     "offseasonsetup" -> Offseasonsetup(Offseasonsetup),
     "player" -> Player(Player),
@@ -128,5 +154,25 @@ etypes! {
     "shopsetup" -> ShopSetup(Shopsetup),
     "teamelectionstats" -> TeamElectionStats(Teamelectionstats),
     "vault" -> Vault(Vault),
+    "stadiumprefabs" -> StadiumPrefabs(Stadiumprefabs),
+    "thebook" -> TheBook(Thebook),
+    "thebeat" -> TheBeat(Thebeat),
+    "teamstatsheet" -> TeamStatSheet(Teamstatsheet),
+    "glossarywords" -> GlossaryWords(Glossarywords),
+    "peanutpower" -> PeanutPower(Peanutpower),
+    "gammasim" -> GammaSim(Gammasim),
+    "gammaelections" -> GammaElections(Gammaelections),
+    "gammaelectionresults" -> GammaElectionResults(Gammaelectionresults),
+    "gammaelectiondetails" -> GammaElectionDetail(Gammaelectiondetails),
+    "gammaelection" -> GammaElection(Gammaelection),
+    "gammabracket" -> Gammabracket(Gammabracket),
+    "gamestatsheet" -> GameStatSheet(Gamestatsheet),
+    "feedseasonlist" -> FeedSeasonList(Feedseasonlist),
+    "fanart" -> Fanart(Fanart),
+    "dayssincelastincineration" -> Dayssincelastincineration(Dayssincelastincineration),
+    "championcallout" -> Championcallout(Championcallout),
+    "availablechampionbets" -> Availablechampionbets(Availablechampionbets),
+    "attributes" -> Attributes(Attributes),
+    "playerstatsheet" -> Playerstatsheet(Playerstatsheet),
     "stream" -> StreamData(StreamDataWrapper)
 }

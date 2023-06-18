@@ -1,7 +1,7 @@
 use blaseball_vcr::vhs::schemas::*;
 use blaseball_vcr::{vhs::db, EntityDatabase, VCRResult};
 
-use uuid::Uuid;
+
 
 fn main() -> VCRResult<()> {
     let db: db::Database<Team> = db::Database::from_single("./vhs_tapes/team.vhs")?;

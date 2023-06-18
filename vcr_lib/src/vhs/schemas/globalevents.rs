@@ -1,22 +1,27 @@
-use serde::{Deserialize, Serialize};
-use vhs_diff::{Diff, Patch};
 
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[repr(transparent)]
 #[serde(transparent)]
 pub struct GlobaleventsWrapper {
-    inner: Vec<Globalevent>,
+    inner: Globalevents
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+pub type Globalevents = Vec<Globalevent>;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
 pub struct Globalevent {
     #[serde(rename = "__v")]
     pub v: Option<i64>,
+
     #[serde(rename = "_id")]
     pub id: Option<String>,
+
     pub expire: Option<String>,
+
     #[serde(rename = "id")]
     pub globalevent_id: Option<String>,
-    #[serde(rename = "msg")]
+
     pub msg: String,
 }

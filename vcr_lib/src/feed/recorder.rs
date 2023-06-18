@@ -1,4 +1,4 @@
-use super::{event::*, EncodedBlockHeader};
+use super::{event::*, EncodedBlockHeader, EventId};
 use crate::VCRResult;
 use rkyv::ser::{serializers::AllocSerializer, Serializer};
 use std::collections::HashMap;
@@ -10,7 +10,7 @@ pub struct FeedRecorder<H: Write, M: Write, A: Write> {
     header_out: H,
     feed_out: M,
     aux_out: A,                                  // output for uuid_to_internal
-    uuid_to_internal: HashMap<Uuid, (u16, u16)>, // map of event id -> (block index, event index relative to block)
+    uuid_to_internal: HashMap<Uuid, [u8; 4]>, // map of event id -> (block index, event index relative to block)
     block_index: usize,
     compressor: Compressor<'static>,
     headers: Vec<EncodedBlockHeader>,
@@ -57,10 +57,14 @@ impl<H: Write, M: Write, A: Write> FeedRecorder<H, M, A> {
         for (idx, event) in chunk.into_iter().enumerate() {
             self.uuid_to_internal.insert(
                 event.id,
-                (
-                    self.block_index.try_into().unwrap(),
-                    idx.try_into().unwrap(),
-                ),
+                EventId::new()
+                .with_chunk(self.block_index.try_into().unwrap())
+                .with_idx(idx.try_into().unwrap())
+                .into_bytes()
+                // (
+                //     self.block_index.try_into().unwrap(),
+                //     idx.try_into().unwrap(),
+                // ),
             );
 
             let created = event.created.timestamp_millis() as u64;

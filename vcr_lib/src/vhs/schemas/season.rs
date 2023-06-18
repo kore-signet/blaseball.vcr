@@ -1,31 +1,32 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use vhs_diff::{Diff, Patch};
 
-#[derive(Diff, Patch, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Patch, vhs_diff::Diff)]
+#[serde(rename_all = "camelCase")]
 pub struct Season {
-    // look i'm not gonna question it
     #[serde(rename = "__v")]
     pub v: Option<i64>,
 
     #[serde(rename = "_id")]
     pub old_id: Option<Uuid>,
     pub id: Option<Uuid>,
-
+    
     pub league: Uuid,
 
     pub rules: Uuid,
 
-    pub schedule: Uuid,
+    pub schedule: Option<Uuid>,
 
     pub season_number: i64,
 
     pub standings: Uuid,
 
-    pub stats: String,
+    pub stats: Uuid,
 
     pub terminology: Uuid,
+
+    pub total_days_in_season: Option<i64>,
 }
 
 impl Season {
