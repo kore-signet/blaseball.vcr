@@ -1,531 +1,539 @@
-#![allow(clippy::redundant_closure_call)]
-#![allow(clippy::needless_lifetimes)]
-#![allow(clippy::match_single_binding)]
-#![allow(clippy::clone_on_copy)]
-
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 use vcr_lookups::UuidShell;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, vhs_diff::Diff, vhs_diff::Patch)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, vhs_diff::Diff, vhs_diff::Patch)]
 pub struct GameUpdate {
+    #[serde(rename = "_id")]
+    pub id: Option<UuidShell>,
+
     #[serde(rename = "atBatBalls")]
     pub at_bat_balls: i64,
+
     #[serde(rename = "atBatStrikes")]
     pub at_bat_strikes: i64,
-    #[serde(rename = "awayBalls", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "awayBalls")]
     pub away_balls: Option<i64>,
-    #[serde(rename = "awayBases", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "awayBases")]
     pub away_bases: Option<i64>,
+
     #[serde(rename = "awayBatter", deserialize_with = "vcr_lookups::empty_string_as_none")]
     pub away_batter: Option<UuidShell>,
-    #[serde(
-        rename = "awayBatterMod",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "awayBatterMod")]
     pub away_batter_mod: Option<String>,
+
     #[serde(rename = "awayBatterName")]
     pub away_batter_name: Option<String>,
+
     #[serde(rename = "awayOdds")]
     pub away_odds: Option<f64>,
-    #[serde(rename = "awayOuts", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "awayOuts")]
     pub away_outs: Option<i64>,
+
     #[serde(rename = "awayPitcher", deserialize_with = "vcr_lookups::empty_string_as_none")]
     pub away_pitcher: Option<UuidShell>,
-    #[serde(
-        rename = "awayPitcherMod",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "awayPitcherMod")]
     pub away_pitcher_mod: Option<String>,
+
     #[serde(rename = "awayPitcherName")]
     pub away_pitcher_name: Option<String>,
+
     #[serde(rename = "awayScore")]
     pub away_score: Option<f64>,
+
     #[serde(rename = "awayStrikes")]
     pub away_strikes: Option<i64>,
+
     #[serde(rename = "awayTeam")]
     pub away_team: UuidShell,
+
     #[serde(rename = "awayTeamBatterCount")]
     pub away_team_batter_count: Option<i64>,
+
     #[serde(rename = "awayTeamColor")]
     pub away_team_color: String,
+
     #[serde(rename = "awayTeamEmoji")]
     pub away_team_emoji: String,
+
     #[serde(rename = "awayTeamName")]
     pub away_team_name: String,
+
     #[serde(rename = "awayTeamNickname")]
     pub away_team_nickname: String,
-    #[serde(rename = "awayTeamRuns", default)]
-    pub away_team_runs: (),
-    #[serde(
-        rename = "awayTeamSecondaryColor",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "awayTeamRuns")]
+    pub away_team_runs: Option<serde_json::Value>,
+
+    #[serde(rename = "awayTeamSecondaryColor")]
     pub away_team_secondary_color: Option<String>,
-    #[serde(
-        rename = "baseRunnerMods",
-        default,
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    pub base_runner_mods: Vec<String>,
-    #[serde(
-        rename = "baseRunnerNames",
-        default,
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    pub base_runner_names: Vec<String>,
-    #[serde(rename = "baseRunners")]
-    pub base_runners: Vec<UuidShell>,
+
     #[serde(rename = "baserunnerCount")]
     pub baserunner_count: i64,
+
+    #[serde(rename = "baseRunnerMods")]
+    pub base_runner_mods: Option<Vec<String>>,
+
+    #[serde(rename = "baseRunnerNames")]
+    pub base_runner_names: Option<Vec<String>>,
+
+    #[serde(rename = "baseRunners")]
+    pub base_runners: Vec<UuidShell>,
+
     #[serde(rename = "basesOccupied")]
     pub bases_occupied: Vec<i64>,
-    #[serde(
-        rename = "bottomInningScore",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "bottomInningScore")]
     pub bottom_inning_score: Option<f64>,
+
+    #[serde(rename = "day")]
     pub day: i64,
-    #[serde(rename = "endPhase", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "endPhase")]
     pub end_phase: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "finalized")]
     pub finalized: Option<bool>,
+
     #[serde(rename = "gameComplete")]
     pub game_complete: bool,
+
     #[serde(rename = "gameStart")]
     pub game_start: bool,
-    #[serde(
-        rename = "gameStartPhase",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "gameStartPhase")]
     pub game_start_phase: Option<i64>,
+
     #[serde(rename = "halfInningOuts")]
     pub half_inning_outs: i64,
+
     #[serde(rename = "halfInningScore")]
     pub half_inning_score: f64,
-    #[serde(rename = "homeBalls", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "homeBalls")]
     pub home_balls: Option<i64>,
-    #[serde(rename = "homeBases", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "homeBases")]
     pub home_bases: Option<i64>,
+
     #[serde(rename = "homeBatter", deserialize_with = "vcr_lookups::empty_string_as_none")]
     pub home_batter: Option<UuidShell>,
-    #[serde(
-        rename = "homeBatterMod",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "homeBatterMod")]
     pub home_batter_mod: Option<String>,
+
     #[serde(rename = "homeBatterName")]
     pub home_batter_name: Option<String>,
+
     #[serde(rename = "homeOdds")]
     pub home_odds: Option<f64>,
-    #[serde(rename = "homeOuts", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "homeOuts")]
     pub home_outs: Option<i64>,
+
     #[serde(rename = "homePitcher", deserialize_with = "vcr_lookups::empty_string_as_none")]
     pub home_pitcher: Option<UuidShell>,
-    #[serde(
-        rename = "homePitcherMod",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "homePitcherMod")]
     pub home_pitcher_mod: Option<String>,
+
     #[serde(rename = "homePitcherName")]
     pub home_pitcher_name: Option<String>,
+
     #[serde(rename = "homeScore")]
     pub home_score: Option<f64>,
+
     #[serde(rename = "homeStrikes")]
     pub home_strikes: Option<i64>,
+
     #[serde(rename = "homeTeam")]
     pub home_team: UuidShell,
+
     #[serde(rename = "homeTeamBatterCount")]
     pub home_team_batter_count: i64,
+
     #[serde(rename = "homeTeamColor")]
     pub home_team_color: String,
+
     #[serde(rename = "homeTeamEmoji")]
     pub home_team_emoji: String,
+
     #[serde(rename = "homeTeamName")]
     pub home_team_name: String,
+
     #[serde(rename = "homeTeamNickname")]
     pub home_team_nickname: String,
-    #[serde(rename = "homeTeamRuns", default)]
-    pub home_team_runs: (),
-    #[serde(
-        rename = "homeTeamSecondaryColor",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "homeTeamRuns")]
+    pub home_team_runs: Option<serde_json::Value>,
+
+    #[serde(rename = "homeTeamSecondaryColor")]
     pub home_team_secondary_color: Option<String>,
-    #[serde(rename = "_id", default, skip_serializing_if = "Option::is_none")]
-    pub old_id: Option<UuidShell>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<UuidShell>,
+
+    #[serde(rename = "id")]
+    pub games_schema_id: Option<String>,
+
+    #[serde(rename = "inning")]
     pub inning: i64,
+
     #[serde(rename = "isPostseason")]
     pub is_postseason: bool,
-    #[serde(
-        rename = "isPrizeMatch",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "isPrizeMatch")]
     pub is_prize_match: Option<bool>,
-    #[serde(
-        rename = "isTitleMatch",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "isTitleMatch")]
     pub is_title_match: Option<bool>,
-    #[serde(
-        rename = "lastUpdate",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "lastUpdate")]
     pub last_update: Option<String>,
-    #[serde(
-        rename = "lastUpdateFull",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub last_update_full: Option<Vec<GameLastUpdateFullItem>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "lastUpdateFull")]
+    pub last_update_full: Option<Vec<LastUpdateFull>>,
+
+    #[serde(rename = "loser")]
     pub loser: Option<String>,
-    #[serde(
-        rename = "newHalfInningPhase",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "newHalfInningPhase")]
     pub new_half_inning_phase: Option<i64>,
-    #[serde(
-        rename = "newInningPhase",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "newInningPhase")]
     pub new_inning_phase: Option<i64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub outcomes: Vec<String>,
+
+    #[serde(rename = "outcomes")]
+    pub outcomes: Option<Vec<String>>,
+
+    #[serde(rename = "phase")]
     pub phase: i64,
-    #[serde(rename = "playCount", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "playCount")]
     pub play_count: Option<i64>,
-    #[serde(
-        rename = "queuedEvents",
-        default,
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    pub queued_events: Vec<GameQueuedEventsItem>,
-    #[serde(
-        rename = "repeatCount",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "queuedEvents")]
+    pub queued_events: Option<Vec<QueuedEvent>>,
+
+    #[serde(rename = "repeatCount")]
     pub repeat_count: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "rules")]
     pub rules: Option<String>,
-    #[serde(
-        rename = "scoreLedger",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "scoreLedger")]
     pub score_ledger: Option<String>,
-    #[serde(
-        rename = "scoreUpdate",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "scoreUpdate")]
     pub score_update: Option<String>,
+
+    #[serde(rename = "season")]
     pub season: i64,
-    #[serde(rename = "seasonId", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "seasonId")]
     pub season_id: Option<String>,
-    #[serde(
-        rename = "secretBaserunner",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "secretBaserunner")]
     pub secret_baserunner: Option<String>,
+
     #[serde(rename = "seriesIndex")]
     pub series_index: i64,
+
     #[serde(rename = "seriesLength")]
     pub series_length: i64,
+
+    #[serde(rename = "shame")]
     pub shame: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "sim")]
     pub sim: Option<String>,
-    #[serde(rename = "stadiumId", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "stadiumId")]
     pub stadium_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<GameState>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "state")]
+    pub state: Option<State>,
+
+    #[serde(rename = "statsheet")]
     pub statsheet: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "terminology")]
     pub terminology: Option<String>,
-    #[serde(
-        rename = "topInningScore",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "topInningScore")]
     pub top_inning_score: Option<f64>,
+
     #[serde(rename = "topOfInning")]
     pub top_of_inning: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "tournament")]
     pub tournament: Option<i64>,
-    #[serde(
-        rename = "tournamentRound",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "tournamentRound")]
     pub tournament_round: Option<i64>,
-    #[serde(
-        rename = "tournamentRoundGameIndex",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "tournamentRoundGameIndex")]
     pub tournament_round_game_index: Option<i64>,
+
+    #[serde(rename = "weather")]
     pub weather: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "winner")]
     pub winner: Option<String>,
 }
-impl From<&GameUpdate> for GameUpdate {
-    fn from(value: &GameUpdate) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameLastUpdateFullItem {
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct LastUpdateFull {
+    #[serde(rename = "blurb")]
     pub blurb: String,
+
+    #[serde(rename = "category")]
     pub category: i64,
+
+    #[serde(rename = "created")]
     pub created: String,
+
+    #[serde(rename = "day")]
     pub day: i64,
+
+    #[serde(rename = "description")]
     pub description: String,
+
     #[serde(rename = "gameTags")]
-    pub game_tags: Vec<serde_json::Value>,
+    pub game_tags: Vec<Option<serde_json::Value>>,
+
+    #[serde(rename = "id")]
     pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<GameLastUpdateFullItemMetadata>,
+
+    #[serde(rename = "metadata")]
+    pub metadata: Option<Metadata>,
+
+    #[serde(rename = "nuts")]
     pub nuts: i64,
+
+    #[serde(rename = "phase")]
     pub phase: i64,
+
     #[serde(rename = "playerTags")]
     pub player_tags: Vec<String>,
+
+    #[serde(rename = "season")]
     pub season: i64,
+
     #[serde(rename = "teamTags")]
     pub team_tags: Vec<String>,
+
+    #[serde(rename = "tournament")]
     pub tournament: i64,
+
     #[serde(rename = "type")]
-    pub type_: i64,
+    pub last_update_full_type: i64,
 }
-impl From<&GameLastUpdateFullItem> for GameLastUpdateFullItem {
-    fn from(value: &GameLastUpdateFullItem) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameLastUpdateFullItemMetadata {
-    #[serde(rename = "aLocation", default, skip_serializing_if = "Option::is_none")]
-    pub a_location: Option<i64>,
-    #[serde(rename = "aPlayerId", default, skip_serializing_if = "Option::is_none")]
-    pub a_player_id: Option<String>,
-    #[serde(
-        rename = "aPlayerName",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub a_player_name: Option<String>,
-    #[serde(rename = "aTeamId", default, skip_serializing_if = "Option::is_none")]
-    pub a_team_id: Option<String>,
-    #[serde(rename = "aTeamName", default, skip_serializing_if = "Option::is_none")]
-    pub a_team_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct Metadata {
+    #[serde(rename = "after")]
     pub after: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "aLocation")]
+    pub a_location: Option<i64>,
+
+    #[serde(rename = "amount")]
     pub amount: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "aPlayerId")]
+    pub a_player_id: Option<String>,
+
+    #[serde(rename = "aPlayerName")]
+    pub a_player_name: Option<String>,
+
+    #[serde(rename = "aTeamId")]
+    pub a_team_id: Option<String>,
+
+    #[serde(rename = "aTeamName")]
+    pub a_team_name: Option<String>,
+
+    #[serde(rename = "away")]
     pub away: Option<String>,
-    #[serde(rename = "awayEmoji", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "awayEmoji")]
     pub away_emoji: Option<String>,
-    #[serde(rename = "awayScore", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "awayScore")]
     pub away_score: Option<i64>,
-    #[serde(rename = "bLocation", default, skip_serializing_if = "Option::is_none")]
-    pub b_location: Option<i64>,
-    #[serde(rename = "bPlayerId", default, skip_serializing_if = "Option::is_none")]
-    pub b_player_id: Option<String>,
-    #[serde(
-        rename = "bPlayerName",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub b_player_name: Option<String>,
-    #[serde(rename = "bTeamId", default, skip_serializing_if = "Option::is_none")]
-    pub b_team_id: Option<String>,
-    #[serde(rename = "bTeamName", default, skip_serializing_if = "Option::is_none")]
-    pub b_team_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "before")]
     pub before: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "bLocation")]
+    pub b_location: Option<i64>,
+
+    #[serde(rename = "bPlayerId")]
+    pub b_player_id: Option<String>,
+
+    #[serde(rename = "bPlayerName")]
+    pub b_player_name: Option<String>,
+
+    #[serde(rename = "bTeamId")]
+    pub b_team_id: Option<String>,
+
+    #[serde(rename = "bTeamName")]
+    pub b_team_name: Option<String>,
+
+    #[serde(rename = "effect")]
     pub effect: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "home")]
     pub home: Option<String>,
-    #[serde(rename = "homeEmoji", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "homeEmoji")]
     pub home_emoji: Option<String>,
-    #[serde(rename = "homeScore", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "homeScore")]
     pub home_score: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "id")]
     pub id: Option<String>,
-    #[serde(
-        rename = "inPlayerId",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "inPlayerId")]
     pub in_player_id: Option<String>,
-    #[serde(
-        rename = "inPlayerName",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "inPlayerName")]
     pub in_player_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "ledger")]
     pub ledger: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub lines: Vec<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "lines")]
+    pub lines: Option<Vec<Option<serde_json::Value>>>,
+
+    #[serde(rename = "location")]
     pub location: Option<i64>,
-    #[serde(rename = "mod", default, skip_serializing_if = "Option::is_none")]
-    pub mod_: Option<String>,
-    #[serde(
-        rename = "outPlayerId",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "mod")]
+    pub metadata_mod: Option<String>,
+
+    #[serde(rename = "outPlayerId")]
     pub out_player_id: Option<String>,
-    #[serde(
-        rename = "outPlayerName",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "outPlayerName")]
     pub out_player_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "source")]
     pub source: Option<String>,
-    #[serde(rename = "teamId", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "teamId")]
     pub team_id: Option<String>,
-    #[serde(rename = "teamName", default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "teamName")]
     pub team_name: Option<String>,
-    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-    pub type_: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "type")]
+    pub metadata_type: Option<i64>,
+
+    #[serde(rename = "update")]
     pub update: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "weather")]
     pub weather: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "winner")]
     pub winner: Option<String>,
 }
-impl From<&GameLastUpdateFullItemMetadata> for GameLastUpdateFullItemMetadata {
-    fn from(value: &GameLastUpdateFullItemMetadata) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameQueuedEventsItem {
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct QueuedEvent {
+    #[serde(rename = "delay")]
     pub delay: i64,
+
     #[serde(rename = "isSpecial")]
     pub is_special: bool,
+
     #[serde(rename = "logUpdates")]
     pub log_updates: Vec<String>,
-    pub outcomes: Vec<serde_json::Value>,
+
+    #[serde(rename = "outcomes")]
+    pub outcomes: Vec<Option<serde_json::Value>>,
+
     #[serde(rename = "type")]
-    pub type_: i64,
+    pub queued_event_type: i64,
 }
-impl From<&GameQueuedEventsItem> for GameQueuedEventsItem {
-    fn from(value: &GameQueuedEventsItem) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameState {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ego_player_data: Vec<GameStateEgoPlayerDataItem>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct State {
+    #[serde(rename = "ego_player_data")]
+    pub ego_player_data: Option<Vec<EgoPlayerDatum>>,
+
+    #[serde(rename = "game_cancelled")]
     pub game_cancelled: Option<bool>,
-    #[serde(
-        rename = "holidayInning",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "holidayInning")]
     pub holiday_inning: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub postseason: Option<GameStatePostseason>,
-    #[serde(
-        rename = "prizeMatch",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub prize_match: Option<GameStatePrizeMatch>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reload: Option<GameStateReload>,
-    #[serde(
-        rename = "snowfallEvents",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+
+    #[serde(rename = "postseason")]
+    pub postseason: Option<Postseason>,
+
+    #[serde(rename = "prizeMatch")]
+    pub prize_match: Option<PrizeMatch>,
+
+    #[serde(rename = "reload")]
+    pub reload: Option<Reload>,
+
+    #[serde(rename = "snowfallEvents")]
     pub snowfall_events: Option<i64>,
 }
-impl From<&GameState> for GameState {
-    fn from(value: &GameState) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameStateEgoPlayerDataItem {
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct EgoPlayerDatum {
     #[serde(rename = "hallPlayer")]
     pub hall_player: bool,
+
+    #[serde(rename = "id")]
     pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "location")]
     pub location: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "team")]
     pub team: Option<String>,
 }
-impl From<&GameStateEgoPlayerDataItem> for GameStateEgoPlayerDataItem {
-    fn from(value: &GameStateEgoPlayerDataItem) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameStatePostseason {
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct Postseason {
+    #[serde(rename = "bracket")]
     pub bracket: i64,
+
+    #[serde(rename = "matchup")]
     pub matchup: String,
+
     #[serde(rename = "playoffId")]
     pub playoff_id: String,
 }
-impl From<&GameStatePostseason> for GameStatePostseason {
-    fn from(value: &GameStatePostseason) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameStatePrizeMatch {
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct PrizeMatch {
     #[serde(rename = "itemId")]
     pub item_id: String,
+
     #[serde(rename = "itemName")]
     pub item_name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+
+    #[serde(rename = "winner")]
     pub winner: Option<String>,
 }
-impl From<&GameStatePrizeMatch> for GameStatePrizeMatch {
-    fn from(value: &GameStatePrizeMatch) -> Self {
-        value.clone()
-    }
-}
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GameStateReload {
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct Reload {
     #[serde(rename = "BaserunnerCount")]
     pub baserunner_count: i64,
+
     #[serde(rename = "Baserunners")]
     pub baserunners: Vec<String>,
+
     #[serde(rename = "BasesOccupied")]
     pub bases_occupied: Vec<i64>,
+
     #[serde(rename = "Batter")]
     pub batter: String,
-}
-impl From<&GameStateReload> for GameStateReload {
-    fn from(value: &GameStateReload) -> Self {
-        value.clone()
-    }
 }

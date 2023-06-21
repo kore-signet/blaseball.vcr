@@ -21,6 +21,7 @@ blake2s_simd = "1.0.1"
 faster-hex = "0.8.0"
 anyhow = "1.0.71"
 iso8601-timestamp = "0.2.11"
+serde_path_to_error = "0.1.11"
 
 [dependencies.xxhash-rust]
 version = "0.8.5"

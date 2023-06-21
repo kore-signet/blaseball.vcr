@@ -1,6 +1,7 @@
 use blaseball_vcr::vhs::recorder::*;
 use blaseball_vcr::{timestamp_to_nanos, VCRResult};
 use new_encoder::*;
+use uuid::Uuid;
 use vcr_schemas::game::GameUpdate;
 
 use std::fs::File;
@@ -79,7 +80,7 @@ fn main() -> VCRResult<()> {
 
         i += 1;
 
-        println!("game #{i}");
+        println!("game #{i} - {}", Uuid::from_bytes(id));
     }
 
     let (mut header, mut main) = recorder.finish()?;

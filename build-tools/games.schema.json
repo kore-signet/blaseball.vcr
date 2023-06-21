@@ -1,7 +1,6 @@
 {
   "$schema": "http://json-schema.org/schema#",
-  "definitions": {
-    "Game": {
+
         "type": "object",
         "properties": {
           "id": { "type": "string" },
@@ -297,6 +296,5 @@
           "topOfInning",
           "weather"
         ]
-      }
-    }
+      
 }

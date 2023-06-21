@@ -11,3 +11,4 @@ time_responses = true
 # tapes_folder = "/run/media/allie/Voyager/data/vhs_tapes"
 # feed_tape = "/run/media/allie/Voyager/data/vhs_tapes/feed.vhs"
 # site_tape = "/run/media/allie/Voyager/data/vhs_tapes/site_assets.vhs"
+parallelize_stream_data = true

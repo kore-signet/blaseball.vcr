@@ -89,12 +89,12 @@ pub fn games(
                     .times
                     .first()
                     .copied()
-                    .map(timestamp_from_millis),
+                    .map(timestamp_from_nanos),
                 end_time: game_db.index[&game.entity_id]
                     .times
                     .last()
                     .copied()
-                    .map(timestamp_from_millis),
+                    .map(timestamp_from_nanos),
                 data: game.data,
             })
         })
