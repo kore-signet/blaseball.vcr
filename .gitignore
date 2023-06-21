@@ -28,3 +28,4 @@ site-assets/mainjs
 feed.aux
 all_games.zstd
 .vscode
+data/

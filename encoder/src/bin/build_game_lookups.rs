@@ -1,14 +1,14 @@
 use blaseball_vcr::*;
-use blaseball_vcr::lookups::{PLAYER_ID_TABLE, GAME_ID_TABLE, TEAM_ID_TABLE};
 use clap::clap_app;
 use perfect_map::PerfectMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Write};
-use std::path::{Path, PathBuf};
 use std::hash::Hash;
+use std::io::{BufReader, BufWriter};
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use vcr_lookups::{GAME_ID_TABLE, PLAYER_ID_TABLE, TEAM_ID_TABLE};
 
 // macro_rules! build_index {
 //     ($table:expr, $key_ty:ty, $out:expr, $declr:literal) => {{
@@ -26,7 +26,6 @@ use uuid::Uuid;
 //         // writeln!($out, $declr, generator.build())?;
 //     }};
 // }
-
 
 #[derive(Deserialize)]
 struct GameIndex {
@@ -59,11 +58,12 @@ fn main() -> VCRResult<()> {
         .map(|(k, v)| {
             (
                 *PLAYER_ID_TABLE.map(&k).unwrap(),
-                v.into_iter().map(|g| *GAME_ID_TABLE.map(&g).unwrap()).collect(),
+                v.into_iter()
+                    .map(|g| *GAME_ID_TABLE.map(&g).unwrap())
+                    .collect(),
             )
         })
         .collect();
-
 
     for (_, p) in pitcher_index.iter_mut() {
         p.sort();
@@ -72,14 +72,15 @@ fn main() -> VCRResult<()> {
 
     write_map(pitcher_index, path.join("pitchers.index"))?;
 
-
     let mut team_index: Vec<(u32, Vec<u32>)> = index
         .by_team
         .into_iter()
         .map(|(k, v)| {
             (
                 *TEAM_ID_TABLE.map(&k).unwrap(),
-                v.into_iter().map(|g| *GAME_ID_TABLE.map(&g).unwrap()).collect(),
+                v.into_iter()
+                    .map(|g| *GAME_ID_TABLE.map(&g).unwrap())
+                    .collect(),
             )
         })
         .collect();
@@ -90,7 +91,6 @@ fn main() -> VCRResult<()> {
     }
 
     write_map(team_index, path.join("teams.index"))?;
-
 
     let mut date_index: Vec<([u8; 4], Vec<u32>)> = index
         .by_date
@@ -107,7 +107,9 @@ fn main() -> VCRResult<()> {
                     tournament: date_components[2].try_into().unwrap(),
                 })
                 .to_bytes(),
-                v.into_iter().map(|g| *GAME_ID_TABLE.map(&g).unwrap()).collect(),
+                v.into_iter()
+                    .map(|g| *GAME_ID_TABLE.map(&g).unwrap())
+                    .collect(),
             )
         })
         .collect();
@@ -124,7 +126,9 @@ fn main() -> VCRResult<()> {
         .map(|(k, v)| {
             (
                 k.try_into().unwrap(),
-                v.into_iter().map(|g|  *GAME_ID_TABLE.map(&g).unwrap()).collect(),
+                v.into_iter()
+                    .map(|g| *GAME_ID_TABLE.map(&g).unwrap())
+                    .collect(),
             )
         })
         .collect();
@@ -134,7 +138,6 @@ fn main() -> VCRResult<()> {
     }
 
     write_map(weather_index, path.join("weather.index"))?;
-
 
     // writeln!(&mut output_file, "/*")?;
     // writeln!(
@@ -193,12 +196,14 @@ fn main() -> VCRResult<()> {
     Ok(())
 }
 
-
-fn write_map<K: Hash + Send + Sync + Serialize, V: Serialize>(table: Vec<(K,V)>, to: impl AsRef<Path>) -> std::io::Result<()> {
+fn write_map<K: Hash + Send + Sync + Serialize, V: Serialize>(
+    table: Vec<(K, V)>,
+    to: impl AsRef<Path>,
+) -> std::io::Result<()> {
     let mut out = BufWriter::new(File::create(to.as_ref())?);
 
     let (keys, vals): (Vec<_>, Vec<_>) = table.into_iter().unzip();
-    let map: PerfectMap<K,V> = PerfectMap::new_preserve_keys(keys, vals);
+    let map: PerfectMap<K, V> = PerfectMap::new_preserve_keys(keys, vals);
 
     rmp_serde::encode::write_named(&mut out, &map).unwrap();
     // let map: PerfectMap<K, V> = PerfectMap::new(keys, vals);

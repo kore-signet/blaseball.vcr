@@ -5,7 +5,6 @@ use clap::clap_app;
 use itertools::Itertools;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::panic::catch_unwind;
 
 fn main() -> VCRResult<()> {
     let matches = clap_app!(train_vhs_dict =>
@@ -21,25 +20,22 @@ fn main() -> VCRResult<()> {
 
     let input = BufReader::new(File::open(matches.value_of("INPUT").unwrap())?);
 
-    for (i, line_chunk) in input.lines().chunks(100).into_iter().enumerate() {
+    for (i, line_chunk) in input.lines().chunks(255).into_iter().enumerate() {
         println!("processing chunk #{i}");
 
-        let mut chunk = Vec::with_capacity(100);
+        let mut chunk = Vec::with_capacity(255);
 
         for line in line_chunk {
             chunk.push(serde_json::from_str::<FeedEvent>(&line?)?);
         }
 
         // if catch_unwind(|| {
-            trainer.add_chunk(chunk);
+        trainer.add_chunk(chunk);
 
         // }).is_err() ;
     }
 
-    std::fs::write(
-        matches.value_of("OUTPUT").unwrap(),
-        &trainer.train(112_000)?,
-    )?;
+    std::fs::write(matches.value_of("OUTPUT").unwrap(), trainer.train(112_000)?)?;
 
     Ok(())
 }

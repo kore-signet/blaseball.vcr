@@ -1,0 +1,64 @@
+[package]
+name = "blaseball_vcr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rmp-serde = "1.0.0"
+thiserror = "1.0"
+memmap2 = "0.5.0"
+bsdiff = "0.1.6"
+vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
+crossbeam = "0.8"
+num_cpus = "1.13.1"
+type-map = "0.5.0"
+moka = "0.8.2"
+# sha2 = "0.10.2"
+modular-bitfield = "0.11.2"
+vcr-schemas = { path = "../vcr-schemas" }
+vcr-lookups = { path = "../vcr-lookups" }
+blake2s_simd = "1.0.1"
+faster-hex = "0.8.0"
+anyhow = "1.0.71"
+iso8601-timestamp = "0.2.11"
+
+[dependencies.xxhash-rust]
+version = "0.8.5"
+features = ["xxh3"]
+
+[dependencies.rkyv]
+version = "0.7.36"
+default-features = false
+features = ["archive_le", "size_16", "std", "uuid", "uuid_std", "strict"]
+
+[dependencies.zstd]
+version = "0.11"
+features = ["experimental", "zdict_builder"]
+
+[dependencies.rocket]
+version = "0.5.0-rc.2"
+optional = true
+
+[dependencies.uuid]
+version = "1.0"
+features = ["serde"]
+
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1.0.64"
+features = ["preserve_order", "raw_value"]
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "stream_data"
+harness = false
+
+[features]
+default = []
+rocket = ["dep:rocket"]

@@ -46,7 +46,6 @@ use paging::*;
 use v2::*;
 
 use blaseball_vcr::db_manager::DatabaseManager;
-use blaseball_vcr::vhs::schemas::*;
 use blaseball_vcr::{call_method_by_type, db_wrapper};
 use rocket::figment::{
     providers::{Env, Format, Toml},
@@ -55,6 +54,7 @@ use rocket::figment::{
 };
 use std::path::PathBuf;
 use std::time::Duration;
+use vcr_schemas::*;
 
 #[derive(Serialize)]
 pub struct ChronV1Response<T> {

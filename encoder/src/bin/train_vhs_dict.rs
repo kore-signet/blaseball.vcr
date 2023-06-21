@@ -19,9 +19,9 @@ pub async fn main() -> VCRResult<()> {
 
     let etype: String = matches.value_of("ENTITY").unwrap().to_owned();
 
-    use blaseball_vcr::vhs::schemas::*;
+    use vcr_schemas::*;
 
-    etypes!(
+    new_encoder::etypes!(
         etype,
         run,
         matches,
@@ -186,7 +186,7 @@ async fn run<T: vhs_diff::Diff + Clone + serde::de::DeserializeOwned + serde::Se
 
     let dict = trainer.train(112000)?;
 
-    std::fs::write(matches.value_of("OUTPUT").unwrap(), &dict)?;
+    std::fs::write(matches.value_of("OUTPUT").unwrap(), dict)?;
 
     Ok(())
 }

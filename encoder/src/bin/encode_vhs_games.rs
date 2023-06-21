@@ -1,7 +1,7 @@
 use blaseball_vcr::vhs::recorder::*;
-use blaseball_vcr::vhs::schemas::game::GameUpdate;
-use blaseball_vcr::VCRResult;
+use blaseball_vcr::{timestamp_to_nanos, VCRResult};
 use new_encoder::*;
+use vcr_schemas::game::GameUpdate;
 
 use std::fs::File;
 use std::io::{self, BufReader, Read};
@@ -64,20 +64,16 @@ fn main() -> VCRResult<()> {
             .unwrap()
             .as_bytes();
 
-        let (times, data): (Vec<u32>, Vec<GameUpdate>) = game_data
+        let (times, data): (Vec<i64>, Vec<GameUpdate>) = game_data
             .into_iter()
-            .map(|v| (v.timestamp.timestamp() as u32, v.data))
+            .map(|v| (timestamp_to_nanos(v.timestamp), v.data))
             .unzip();
 
         if times.is_empty() {
             continue;
         }
 
-        let entity = TapeEntity {
-            times,
-            data,
-            id: id,
-        };
+        let entity = TapeEntity { times, data, id };
 
         recorder.add_entity(entity)?;
 

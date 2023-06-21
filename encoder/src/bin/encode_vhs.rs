@@ -4,6 +4,7 @@ use clap::{clap_app, ArgMatches};
 use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressStyle};
 use new_encoder::*;
 use std::fs::File;
+use vcr_schemas::*;
 
 #[tokio::main]
 pub async fn main() -> VCRResult<()> {
@@ -21,8 +22,7 @@ pub async fn main() -> VCRResult<()> {
 
     let etype: String = matches.value_of("ENTITY").unwrap().to_owned();
 
-    use blaseball_vcr::vhs::schemas::*;
-    etypes!(
+    new_encoder::etypes!(
         etype,
         run,
         matches,
@@ -81,7 +81,8 @@ pub async fn main() -> VCRResult<()> {
         "championcallout" > Championcallout,
         "availablechampionbets" > Availablechampionbets,
         "attributes" > Attributes,
-        "playerstatsheet" > Playerstatsheet
+        "playerstatsheet" > Playerstatsheet,
+        "sponsordata" > Sponsordata
     )
 }
 

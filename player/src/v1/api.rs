@@ -1,14 +1,16 @@
 use super::*;
 use crate::*;
 use blaseball_vcr::db_manager::*;
-use blaseball_vcr::lookups::{DATES_TO_GAMES, GAME_ID_TABLE, PLAYER_ID_TABLE, PITCHER_TO_GAMES, TEAM_ID_TABLE, TEAMS_TO_GAMES, WEATHER_TO_GAMES};
-use blaseball_vcr::vhs::schemas::GameUpdate;
 use blaseball_vcr::*;
-use chrono::{DateTime, TimeZone, Utc};
 use rocket::serde::json::Json as RocketJSON;
 use rocket::State;
 use std::collections::HashSet;
 use uuid::Uuid;
+use vcr_lookups::{
+    DATES_TO_GAMES, GAME_ID_TABLE, PITCHER_TO_GAMES, PLAYER_ID_TABLE, TEAMS_TO_GAMES,
+    TEAM_ID_TABLE, WEATHER_TO_GAMES,
+};
+use vcr_schemas::GameUpdate;
 
 use xxhash_rust::xxh3::Xxh3Builder;
 
@@ -24,8 +26,8 @@ pub struct GamesResponse {
 #[serde(rename_all = "camelCase")]
 struct FinishedGame {
     game_id: Uuid,
-    start_time: Option<DateTime<Utc>>,
-    end_time: Option<DateTime<Utc>>,
+    start_time: Option<iso8601_timestamp::Timestamp>,
+    end_time: Option<iso8601_timestamp::Timestamp>,
     data: GameUpdate,
 }
 
@@ -76,15 +78,9 @@ pub fn games(
         .unwrap();
 
     let ids = filter_games(&req, game_db);
-    let before = req
-        .before
-        .and_then(|v| DateTime::parse_from_rfc3339(v).ok());
 
     let games = game_db
-        .get_entities(
-            &ids,
-            before.map(|v| v.timestamp() as u32).unwrap_or(u32::MAX),
-        )?
+        .get_entities(&ids, req.before_nanos().unwrap_or(i64::MAX))?
         .into_iter()
         .filter_map(|game| {
             game.map(|game| FinishedGame {
@@ -92,11 +88,13 @@ pub fn games(
                 start_time: game_db.index[&game.entity_id]
                     .times
                     .first()
-                    .map(|timestamp| Utc.timestamp(*timestamp as i64, 0)),
+                    .copied()
+                    .map(timestamp_from_millis),
                 end_time: game_db.index[&game.entity_id]
                     .times
                     .last()
-                    .map(|timestamp| Utc.timestamp(*timestamp as i64, 0)),
+                    .copied()
+                    .map(timestamp_from_millis),
                 data: game.data,
             })
         })
@@ -135,16 +133,9 @@ pub fn game_updates(
             data,
         }))
     } else {
-        let before = req
-            .before
-            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-            .map(|v| v.timestamp() as u32)
-            .unwrap_or(u32::MAX);
-        let after = req
-            .after
-            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-            .map(|v| v.timestamp() as u32)
-            .unwrap_or(0);
+        let before = req.before_nanos().unwrap_or(i64::MAX);
+        let after = req.after_nanos().unwrap_or(0);
+
         let ids = if let Some(id_list) = req.game {
             id_list
                 .split_terminator(',')
@@ -186,10 +177,8 @@ fn filter_games(
     req: &GamesReq<'_>,
     db: &blaseball_vcr::vhs::db::Database<GameUpdate>,
 ) -> Vec<[u8; 16]> {
-    let before = req
-        .before
-        .and_then(|v| DateTime::parse_from_rfc3339(v).ok());
-    let after = req.after.and_then(|v| DateTime::parse_from_rfc3339(v).ok());
+    let before = req.before_nanos();
+    let after = req.after_nanos();
 
     let game_ids: Vec<Uuid> = db
         .index
@@ -201,14 +190,14 @@ fn filter_games(
 
             if let Some(before) = before {
                 // if the first game update we have on file is after the Before parameter, filter it out
-                if game_header.times[0] > before.timestamp() as u32 {
+                if game_header.times[0] > before {
                     return None;
                 }
             }
 
             if let Some(after) = after {
                 // if the last game update we have on file is before the After timestamp, filter it out
-                if *game_header.times.last().unwrap() < after.timestamp() as u32 {
+                if *game_header.times.last().unwrap() < after {
                     return None;
                 }
             }

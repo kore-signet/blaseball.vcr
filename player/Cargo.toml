@@ -10,6 +10,9 @@ erased-serde = "0.3.20"
 atomic-shim = "0.2.0"
 vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
 humantime-serde = "1.1.1"
+vcr-schemas = { path = "../vcr-schemas" }
+vcr-lookups = { path = "../vcr-lookups" }
+iso8601-timestamp = "0.2.11"
 
 [features]
 bundle_before = ["before"]
@@ -22,16 +25,13 @@ features = ["xxh3"]
 version = "1.0"
 features = ["serde"]
 
-[dependencies.chrono]
-version = "0.4"
-features = ["serde"]
-
 [dependencies.rocket]
 version = "0.5.0-rc.2"
 features = ["uuid", "json"]
 
 [dependencies.blaseball_vcr]
-path = "../vcr_lib"
+path = "../vcr-lib"
+features = ["rocket"]
 
 [dependencies.serde]
 version = "1.0"

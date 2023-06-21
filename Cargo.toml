@@ -1,12 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
-  "vcr_lib",
+  "vcr-lib",
   "player",
-  "encoder"
+  "encoder",
+  "vcr-schemas",
+  "vcr-lookups"
 ]
 
 [profile.release]
+debug = true
 # # opt-level = 'z'
 # lto = true
 # strip = true

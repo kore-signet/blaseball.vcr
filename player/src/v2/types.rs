@@ -1,3 +1,4 @@
+use blaseball_vcr::timestamp_to_nanos;
 use uuid::Uuid;
 
 #[derive(FromForm)]
@@ -10,6 +11,14 @@ pub struct EntitiesRequest<'r> {
     pub count: Option<usize>,
 }
 
+impl<'r> EntitiesRequest<'r> {
+    pub fn at_nanos(&self) -> Option<i64> {
+        self.at
+            .and_then(iso8601_timestamp::Timestamp::parse)
+            .map(timestamp_to_nanos)
+    }
+}
+
 #[derive(FromForm)]
 pub struct VersionsRequest<'r> {
     #[field(name = "type")]
@@ -20,6 +29,20 @@ pub struct VersionsRequest<'r> {
     pub after: Option<&'r str>,
     pub count: Option<usize>,
     pub order: Option<Order>,
+}
+
+impl<'r> VersionsRequest<'r> {
+    pub fn before_nanos(&self) -> Option<i64> {
+        self.before
+            .and_then(iso8601_timestamp::Timestamp::parse)
+            .map(timestamp_to_nanos)
+    }
+
+    pub fn after_nanos(&self) -> Option<i64> {
+        self.after
+            .and_then(iso8601_timestamp::Timestamp::parse)
+            .map(timestamp_to_nanos)
+    }
 }
 
 #[derive(FromFormField)]

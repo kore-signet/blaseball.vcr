@@ -1,6 +1,5 @@
 use blaseball_vcr::feed::db::*;
 use blaseball_vcr::*;
-use chrono::{DateTime, Utc};
 use rocket::http::ContentType;
 use rocket::State;
 
@@ -12,17 +11,13 @@ pub fn feed(
     limit: Option<usize>,
 ) -> VCRResult<(ContentType, String)> {
     let time = start
-        .as_ref()
-        .and_then(|s| {
-            s.parse::<DateTime<Utc>>()
-                .ok()
-                .map(|t| t.timestamp_millis())
-        })
+        .and_then(iso8601_timestamp::Timestamp::parse)
+        .map(timestamp_to_millis)
         .or(time)
-        .unwrap_or(Utc::now().timestamp_millis());
+        .unwrap_or_else(|| timestamp_to_millis(iso8601_timestamp::Timestamp::now_utc()));
 
     Ok((
         ContentType::JSON,
-        serde_json::to_string(&db.get_events_before(time as u64, limit.unwrap_or(100)))?,
+        serde_json::to_string(&db.get_events_before(time, limit.unwrap_or(100)))?,
     ))
 }

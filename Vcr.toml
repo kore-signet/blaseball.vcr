@@ -1,4 +1,13 @@
+[default]
+static_dir = "./data/before/static"
+static_zip_path = "./data/before/static.zip"
+site_cache = true
+
 [default.vcr]
+tapes_folder = "./data/dist/vhs_tapes"
+feed_tape = "./data/dist/vhs_tapes/feed.vhs"
+site_tape = "./data/dist/vhs_tapes/site_assets.vhs"
+time_responses = true
 # tapes_folder = "/run/media/allie/Voyager/data/vhs_tapes"
 # feed_tape = "/run/media/allie/Voyager/data/vhs_tapes/feed.vhs"
 # site_tape = "/run/media/allie/Voyager/data/vhs_tapes/site_assets.vhs"

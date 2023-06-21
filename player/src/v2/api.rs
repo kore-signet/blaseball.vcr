@@ -6,9 +6,9 @@ use rocket::State;
 
 use blaseball_vcr::db_manager::DatabaseManager;
 
-use blaseball_vcr::vhs::schemas::*;
 use blaseball_vcr::*;
-use chrono::DateTime;
+
+use vcr_schemas::*;
 
 #[get("/v2/entities?<req..>")]
 pub fn entities(
@@ -43,11 +43,8 @@ pub fn entities(
             data,
         }))
     } else {
-        let at = req
-            .at
-            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-            .map(|v| v.timestamp() as u32)
-            .unwrap_or(u32::MAX);
+        let at = req.at_nanos().unwrap_or(i64::MAX);
+
         let ids = if let Some(id) = req.id {
             vec![*id.as_bytes()]
         } else {
@@ -116,22 +113,16 @@ pub fn versions(
         let step = 3;
 
         if ety == "stream" {
-            let start_time = req.after.as_ref().map_or(
-                req.before.as_ref().map_or(u32::MAX, |x| {
-                    DateTime::parse_from_rfc3339(x).unwrap().timestamp() as u32
-                }) - ((req.count.unwrap_or(1) as u32) * step),
-                |y| DateTime::parse_from_rfc3339(y).unwrap().timestamp() as u32,
-            );
+            let start_time = req.after_nanos().unwrap_or_else(|| {
+                req.before_nanos().unwrap_or(i64::MAX) - ((req.count.unwrap_or(1) as i64) * step)
+            });
+            // req.before_nanos() - ((req.count.unwrap_or(1) as i64) * step),
 
-            let end_time = req.before.map_or(
-                req.after.map_or(u32::MIN, |x| {
-                    DateTime::parse_from_rfc3339(x).unwrap().timestamp() as u32
-                }) + ((req.count.unwrap_or(1) as u32) * step),
-                |y| DateTime::parse_from_rfc3339(y).unwrap().timestamp() as u32,
-            );
+            let end_time = req.before_nanos().unwrap_or_else(|| {
+                req.after_nanos().unwrap_or(0) + ((req.count.unwrap_or(1) as i64) * step)
+            });
 
             let mut stream_samples = (start_time..end_time)
-                .into_iter()
                 .step_by(step as usize)
                 .map(|at| {
                     Ok((ChroniclerEntity {
@@ -154,16 +145,8 @@ pub fn versions(
             }));
         }
 
-        let before = req
-            .before
-            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-            .map(|v| v.timestamp() as u32)
-            .unwrap_or(u32::MAX);
-        let after = req
-            .after
-            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-            .map(|v| v.timestamp() as u32)
-            .unwrap_or(0);
+        let before = req.before_nanos().unwrap_or(i64::MAX);
+        let after = req.after_nanos().unwrap_or(i64::MAX);
 
         let ids = if let Some(id) = req.id {
             vec![*id.as_bytes()]

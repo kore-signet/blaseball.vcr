@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JSONValue;
@@ -45,8 +44,8 @@ pub struct GameDate {
 #[serde(rename_all = "camelCase")]
 pub struct ChronV1Game {
     pub game_id: String,
-    pub start_time: Option<DateTime<Utc>>,
-    pub end_time: Option<DateTime<Utc>>,
+    pub start_time: Option<iso8601_timestamp::Timestamp>,
+    pub end_time: Option<iso8601_timestamp::Timestamp>,
     pub data: JSONValue,
 }
 
@@ -54,7 +53,7 @@ pub struct ChronV1Game {
 #[serde(rename_all = "camelCase")]
 pub struct ChronV1GameUpdate<T> {
     pub game_id: String,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: iso8601_timestamp::Timestamp,
     pub hash: String,
     pub data: T,
 }

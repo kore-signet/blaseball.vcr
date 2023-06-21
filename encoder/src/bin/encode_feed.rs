@@ -39,10 +39,10 @@ fn main() -> VCRResult<()> {
 
     let input = BufReader::new(File::open(matches.value_of("INPUT").unwrap())?);
 
-    for (i, line_chunk) in input.lines().chunks(100).into_iter().enumerate() {
+    for (i, line_chunk) in input.lines().chunks(255).into_iter().enumerate() {
         println!("processing chunk #{i}");
 
-        let mut chunk = Vec::with_capacity(100);
+        let mut chunk = Vec::with_capacity(255);
 
         for line in line_chunk {
             chunk.push(serde_json::from_str::<FeedEvent>(&line?)?);

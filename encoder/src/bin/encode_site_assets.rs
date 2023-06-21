@@ -1,10 +1,8 @@
 use blaseball_vcr::site::*;
 use blaseball_vcr::*;
 use bsdiff::diff;
-use chrono::{DateTime, Utc};
 use clap::clap_app;
 use serde::Deserialize;
-use sha2::{Digest, Sha224};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Seek, SeekFrom, Write};
@@ -13,7 +11,7 @@ use zstd::bulk::Compressor;
 
 #[derive(Deserialize)]
 struct JsonSiteUpdate {
-    timestamp: DateTime<Utc>,
+    timestamp: iso8601_timestamp::Timestamp,
     path: String,
     #[serde(rename = "where")]
     file_path: String,
@@ -50,7 +48,8 @@ fn main() -> VCRResult<()> {
         let mut assets: Vec<(JsonSiteUpdate, Vec<u8>)> = files.into_iter().zip(file_data).collect();
         assets.sort_by_key(|(k, _)| k.timestamp);
 
-        let mut hasher = Sha224::new();
+        let mut hasher = blake2s_simd::blake2sp::Params::new();
+        hasher.hash_length(16);
 
         let mut source = assets[0].1.clone();
         let mut patch_set = PatchSet {
@@ -63,7 +62,8 @@ fn main() -> VCRResult<()> {
         for (i, (asset_metadata, bytes)) in assets.into_iter().enumerate() {
             print!("\x1b[2K\r#{i}/{total_len}");
             io::stdout().flush()?;
-            hasher.update(&bytes);
+
+            let hash = hasher.hash(&bytes);
 
             asset_tape.flush()?;
 
@@ -84,8 +84,8 @@ fn main() -> VCRResult<()> {
 
             patch_set.patches.push(PatchHeader {
                 path: asset_metadata.path,
-                timestamp: asset_metadata.timestamp.timestamp_millis() as u64,
-                hash: hasher.finalize_reset().into(),
+                timestamp: timestamp_to_nanos(asset_metadata.timestamp),
+                hash: hash.as_bytes().try_into().unwrap(),
                 offset,
                 length,
                 uncompressed_length,

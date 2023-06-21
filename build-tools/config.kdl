@@ -1,7 +1,7 @@
 target {
-    tapes "../vhs_tapes/"
-    dicts "../vhs-dicts/"
-    schemas "../vcr_lib/src/vhs/schemas/"
+    tapes "../data/dist/vhs_tapes/"
+    dicts "../data/dist/vhs-dicts/"
+    schemas "../vcr-schemas/src/schemas/"
     binaries "../target/release/"
 }
 

@@ -1,11 +1,11 @@
 use atomic_shim::AtomicU64;
 use blaseball_vcr::db_manager::DatabaseManager;
-use blaseball_vcr::vhs::schemas::DynamicEntity;
 use blaseball_vcr::{ChroniclerEntity, VCRResult};
 use moka::sync::Cache;
 use parking_lot::Mutex;
 use std::sync::{atomic, Arc};
 use std::time::Duration;
+use vcr_schemas::DynamicEntity;
 
 pub type DynamicChronEntity = ChroniclerEntity<DynamicEntity>;
 
@@ -47,8 +47,8 @@ impl PageManager {
 }
 
 pub enum PageFetchParameters {
-    Versions { before: u32, after: u32 },
-    Entities { at: u32 },
+    Versions { before: i64, after: i64 },
+    Entities { at: i64 },
 }
 
 pub struct Page {
@@ -59,7 +59,7 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn entities(at: u32, ids: Vec<[u8; 16]>) -> Page {
+    pub fn entities(at: i64, ids: Vec<[u8; 16]>) -> Page {
         Page {
             remaining_ids: ids,
             remaining_data: Vec::new(), // the vec will allocate more efficiently in fetch_next_entities
@@ -67,7 +67,7 @@ impl Page {
         }
     }
 
-    pub fn versions(before: u32, after: u32, ids: Vec<[u8; 16]>) -> Page {
+    pub fn versions(before: i64, after: i64, ids: Vec<[u8; 16]>) -> Page {
         Page {
             remaining_ids: ids,
             remaining_data: Vec::new(),
@@ -120,8 +120,8 @@ impl Page {
         &mut self,
         db: &DatabaseManager,
         total_needed: usize,
-        before: u32,
-        after: u32,
+        before: i64,
+        after: i64,
     ) -> VCRResult<()> {
         // TODO: add a clause for pre-allocating space via getting the total number of versions for an entity id
 
@@ -146,7 +146,7 @@ impl Page {
         &mut self,
         db: &DatabaseManager,
         count: usize,
-        at: u32,
+        at: i64,
     ) -> VCRResult<()> {
         let ids: Vec<[u8; 16]> = self
             .remaining_ids
