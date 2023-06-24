@@ -206,7 +206,7 @@ fn filter_games(
         })
         .collect();
 
-    let games_that_match_date: XxSet<u32> =
+    let games_that_match_date: XxSet<u16> =
         if req.tournament.is_some() || req.day.is_some() || req.season.is_some() {
             let mut hash_set =
                 HashSet::with_capacity_and_hasher(game_ids.len(), Xxh3Builder::new());
@@ -232,7 +232,7 @@ fn filter_games(
             XxSet::with_capacity_and_hasher(0, Xxh3Builder::new())
         };
 
-    let mut game_tags: Vec<u32> = game_ids
+    let mut game_tags: Vec<u16> = game_ids
         .iter()
         .map(|id| GAME_ID_TABLE.mapper[id])
         .filter(|tag| {

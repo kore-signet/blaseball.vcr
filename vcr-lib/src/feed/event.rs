@@ -60,14 +60,14 @@ impl CompactedFeedEvent {
                 .player_tags
                 .unwrap_or_default()
                 .into_iter()
-                .map(|id| PLAYER_ID_TABLE.mapper[&id] as u16)
+                .map(|id| PLAYER_ID_TABLE.mapper[&id])
                 .collect(),
             game_tags: ev
                 .game_tags
                 .unwrap_or_default()
                 .into_iter()
                 .map(|id| match GAME_ID_TABLE.map(&id) {
-                    Some(v) => *v as u16,
+                    Some(v) => *v,
                     None => panic!("{}", id),
                 })
                 .collect(),
@@ -75,7 +75,7 @@ impl CompactedFeedEvent {
                 .team_tags
                 .unwrap_or_default()
                 .into_iter()
-                .map(|id| TEAM_ID_TABLE.mapper[&id] as u16)
+                .map(|id| TEAM_ID_TABLE.mapper[&id])
                 .collect(),
         }
     }

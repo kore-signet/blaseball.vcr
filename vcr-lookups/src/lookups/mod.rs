@@ -7,16 +7,17 @@ use uuid::Uuid;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct IdLookUp {
-    pub mapper: PerfectMap<Uuid, u32>,
+    pub mapper: PerfectMap<Uuid, u16>,
     pub inverter: Vec<Uuid>,
 }
 
 impl IdLookUp {
-    pub fn map(&self, id: &Uuid) -> Option<&u32> {
+    pub fn map(&self, id: &Uuid) -> Option<&u16> {
         self.mapper.get(id)
+        // .filter(|k| self.inverter[**k as usize] == *id)
     }
 
-    pub fn invert(&self, tag: u32) -> Option<&Uuid> {
+    pub fn invert(&self, tag: u16) -> Option<&Uuid> {
         self.inverter.get(tag as usize)
     }
 }
@@ -32,6 +33,7 @@ pub static TEAM_ID_TABLE: IdLookUp =
 #[static_init::dynamic]
 pub static PLAYER_ID_TABLE: IdLookUp =
     rmp_serde::from_slice(include_bytes!("./players.idmap")).unwrap();
+// IdLookUp { mapper: PerfectMap::<Uuid, u16>::new::<u16>(&[], vec![]), inverter: vec![] };
 
 // PITCHER_TO_GAMES: u16 -> u16 game tag; phf::Map
 // TEAMS_TO_GAMES: u16 -> u16 game tag; phf::Map
@@ -39,27 +41,27 @@ pub static PLAYER_ID_TABLE: IdLookUp =
 // WEATHER_TO_GAMES: u8-> u16 game tag; phf::Map
 
 #[static_init::dynamic]
-pub static PITCHER_TO_GAMES: PerfectMap<u32, Vec<u32>> = {
+pub static PITCHER_TO_GAMES: PerfectMap<u16, Vec<u16>> = {
     // PerfectMap::new(&[], Vec::<Vec<u32>>::new())
     rmp_serde::from_slice(include_bytes!("./games/pitchers.index")).unwrap()
 };
 
 #[static_init::dynamic]
-pub static TEAMS_TO_GAMES: PerfectMap<u32, Vec<u32>> = {
+pub static TEAMS_TO_GAMES: PerfectMap<u16, Vec<u16>> = {
     // PerfectMap::new(&[], Vec::<Vec<u32>>::new())
 
     rmp_serde::from_slice(include_bytes!("./games/teams.index")).unwrap()
 };
 
 #[static_init::dynamic]
-pub static DATES_TO_GAMES: PerfectMap<[u8; 4], Vec<u32>> = {
+pub static DATES_TO_GAMES: PerfectMap<[u8; 4], Vec<u16>> = {
     // PerfectMap::new(&[], Vec::<Vec<u32>>::new())
 
     rmp_serde::from_slice(include_bytes!("./games/dates.index")).unwrap()
 };
 
 #[static_init::dynamic]
-pub static WEATHER_TO_GAMES: PerfectMap<u8, Vec<u32>> = {
+pub static WEATHER_TO_GAMES: PerfectMap<u8, Vec<u16>> = {
     // PerfectMap::new(&[], Vec::<Vec<u32>>::new())
 
     rmp_serde::from_slice(include_bytes!("./games/weather.index")).unwrap()

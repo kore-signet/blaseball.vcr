@@ -22,6 +22,11 @@ faster-hex = "0.8.0"
 anyhow = "1.0.71"
 iso8601-timestamp = "0.2.11"
 serde_path_to_error = "0.1.11"
+bytemuck = "1.13.1"
+mycelium-bitfield = "0.1.2"
+dusk-varint = "0.1.0"
+humansize = "2.1.3"
+smallvec = "1.10.0"
 
 [dependencies.xxhash-rust]
 version = "0.8.5"

@@ -1,7 +1,5 @@
+use blaseball_vcr::{vhs::db, EntityDatabase, VCRError};
 
-use blaseball_vcr::{vhs::db, EntityDatabase, VCRResult, VCRError};
-
-use uuid::Uuid;
 use vcr_schemas::GameUpdate;
 
 fn main() -> Result<(), VCRError> {

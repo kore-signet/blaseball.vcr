@@ -6,8 +6,7 @@ use std::io::Write;
 use uuid::Uuid;
 use zstd::bulk::Compressor;
 
-pub struct FeedRecorder<H: Write, M: Write, A: Write> {
-    header_out: H,
+pub struct FeedRecorder<M: Write, A: Write> {
     feed_out: M,
     aux_out: A,                               // output for uuid_to_internal
     uuid_to_internal: HashMap<Uuid, [u8; 4]>, // map of event id -> (block index, event index relative to block)
@@ -16,14 +15,13 @@ pub struct FeedRecorder<H: Write, M: Write, A: Write> {
     headers: Vec<EncodedBlockHeader>,
 }
 
-impl<H: Write, M: Write, A: Write> FeedRecorder<H, M, A> {
+impl<M: Write, A: Write> FeedRecorder<M, A> {
     pub fn new(
-        header_out: H,
         feed_out: M,
         aux_out: A,
         dict: Option<Vec<u8>>,
         compression_level: i32,
-    ) -> VCRResult<FeedRecorder<H, M, A>> {
+    ) -> VCRResult<FeedRecorder<M, A>> {
         let mut compressor = if let Some(ref d) = dict {
             Compressor::with_dictionary(compression_level, d)?
         } else {
@@ -34,7 +32,6 @@ impl<H: Write, M: Write, A: Write> FeedRecorder<H, M, A> {
         compressor.include_magicbytes(false)?;
 
         Ok(FeedRecorder {
-            header_out,
             feed_out,
             aux_out,
             compressor,
@@ -91,23 +88,23 @@ impl<H: Write, M: Write, A: Write> FeedRecorder<H, M, A> {
         Ok(())
     }
 
-    pub fn finish(mut self) -> VCRResult<(H, M, A)> {
+    pub fn finish(mut self) -> VCRResult<(Vec<u8>, M, A)> {
         self.headers.sort_by_key(|v| v.start_time);
-        let mut header_out = zstd::Encoder::new(self.header_out, 11)?;
+        // let mut header_out = zstd::Encoder::new(self.header_out, 11)?;
         let header_bytes = rmp_serde::to_vec(&self.headers)?;
 
-        header_out.set_pledged_src_size(Some(header_bytes.len() as u64))?;
-        header_out.long_distance_matching(true)?;
+        // header_out.set_pledged_src_size(Some(header_bytes.len() as u64))?;
+        // header_out.long_distance_matching(true)?;
 
-        header_out.write_all(&header_bytes)?;
-        header_out.flush()?;
+        // header_out.write_all(&header_bytes)?;
+        // header_out.flush()?;
 
-        let header_handle = header_out.finish()?;
-        self.feed_out.flush()?;
+        // let header_handle = header_out.finish()?;
+        // self.feed_out.flush()?;
 
         rmp_serde::encode::write(&mut self.aux_out, &self.uuid_to_internal)?;
 
-        Ok((header_handle, self.feed_out, self.aux_out))
+        Ok((header_bytes, self.feed_out, self.aux_out))
     }
 }
 

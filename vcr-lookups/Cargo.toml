@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 rmp-serde = "1.0.0"
 perfect-map = { git = "https://github.com/emily-signet/perfect-map.git", version = "0.1.0" }
+#perfect-map = { path = "../perfect-map" }
 static_init = "1.0.3"
 modular-bitfield = "0.11.2"
 

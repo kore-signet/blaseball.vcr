@@ -28,8 +28,7 @@ impl<T> From<Vec<RawChroniclerEntity<T>>> for TapeEntity<T> {
     }
 }
 
-pub struct TapeRecorder<T: Serialize + Clone + Patch + Diff + Send + Sync, H: Write, M: Write> {
-    header_out: H,
+pub struct TapeRecorder<T: Serialize + Clone + Patch + Diff + Send + Sync, M: Write> {
     patch_out: M,
     compressor: Compressor<'static>,
     offset: u32,
@@ -38,14 +37,13 @@ pub struct TapeRecorder<T: Serialize + Clone + Patch + Diff + Send + Sync, H: Wr
     _record_type: PhantomData<T>,
 }
 
-impl<T: Serialize + Clone + Patch + Diff + Send + Sync, H: Write, M: Write> TapeRecorder<T, H, M> {
+impl<T: Serialize + Clone + Patch + Diff + Send + Sync, M: Write> TapeRecorder<T, M> {
     pub fn new(
-        header_out: H,
         patch_out: M,
         dict: Option<Vec<u8>>,
         compression_level: i32,
         checkpoint_every: usize,
-    ) -> VCRResult<TapeRecorder<T, H, M>> {
+    ) -> VCRResult<TapeRecorder<T, M>> {
         let mut compressor = if let Some(ref d) = dict {
             Compressor::with_dictionary(compression_level, d)?
         } else {
@@ -56,7 +54,6 @@ impl<T: Serialize + Clone + Patch + Diff + Send + Sync, H: Write, M: Write> Tape
         compressor.include_magicbytes(false)?;
 
         Ok(TapeRecorder {
-            header_out,
             patch_out,
             compressor,
             offset: 0,
@@ -90,33 +87,31 @@ impl<T: Serialize + Clone + Patch + Diff + Send + Sync, H: Write, M: Write> Tape
     }
 
     /// finish, compress header, return handles for header file + patch database.
-    pub fn finish(mut self) -> VCRResult<(H, M)> {
-        let mut header_out = zstd::Encoder::new(self.header_out, 11)?;
+    pub fn finish(self) -> VCRResult<(Vec<u8>, M)> {
         let header_bytes = rmp_serde::to_vec(&self.headers)?;
 
-        header_out.set_pledged_src_size(Some(header_bytes.len() as u64))?;
-        header_out.long_distance_matching(true)?;
+        // header_out.set_pledged_src_size(Some(header_bytes.len() as u64))?;
 
-        header_out.write_all(&header_bytes)?;
-        header_out.flush()?;
+        // header_out.write_all(&header_bytes)?;
+        // header_out.flush()?;
 
-        let header_handle = header_out.finish()?;
+        // let header_handle = header_out.finish()?;
 
-        self.patch_out.flush()?;
+        // self.patch_out.flush()?;
 
-        Ok((header_handle, self.patch_out))
+        Ok((header_bytes, self.patch_out))
     }
 }
 
 /// Merges header, dictionary and database into a single file.
 pub fn merge_tape(
-    mut header: impl Read,
+    header: Vec<u8>,
     mut db: impl Read,
     dict: Option<impl Read>,
     mut out: impl Write,
 ) -> VCRResult<()> {
-    let mut header_bytes = Vec::new();
-    header.read_to_end(&mut header_bytes)?;
+    // let mut header_bytes = Vec::new();
+    // header.read_to_end(&mut header_bytes)?;
     let dict_bytes = if let Some(mut dict_reader) = dict {
         let mut buf = Vec::new();
         dict_reader.read_to_end(&mut buf)?;
@@ -128,8 +123,16 @@ pub fn merge_tape(
     out.write_all(&dict_bytes.len().to_le_bytes())?;
     out.write_all(&dict_bytes)?;
 
-    out.write_all(&header_bytes.len().to_le_bytes())?;
-    out.write_all(&header_bytes)?;
+    let mut header_out = zstd::Encoder::new(Vec::with_capacity(header.len()), 23)?;
+    header_out.set_pledged_src_size(Some(header.len() as u64))?;
+    header_out.long_distance_matching(true)?;
+
+    header_out.write_all(&header)?;
+
+    let compressed_header_bytes = header_out.finish()?;
+
+    out.write_all(&(compressed_header_bytes.len() as u64).to_le_bytes())?;
+    out.write_all(&compressed_header_bytes)?;
 
     io::copy(&mut db, &mut out)?;
 

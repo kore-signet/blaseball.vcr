@@ -52,7 +52,7 @@ fn main() -> VCRResult<()> {
 
     // let mut output_file = BufWriter::new(File::create(matches.value_of("OUTPUT").unwrap())?);
 
-    let mut pitcher_index: Vec<(u32, Vec<u32>)> = index
+    let mut pitcher_index: Vec<(u16, Vec<u16>)> = index
         .by_pitcher
         .into_iter()
         .map(|(k, v)| {
@@ -72,7 +72,7 @@ fn main() -> VCRResult<()> {
 
     write_map(pitcher_index, path.join("pitchers.index"))?;
 
-    let mut team_index: Vec<(u32, Vec<u32>)> = index
+    let mut team_index: Vec<(u16, Vec<u16>)> = index
         .by_team
         .into_iter()
         .map(|(k, v)| {
@@ -92,7 +92,7 @@ fn main() -> VCRResult<()> {
 
     write_map(team_index, path.join("teams.index"))?;
 
-    let mut date_index: Vec<([u8; 4], Vec<u32>)> = index
+    let mut date_index: Vec<([u8; 4], Vec<u16>)> = index
         .by_date
         .into_iter()
         .map(|(k, v)| {
@@ -120,7 +120,7 @@ fn main() -> VCRResult<()> {
 
     write_map(date_index, path.join("dates.index"))?;
 
-    let mut weather_index: Vec<(u8, Vec<u32>)> = index
+    let mut weather_index: Vec<(u8, Vec<u16>)> = index
         .by_weather
         .into_iter()
         .map(|(k, v)| {
@@ -203,7 +203,7 @@ fn write_map<K: Hash + Send + Sync + Serialize, V: Serialize>(
     let mut out = BufWriter::new(File::create(to.as_ref())?);
 
     let (keys, vals): (Vec<_>, Vec<_>) = table.into_iter().unzip();
-    let map: PerfectMap<K, V> = PerfectMap::new_preserve_keys(keys, vals);
+    let map: PerfectMap<K, V> = PerfectMap::new(keys, vals);
 
     rmp_serde::encode::write_named(&mut out, &map).unwrap();
     // let map: PerfectMap<K, V> = PerfectMap::new(keys, vals);

@@ -106,8 +106,7 @@ async fn run<
         None
     };
 
-    let mut recorder: TapeRecorder<T, File, File> = TapeRecorder::new(
-        tempfile::tempfile()?,
+    let mut recorder: TapeRecorder<T, File> = TapeRecorder::new(
         tempfile::tempfile()?,
         dict.clone(),
         matches
@@ -188,11 +187,10 @@ async fn run<
         }
     }
 
-    let (mut header, mut main) = recorder.finish()?;
+    let (header, mut main) = recorder.finish()?;
     let out = std::fs::File::create(matches.value_of("OUTPUT").unwrap())?;
 
     use std::io::Seek;
-    header.rewind()?;
     main.rewind()?;
 
     merge_tape(header, main, dict.as_deref(), out)?;

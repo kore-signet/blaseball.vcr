@@ -26,8 +26,7 @@ fn main() -> VCRResult<()> {
         None
     };
 
-    let mut recorder: FeedRecorder<File, File, File> = FeedRecorder::new(
-        tempfile::tempfile()?,
+    let mut recorder: FeedRecorder<File, File> = FeedRecorder::new(
         tempfile::tempfile()?,
         File::create(matches.value_of("AUX_OUTPUT").unwrap())?,
         dict.clone(),
@@ -51,13 +50,13 @@ fn main() -> VCRResult<()> {
         recorder.add_chunk(chunk)?;
     }
 
-    let (mut header, mut main, mut aux) = recorder.finish()?;
+    let (header, mut main, mut aux) = recorder.finish()?;
     let out = std::fs::File::create(matches.value_of("OUTPUT").unwrap())?;
 
     aux.flush()?;
 
     use std::io::Seek;
-    header.rewind()?;
+    // header.rewind()?;
     main.rewind()?;
 
     merge_tape(header, main, dict.as_deref(), out)?;

@@ -27,9 +27,9 @@ fn main() -> VCRResult<()> {
     )
     .get_matches();
 
-    let mut player_tag_table: HashMap<Uuid, u32> = HashMap::new();
-    let mut team_tag_table: HashMap<Uuid, u32> = HashMap::new();
-    let mut game_tag_table: HashMap<Uuid, u32> = HashMap::new();
+    let mut player_tag_table: HashMap<Uuid, u16> = HashMap::new();
+    let mut team_tag_table: HashMap<Uuid, u16> = HashMap::new();
+    let mut game_tag_table: HashMap<Uuid, u16> = HashMap::new();
 
     let index: IdIndex = serde_json::from_reader(BufReader::new(File::open(
         matches.value_of("INPUT").unwrap(),
@@ -39,19 +39,19 @@ fn main() -> VCRResult<()> {
 
     for game in index.games {
         if !game_tag_table.contains_key(&game) {
-            game_tag_table.insert(game, game_tag_table.len() as u32);
+            game_tag_table.insert(game, game_tag_table.len().try_into().unwrap());
         }
     }
 
     for team in index.teams {
         if !team_tag_table.contains_key(&team) {
-            team_tag_table.insert(team, team_tag_table.len() as u32);
+            team_tag_table.insert(team, team_tag_table.len().try_into().unwrap());
         }
     }
 
     for player in index.players {
         if !player_tag_table.contains_key(&player) {
-            player_tag_table.insert(player, player_tag_table.len() as u32);
+            player_tag_table.insert(player, player_tag_table.len().try_into().unwrap());
         }
     }
 
@@ -157,15 +157,15 @@ fn main() -> VCRResult<()> {
     Ok(())
 }
 
-fn write_map(map: HashMap<Uuid, u32>, to: impl AsRef<Path>) -> std::io::Result<()> {
+fn write_map(map: HashMap<Uuid, u16>, to: impl AsRef<Path>) -> std::io::Result<()> {
     let mut out = BufWriter::new(File::create(to.as_ref())?);
 
-    let mut table: Vec<(Uuid, u32)> = map.into_iter().collect();
+    let mut table: Vec<(Uuid, u16)> = map.into_iter().collect();
     table.sort_by_key(|&(_, v)| v);
 
     let (ids, tags): (Vec<_>, Vec<_>) = table.into_iter().unzip();
 
-    let map: PerfectMap<Uuid, u32> = PerfectMap::new(&ids, tags);
+    let map: PerfectMap<Uuid, u16> = PerfectMap::new(ids.clone(), tags);
 
     rmp_serde::encode::write_named(
         &mut out,
