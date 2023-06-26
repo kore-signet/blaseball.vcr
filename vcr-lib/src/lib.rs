@@ -104,3 +104,42 @@ pub mod db_wrapper {
         Ok(())
     }
 }
+
+pub struct SliceReader<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> SliceReader<'a> {
+    pub fn read_array<const N: usize>(&mut self) -> &'a [u8; N] {
+        let (lhs, rhs) = self.bytes.split_at(N);
+        self.bytes = rhs;
+
+        unsafe { &*(lhs.as_ptr() as *const [u8; N]) }
+    }
+
+    pub fn read_slice(&mut self, len: usize) -> &'a [u8] {
+        let (lhs, rhs) = self.bytes.split_at(len);
+        self.bytes = rhs;
+        lhs
+    }
+
+    pub fn read_str(&mut self) -> &'a str {
+        let len = u16::from_le_bytes(*self.read_array::<2>());
+        unsafe { std::str::from_utf8_unchecked(self.read_slice(len as usize)) }
+    }
+
+    pub fn read_varlen_slice(&mut self) -> &'a [u8] {
+        let len = u16::from_le_bytes(*self.read_array::<2>());
+        self.read_slice(len as usize)
+    }
+}
+
+pub fn write_str(st: &str, out: &mut Vec<u8>) {
+    out.extend_from_slice(&(st.len() as u16).to_le_bytes());
+    out.extend_from_slice(st.as_bytes());
+}
+
+pub fn write_slice(st: &[u8], out: &mut Vec<u8>) {
+    out.extend_from_slice(&(st.len() as u16).to_le_bytes());
+    out.extend_from_slice(st);
+}

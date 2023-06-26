@@ -1,6 +1,6 @@
-use super::{event::*, EncodedBlockHeader, EventId};
+use super::{event::*, BlockMetadata, EncodedBlockHeader, EventId};
 use crate::VCRResult;
-use rkyv::ser::{serializers::AllocSerializer, Serializer};
+
 use std::collections::HashMap;
 use std::io::Write;
 use uuid::Uuid;
@@ -41,8 +41,8 @@ impl<M: Write, A: Write> FeedRecorder<M, A> {
         })
     }
 
-    pub fn add_chunk(&mut self, chunk: Vec<FeedEvent>) -> VCRResult<()> {
-        let mut ser = AllocSerializer::<1024>::default();
+    pub fn add_chunk(&mut self, chunk: Vec<FeedEvent>, metadata: BlockMetadata) -> VCRResult<()> {
+        let mut chunk_bytes = Vec::new();
         let mut event_positions: Vec<(i64, u32)> = Vec::new();
 
         if chunk.is_empty() {
@@ -64,8 +64,10 @@ impl<M: Write, A: Write> FeedRecorder<M, A> {
             );
 
             let created = event.created;
-            let compact: CompactedFeedEvent = CompactedFeedEvent::convert(event);
-            event_positions.push((created, ser.serialize_value(&compact).unwrap() as u32));
+            // let compact: CompactedFeedEvent = CompactedFeedEvent::convert(event);
+            let event_bytes = encode_event(event);
+            event_positions.push((created, chunk_bytes.len() as u32));
+            chunk_bytes.extend_from_slice(&event_bytes);
             // infallible
         }
 
@@ -73,14 +75,14 @@ impl<M: Write, A: Write> FeedRecorder<M, A> {
 
         event_positions.sort_by_key(|&(k, _)| k);
 
-        let bytes = ser.into_serializer().into_inner();
-        let compressed_bytes = self.compressor.compress(&bytes[..])?;
+        let compressed_bytes = self.compressor.compress(&chunk_bytes[..])?;
 
         self.headers.push(EncodedBlockHeader {
             compressed_len: compressed_bytes.len() as u32,
-            decompressed_len: bytes.len() as u32,
+            decompressed_len: chunk_bytes.len() as u32,
             start_time,
             event_positions,
+            metadata,
         });
 
         self.feed_out.write_all(&compressed_bytes)?;
@@ -122,20 +124,23 @@ impl FeedDictTrainer {
     }
 
     pub fn add_chunk(&mut self, chunk: Vec<FeedEvent>) {
-        let mut ser = AllocSerializer::<1024>::default();
+        // let mut ser = AllocSerializer::<1024>::default();
+        let mut chunk_bytes = Vec::new();
 
         if chunk.is_empty() {
             return;
         }
 
         for event in chunk {
-            let compact: CompactedFeedEvent = CompactedFeedEvent::convert(event);
-            ser.serialize_value(&compact).unwrap(); // infallible
+            // let compact: CompactedFeedEvent = CompactedFeedEvent::convert(event);
+            chunk_bytes.append(&mut encode_event(event));
+
+            // ser.serialize_value(&compact).unwrap(); // infallible
         }
 
-        let bytes = ser.into_serializer().into_inner();
-        self.sample_sizes.push(bytes.len());
-        self.samples.extend_from_slice(&bytes[..]);
+        // let bytes = ser.into_serializer().into_inner();
+        self.sample_sizes.push(chunk_bytes.len());
+        self.samples.extend_from_slice(&chunk_bytes[..]);
     }
 
     pub fn train(self, dict_size: usize) -> VCRResult<Vec<u8>> {

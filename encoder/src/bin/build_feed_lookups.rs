@@ -1,11 +1,11 @@
 use blaseball_vcr::VCRResult;
 use clap::clap_app;
 use perfect_map::PerfectMap;
-use serde::Serialize;
+
 use std::collections::HashMap;
 use std::fs::File;
-use std::hash::Hash;
-use std::io::{BufReader, BufWriter, Write};
+
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use vcr_lookups::IdLookUp;

@@ -1,4 +1,4 @@
-use super::{split_tape, DataHeader, TapeComponents};
+use super::{DataHeader, TapeComponents};
 use crate::chron_types::*;
 use crate::{EntityDatabase, OptionalEntity, VCRError, VCRResult};
 use crossbeam::channel;
@@ -67,7 +67,7 @@ impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Datab
             dict,
             header,
             store,
-        } = split_tape::<Vec<DataHeader>>(path)?;
+        } = TapeComponents::<Vec<DataHeader>>::split(path)?;
 
         let index: HashMap<[u8; 16], DataHeader> = header.into_iter().map(|v| (v.id, v)).collect();
         let id_list = index.keys().copied().collect();

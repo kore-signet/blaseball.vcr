@@ -1,5 +1,6 @@
 pub mod block;
 pub mod db;
+// pub mod desc;
 pub mod event;
 pub mod recorder;
 /*
@@ -17,12 +18,34 @@ we then decompress it, and find the event inside it with time <x>
 use modular_bitfield::specifiers::{B24, B8};
 use serde::{Deserialize, Serialize};
 
+use self::event::FeedEvent;
+
 #[derive(Serialize, Deserialize)]
 pub struct EncodedBlockHeader {
     pub compressed_len: u32,
     pub decompressed_len: u32,
     pub start_time: i64,
+    pub metadata: BlockMetadata,
     pub event_positions: Vec<(i64, u32)>,
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
+pub struct BlockMetadata {
+    pub tournament: i8,
+    pub season: i8,
+    pub phase: u8,
+    // pub day: u8, //            day: ev.day.try_into().unwrap_or(255),
+}
+
+impl BlockMetadata {
+    pub fn from_event(event: &FeedEvent) -> BlockMetadata {
+        BlockMetadata {
+            tournament: event.tournament,
+            season: event.season,
+            phase: event.phase,
+            // day: event.day.try_into().unwrap_or(255),
+        }
+    }
 }
 
 // same, but includes an offset field for ease of use
@@ -31,6 +54,7 @@ pub struct BlockHeader {
     pub decompressed_len: u32,
     pub start_time: i64,
     pub event_positions: Vec<(i64, u32)>,
+    pub metadata: BlockMetadata,
     pub offset: u32,
 }
 

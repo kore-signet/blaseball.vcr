@@ -16,7 +16,6 @@ indicatif = "0.17.0-beta.1"
 clap = "2.33.3"
 tempfile = "3.3.0"
 vhs-diff = { git = "https://github.com/emily-signet/vhs-diff.git" }
-itertools = "0.10"
 rmp-serde = "=1.0.0"
 bsdiff = "0.1.6"
 perfect-map = { git = "https://github.com/emily-signet/perfect-map.git", version = "0.1.0" }
@@ -24,6 +23,7 @@ vcr-lookups = { path = "../vcr-lookups" }
 vcr-schemas = { path = "../vcr-schemas" }
 blake2s_simd = "1.0.1"
 iso8601-timestamp = "0.2.11"
+humansize = "2.1.3"
 
 [dependencies.reqwest]
 version = "0.11"

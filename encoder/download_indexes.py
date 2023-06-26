@@ -45,7 +45,7 @@ for team in chronicler.get_entities("team"):
 
 i = 0
 
-with open("feed.json") as feed:
+with open("../data/source/feed.json") as feed:
     for line in feed:
         if i % 10000 == 0:
             print(f"feed #{i}")

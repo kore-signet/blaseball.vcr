@@ -1,4 +1,3 @@
-use crate::vhs::split_tape;
 use dusk_varint::VarInt;
 use memmap2::Mmap;
 
@@ -135,7 +134,7 @@ impl TributesDatabase {
             dict,
             header,
             store,
-        } = split_tape::<TributesTapeHeader>(path)?;
+        } = TapeComponents::<TributesTapeHeader>::split(path)?;
 
         let store = CompressedTributeStore {
             cache: Cache::builder()

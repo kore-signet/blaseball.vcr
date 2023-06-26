@@ -22,46 +22,48 @@ pub struct DataHeader {
 }
 
 pub struct TapeComponents<T: DeserializeOwned> {
-    dict: Option<DecoderDictionary<'static>>,
-    header: T,
-    store: Mmap,
+    pub dict: Option<DecoderDictionary<'static>>,
+    pub header: T,
+    pub store: Mmap,
 }
 
-fn split_tape<T: DeserializeOwned>(path: impl AsRef<Path>) -> VCRResult<TapeComponents<T>> {
-    let mut file = File::open(path)?;
-    let mut len_bytes: [u8; 8] = [0; 8];
-    file.read_exact(&mut len_bytes)?;
+impl<T: DeserializeOwned> TapeComponents<T> {
+    pub fn split(path: impl AsRef<Path>) -> VCRResult<TapeComponents<T>> {
+        let mut file = File::open(path)?;
+        let mut len_bytes: [u8; 8] = [0; 8];
+        file.read_exact(&mut len_bytes)?;
 
-    let dict_len = u64::from_le_bytes(len_bytes) as usize;
+        let dict_len = u64::from_le_bytes(len_bytes) as usize;
 
-    let dict = if dict_len > 0 {
-        let mut dict = vec![0u8; dict_len];
-        file.read_exact(&mut dict)?;
-        Some(DecoderDictionary::copy(&dict[..]))
-    } else {
-        None
-    };
+        let dict = if dict_len > 0 {
+            let mut dict = vec![0u8; dict_len];
+            file.read_exact(&mut dict)?;
+            Some(DecoderDictionary::copy(&dict[..]))
+        } else {
+            None
+        };
 
-    file.read_exact(&mut len_bytes)?;
-    let header_len = u64::from_le_bytes(len_bytes) as usize;
+        file.read_exact(&mut len_bytes)?;
+        let header_len = u64::from_le_bytes(len_bytes) as usize;
 
-    let mut header_bytes = vec![0u8; header_len];
-    file.read_exact(&mut header_bytes)?;
+        let mut header_bytes = vec![0u8; header_len];
+        file.read_exact(&mut header_bytes)?;
 
-    let header: T = rmp_serde::from_read(zstd::Decoder::new(&header_bytes[..])?)?;
+        let header: T = rmp_serde::from_read(zstd::Decoder::new(&header_bytes[..])?)?;
 
-    let total_len = file.metadata()?.len() as usize;
+        let total_len = file.metadata()?.len() as usize;
 
-    let inner = unsafe {
-        MmapOptions::new()
-            .offset((dict_len + header_len + 16) as u64)
-            .len(total_len - (dict_len + header_len + 16))
-            .map(&file)?
-    };
+        let inner = unsafe {
+            MmapOptions::new()
+                .offset((dict_len + header_len + 16) as u64)
+                .len(total_len - (dict_len + header_len + 16))
+                .map(&file)?
+        };
 
-    Ok(TapeComponents {
-        dict,
-        header,
-        store: inner,
-    })
+        Ok(TapeComponents {
+            dict,
+            header,
+            store: inner,
+        })
+    }
 }

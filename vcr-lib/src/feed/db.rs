@@ -1,11 +1,12 @@
 use super::block::*;
 use super::{BlockHeader, EncodedBlockHeader};
+use crate::vhs::TapeComponents;
 use crate::VCRResult;
-use memmap2::{Mmap, MmapOptions};
+use memmap2::Mmap;
 use moka::sync::Cache;
 use serde::ser::{Error, Serialize, SerializeSeq, Serializer};
 use std::cell::Cell;
-use std::fs::File;
+
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
@@ -23,28 +24,12 @@ pub struct FeedDatabase {
 
 impl FeedDatabase {
     pub fn from_single(path: impl AsRef<Path>) -> VCRResult<FeedDatabase> {
-        let mut file = File::open(path)?;
-        let mut len_bytes: [u8; 8] = [0; 8];
-        file.read_exact(&mut len_bytes)?;
-
-        let dict_len = u64::from_le_bytes(len_bytes) as usize;
-
-        let dict = if dict_len > 0 {
-            let mut dict = vec![0u8; dict_len];
-            file.read_exact(&mut dict)?;
-            Some(DecoderDictionary::copy(&dict[..]))
-        } else {
-            None
-        };
-
-        file.read_exact(&mut len_bytes)?;
-        let header_len = u64::from_le_bytes(len_bytes) as usize;
-
-        let mut header_bytes = vec![0u8; header_len];
-        file.read_exact(&mut header_bytes)?;
-
-        let raw_headers: Vec<EncodedBlockHeader> =
-            rmp_serde::from_read(zstd::Decoder::new(&header_bytes[..])?)?;
+        let TapeComponents {
+            dict,
+            header,
+            store,
+        } = TapeComponents::<Vec<EncodedBlockHeader>>::split(path)?;
+        let raw_headers = header;
 
         let headers: Vec<BlockHeader> = {
             let mut offset = 0;
@@ -58,6 +43,7 @@ impl FeedDatabase {
                     decompressed_len: header.decompressed_len,
                     start_time: header.start_time,
                     event_positions: header.event_positions,
+                    metadata: header.metadata,
                     offset,
                 });
 
@@ -67,19 +53,10 @@ impl FeedDatabase {
             headers
         };
 
-        let total_len = file.metadata()?.len() as usize;
-
-        let inner = unsafe {
-            MmapOptions::new()
-                .offset((dict_len + header_len + 16) as u64)
-                .len(total_len - (dict_len + header_len + 16))
-                .map(&file)?
-        };
-
         Ok(FeedDatabase {
             headers,
             dict,
-            inner,
+            inner: store,
             cache: Cache::builder()
                 .max_capacity(100)
                 .time_to_live(Duration::from_secs(20 * 60))
@@ -117,6 +94,7 @@ impl FeedDatabase {
         let block = Arc::new(EventBlock {
             bytes: decompressed,
             event_positions: header.event_positions.clone(),
+            meta: header.metadata,
         });
 
         self.cache.insert(index, Arc::clone(&block));

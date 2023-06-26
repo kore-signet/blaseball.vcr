@@ -1,8 +1,9 @@
 use blaseball_vcr::feed::event::FeedEvent;
 use blaseball_vcr::feed::recorder::FeedDictTrainer;
+use blaseball_vcr::feed::BlockMetadata;
 use blaseball_vcr::VCRResult;
 use clap::clap_app;
-use itertools::Itertools;
+
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
@@ -18,21 +19,44 @@ fn main() -> VCRResult<()> {
 
     let mut trainer = FeedDictTrainer::new();
 
-    let input = BufReader::new(File::open(matches.value_of("INPUT").unwrap())?);
+    let mut input = BufReader::new(File::open(matches.value_of("INPUT").unwrap())?).lines();
 
-    for (i, line_chunk) in input.lines().chunks(255).into_iter().enumerate() {
-        println!("processing chunk #{i}");
+    let mut chunk = Vec::with_capacity(255);
+    let mut current_meta = BlockMetadata {
+        tournament: i8::MIN,
+        season: i8::MIN,
+        phase: u8::MAX,
+    };
 
-        let mut chunk = Vec::with_capacity(255);
+    let mut i = 0;
+    let mut evi = 0;
 
-        for line in line_chunk {
-            chunk.push(serde_json::from_str::<FeedEvent>(&line?)?);
+    loop {
+        let Some(line) = input.next() else { break };
+
+        let event = serde_json::from_str::<FeedEvent>(&line?)?;
+        let new_meta = BlockMetadata::from_event(&event);
+
+        if !chunk.is_empty() && (chunk.len() >= 255 || current_meta != new_meta) {
+            println!("processing chunk #{i} (event #{evi})");
+            if chunk.len() >= 255 {
+                println!("reason: chunklen")
+            } else if current_meta.season != new_meta.season {
+                println!("reason: season")
+            } else if current_meta.phase != new_meta.phase {
+                println!("reason: phase");
+            } else if current_meta.tournament != new_meta.tournament {
+                println!("reason: tournament")
+            }
+
+            trainer.add_chunk(chunk.drain(..).collect());
+            i += 1;
         }
 
-        // if catch_unwind(|| {
-        trainer.add_chunk(chunk);
+        current_meta = new_meta;
+        chunk.push(event);
 
-        // }).is_err() ;
+        evi += 1;
     }
 
     std::fs::write(matches.value_of("OUTPUT").unwrap(), trainer.train(112_000)?)?;
