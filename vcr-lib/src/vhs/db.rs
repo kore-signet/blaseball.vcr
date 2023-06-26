@@ -1,4 +1,4 @@
-use super::{DataHeader, TapeComponents};
+use super::{CompressedDataHeader, DataHeader, TapeComponents};
 use crate::chron_types::*;
 use crate::{EntityDatabase, OptionalEntity, VCRError, VCRResult};
 use crossbeam::channel;
@@ -30,62 +30,6 @@ pub struct Database<T: Clone + Patch + Send + Sync> {
 }
 
 impl<T: Clone + Patch + DeserializeOwned + Send + Sync + serde::Serialize> Database<T> {
-    pub fn from_single(path: impl AsRef<Path>) -> VCRResult<Database<T>> {
-        // let mut file = File::open(path)?;
-        // let mut len_bytes: [u8; 8] = [0; 8];
-        // file.read_exact(&mut len_bytes)?;
-
-        // let dict_len = u64::from_le_bytes(len_bytes) as usize;
-
-        // let dict = if dict_len > 0 {
-        //     let mut dict = vec![0u8; dict_len];
-        //     file.read_exact(&mut dict)?;
-        //     Some(DecoderDictionary::copy(&dict[..]))
-        // } else {
-        //     None
-        // };
-
-        // file.read_exact(&mut len_bytes)?;
-        // let header_len = u64::from_le_bytes(len_bytes) as usize;
-
-        // let mut header_bytes = vec![0u8; header_len];
-        // file.read_exact(&mut header_bytes)?;
-
-        // let headers: Vec<DataHeader> =
-        //     rmp_serde::from_read(zstd::Decoder::new(&header_bytes[..])?)?;
-
-        // let total_len = file.metadata()?.len() as usize;
-
-        // let inner = unsafe {
-        //     MmapOptions::new()
-        //         .offset((dict_len + header_len + 16) as u64)
-        //         .len(total_len - (dict_len + header_len + 16))
-        //         .map(&file)?
-        // };
-
-        let TapeComponents {
-            dict,
-            header,
-            store,
-        } = TapeComponents::<Vec<DataHeader>>::split(path)?;
-
-        let index: HashMap<[u8; 16], DataHeader> = header.into_iter().map(|v| (v.id, v)).collect();
-        let id_list = index.keys().copied().collect();
-
-        Ok(Database {
-            index,
-            id_list,
-            decoder: dict,
-            inner: store,
-            cache: Cache::builder()
-                .max_capacity(100)
-                .time_to_live(Duration::from_secs(20 * 60))
-                .time_to_idle(Duration::from_secs(10 * 60))
-                .build_with_hasher(xxh3::Xxh3Builder::new()),
-            _record_type: PhantomData,
-        })
-    }
-
     pub fn from_files(
         header: impl AsRef<Path>,
         database: impl AsRef<Path>,
@@ -456,6 +400,34 @@ impl<T: Clone + Patch + Diff + DeserializeOwned + Send + Sync + serde::Serialize
     EntityDatabase for Database<T>
 {
     type Record = T;
+
+    fn from_single(path: impl AsRef<Path>) -> VCRResult<Self>
+    where
+        Self: Sized,
+    {
+        let TapeComponents {
+            dict,
+            header,
+            store,
+        } = TapeComponents::<Vec<CompressedDataHeader>>::split(path)?;
+
+        let index: HashMap<[u8; 16], DataHeader> =
+            header.into_iter().map(|v| (v.id, v.decode())).collect();
+        let id_list = index.keys().copied().collect();
+
+        Ok(Database {
+            index,
+            id_list,
+            decoder: dict,
+            inner: store,
+            cache: Cache::builder()
+                .max_capacity(100)
+                .time_to_live(Duration::from_secs(20 * 60))
+                .time_to_idle(Duration::from_secs(10 * 60))
+                .build_with_hasher(xxh3::Xxh3Builder::new()),
+            _record_type: PhantomData,
+        })
+    }
 
     fn get_entity(&self, id: &[u8; 16], at: i64) -> VCRResult<OptionalEntity<T>> {
         let mut decompressor = self.decompressor()?;

@@ -12,6 +12,7 @@ use std::{
     time::Duration,
 };
 use uuid::Uuid;
+use vcr_schemas::{TributeValue, Tributes};
 
 use xxhash_rust::xxh3;
 use zstd::{bulk::Decompressor, dict::DecoderDictionary};
@@ -21,30 +22,11 @@ pub mod recorder;
 
 use command::TributeCommand;
 
-pub mod ser;
-
-use ser::Tributes;
-
 use crate::{ChroniclerEntity, EntityDatabase, VCRResult};
 
 use super::TapeComponents;
 
 const TEAM_EPOCH: i64 = 1_623_600_000_000_000_000;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct TributeValue(i64, bool);
-
-impl PartialOrd for TributeValue {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl Ord for TributeValue {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 struct BlockReader<'a> {
     slice: &'a [u8],
@@ -105,14 +87,14 @@ impl<'a> BlockReader<'a> {
                 }
                 Remove => match command.get(TributeCommand::AFFECTS) {
                     Team => {
-                        teams
-                            .get_mut(&id)
-                            .map(|TributeValue(_, is_present)| *is_present = false);
+                        if let Some(TributeValue(_, is_present)) = teams.get_mut(&id) {
+                            *is_present = false
+                        }
                     }
                     Player => {
-                        players
-                            .get_mut(&id)
-                            .map(|TributeValue(_, is_present)| *is_present = false);
+                        if let Some(TributeValue(_, is_present)) = players.get_mut(&id) {
+                            *is_present = false
+                        }
                     }
                 },
             }
@@ -126,30 +108,6 @@ pub struct TributesDatabase {
 }
 
 impl TributesDatabase {
-    pub fn from_single(path: impl AsRef<Path>) -> VCRResult<TributesDatabase> {
-        let TapeComponents {
-            dict,
-            header,
-            store,
-        } = TapeComponents::<TributesTapeHeader>::split(path)?;
-
-        let store = CompressedTributeStore {
-            cache: Cache::builder()
-                .max_capacity(100)
-                .time_to_live(Duration::from_secs(20 * 60))
-                .time_to_idle(Duration::from_secs(10 * 60))
-                .build_with_hasher(xxh3::Xxh3Builder::new()),
-            store,
-            blocks: header.positions,
-            dict: dict.unwrap(),
-        };
-
-        Ok(TributesDatabase {
-            times: header.times,
-            store,
-        })
-    }
-
     fn get_at(&self, at: i64) -> (i64, Tributes) {
         let index = match self.times.binary_search_by(|probe| probe.cmp(&at)) {
             Ok(i) => i,
@@ -224,6 +182,30 @@ impl TributesDatabase {
 
 impl EntityDatabase for TributesDatabase {
     type Record = Tributes;
+
+    fn from_single(path: impl AsRef<Path>) -> VCRResult<TributesDatabase> {
+        let TapeComponents {
+            dict,
+            header,
+            store,
+        } = TapeComponents::<TributesTapeHeader>::split(path)?;
+
+        let store = CompressedTributeStore {
+            cache: Cache::builder()
+                .max_capacity(100)
+                .time_to_live(Duration::from_secs(20 * 60))
+                .time_to_idle(Duration::from_secs(10 * 60))
+                .build_with_hasher(xxh3::Xxh3Builder::new()),
+            store,
+            blocks: header.positions,
+            dict: dict.unwrap(),
+        };
+
+        Ok(TributesDatabase {
+            times: header.times,
+            store,
+        })
+    }
 
     fn get_entity(
         &self,

@@ -29,6 +29,7 @@ arrayvec = { version = "0.7.4", features = ["serde"] }
 rmpv = { version = "1.0.0", features = ["serde", "with-serde"] }
 tsz-compress = "1.0.5"
 bitvec = { version = "1.0.1", features = ["serde"] }
+itertools = "0.11.0"
 
 [dependencies.xxhash-rust]
 version = "0.8.5"

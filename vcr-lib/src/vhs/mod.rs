@@ -4,8 +4,10 @@ pub mod tributes;
 
 use std::{fs::File, io::Read, path::Path};
 
+use bitvec::{slice::BitSlice, vec::BitVec};
 use memmap2::{Mmap, MmapOptions};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tsz_compress::prelude::*;
 use zstd::dict::DecoderDictionary;
 
 use crate::VCRResult;
@@ -19,6 +21,95 @@ pub struct DataHeader {
     pub offset: u32,
     pub checkpoint_every: usize,
     pub checkpoint_positions: Vec<usize>, // positions in the decompressed byte slice at which checkpoints happen
+}
+
+impl DataHeader {
+    pub fn encode(self) -> CompressedDataHeader {
+        CompressedDataHeader {
+            id: self.id,
+            compressed_len: self.compressed_len,
+            decompressed_len: self.decompressed_len,
+            offset: self.offset,
+            checkpoint_every: self.checkpoint_every,
+            times: compress_rows(self.times),
+            checkpoint_positions: compress_rows(self.checkpoint_positions),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CompressedDataHeader {
+    pub id: [u8; 16],
+    pub times: BitVec<u8>,
+    pub compressed_len: u32,
+    pub decompressed_len: u32,
+    pub offset: u32,
+    pub checkpoint_every: usize,
+    pub checkpoint_positions: BitVec<u8>,
+}
+
+impl CompressedDataHeader {
+    pub fn decode(self) -> DataHeader {
+        DataHeader {
+            id: self.id,
+            compressed_len: self.compressed_len,
+            decompressed_len: self.decompressed_len,
+            offset: self.offset,
+            checkpoint_every: self.checkpoint_every,
+            times: decompress_rows(&self.times),
+            checkpoint_positions: decompress_rows(&self.checkpoint_positions),
+        }
+    }
+}
+
+#[derive(Compressible, Decompressible, DeltaEncodable, Clone, Copy, PartialEq)]
+struct SingleValueRow {
+    value: i64,
+}
+
+impl From<usize> for SingleValueRow {
+    fn from(value: usize) -> Self {
+        SingleValueRow {
+            value: value.try_into().unwrap(),
+        }
+    }
+}
+
+impl From<i64> for SingleValueRow {
+    fn from(value: i64) -> Self {
+        SingleValueRow { value }
+    }
+}
+
+impl From<SingleValueRow> for usize {
+    fn from(val: SingleValueRow) -> Self {
+        val.value.try_into().unwrap()
+    }
+}
+
+impl From<SingleValueRow> for i64 {
+    fn from(val: SingleValueRow) -> Self {
+        val.value
+    }
+}
+
+fn compress_rows<T: Into<SingleValueRow>>(rows: impl IntoIterator<Item = T>) -> BitVec<u8> {
+    let mut compressor = Compressor::new();
+    for row in rows {
+        compressor.compress(row.into());
+    }
+
+    compressor.finish()
+}
+
+fn decompress_rows<T: From<SingleValueRow>>(rows: &BitSlice<u8>) -> Vec<T> {
+    let mut out = Vec::new();
+    let mut decompressor = Decompressor::new(rows);
+    for row in decompressor.decompress::<SingleValueRow>() {
+        out.push(row.unwrap().into())
+    }
+
+    out
 }
 
 pub struct TapeComponents<T: DeserializeOwned> {

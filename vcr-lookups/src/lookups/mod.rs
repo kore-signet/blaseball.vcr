@@ -20,6 +20,10 @@ impl IdLookUp {
     pub fn invert(&self, tag: u16) -> Option<&Uuid> {
         self.inverter.get(tag as usize)
     }
+
+    pub fn len(&self) -> usize {
+        self.inverter.len()
+    }
 }
 
 #[static_init::dynamic]

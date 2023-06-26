@@ -64,6 +64,12 @@ impl UuidShell {
     }
 }
 
+impl From<Uuid> for UuidShell {
+    fn from(value: Uuid) -> Self {
+        UuidShell::RawUuid(value).find_tag()
+    }
+}
+
 impl Serialize for UuidShell {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

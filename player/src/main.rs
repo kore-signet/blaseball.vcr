@@ -32,6 +32,7 @@ extern crate rocket;
 
 use blaseball_vcr::feed::db::FeedDatabase;
 use blaseball_vcr::site::AssetManager;
+use blaseball_vcr::vhs::tributes::TributesDatabase;
 use serde::Serialize;
 
 mod fairings;
@@ -46,7 +47,7 @@ use paging::*;
 use v2::*;
 
 use blaseball_vcr::db_manager::DatabaseManager;
-use blaseball_vcr::{call_method_by_type, db_wrapper};
+use blaseball_vcr::{call_method_by_type, db_wrapper, EntityDatabase};
 use rocket::figment::{
     providers::{Env, Format, Toml},
     value::magic::RelativePathBuf,
@@ -122,7 +123,9 @@ async fn main() -> Result<(), rocket::Error> {
     struct VCRConfig {
         tapes_folder: Option<RelativePathBuf>,
         feed_tape: Option<RelativePathBuf>,
+        feed_indexes: Option<RelativePathBuf>,
         site_tape: Option<RelativePathBuf>,
+        tributes_tape: Option<RelativePathBuf>,
         #[serde(default)]
         check_site_tapes: bool,
         #[serde(default)]
@@ -199,10 +202,19 @@ async fn main() -> Result<(), rocket::Error> {
     }
 
     if let Some(feed_path) = config.feed_tape {
-        let feed_db = FeedDatabase::from_single(feed_path.relative()).unwrap();
+        let feed_db = FeedDatabase::from_tape(
+            feed_path.relative(),
+            config.feed_indexes.map(|v| v.relative()),
+        )
+        .unwrap();
         rocket = rocket
             .manage(feed_db)
             .mount("/vcr", routes![feed::api::feed]);
+    }
+
+    if let Some(tributes) = config.tributes_tape {
+        let db = TributesDatabase::from_single(tributes.relative()).unwrap();
+        db_manager.insert(db);
     }
 
     if config.time_requests {

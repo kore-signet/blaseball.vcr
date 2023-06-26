@@ -27,7 +27,7 @@ pub fn entities(
             .get_page(&page_token)
             .ok_or(VCRError::InvalidPageToken)?;
         let mut page = page_mutex.lock();
-        let data = call_method_by_type!(
+        let data = call_method_by_type_with_custom_impls!(
             page.take_n,
             (db_manager, req.count.unwrap_or(100)),
             ety.as_str(),
@@ -48,7 +48,7 @@ pub fn entities(
         let ids = if let Some(id) = req.id {
             vec![*id.as_bytes()]
         } else {
-            call_method_by_type!(db_manager.all_entity_ids, (), ety.as_str(), {
+            call_method_by_type_with_custom_impls!(db_manager.all_entity_ids, (), ety.as_str(), {
                 return Err(VCRError::EntityTypeNotFound);
             })
             .ok_or(VCRError::EntityTypeNotFound)?
@@ -56,7 +56,7 @@ pub fn entities(
         };
 
         let mut page = Page::entities(at, ids);
-        let data = call_method_by_type!(
+        let data = call_method_by_type_with_custom_impls!(
             page.take_n,
             (db_manager, req.count.unwrap_or(100)),
             ety.as_str(),
@@ -94,7 +94,7 @@ pub fn versions(
             .get_page(&page_token)
             .ok_or(VCRError::InvalidPageToken)?;
         let mut page = page_mutex.lock();
-        let data = call_method_by_type!(
+        let data = call_method_by_type_with_custom_impls!(
             page.take_n,
             (db_manager, req.count.unwrap_or(100)),
             ety.as_str(),
@@ -151,7 +151,7 @@ pub fn versions(
         let ids = if let Some(id) = req.id {
             vec![*id.as_bytes()]
         } else {
-            call_method_by_type!(db_manager.all_entity_ids, (), ety.as_str(), {
+            call_method_by_type_with_custom_impls!(db_manager.all_entity_ids, (), ety.as_str(), {
                 return Err(VCRError::EntityTypeNotFound);
             })
             .ok_or(VCRError::EntityTypeNotFound)?
@@ -159,7 +159,7 @@ pub fn versions(
         };
 
         let mut page = Page::versions(before, after, ids);
-        let data = call_method_by_type!(
+        let data = call_method_by_type_with_custom_impls!(
             page.take_n,
             (db_manager, req.count.unwrap_or(100)),
             ety.as_str(),

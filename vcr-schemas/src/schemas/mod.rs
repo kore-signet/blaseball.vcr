@@ -18,6 +18,7 @@ pub use team::Team;
 pub use temporal::Temporal;
 pub use tiebreakers::Tiebreakers;
 pub use tournament::Tournament;
+pub use tributes::*;
 
 pub use bonusresult::Bonusresult;
 pub use decreeresult::Decreeresult;
@@ -174,5 +175,6 @@ etypes! {
     "availablechampionbets" -> Availablechampionbets(Availablechampionbets),
     "attributes" -> Attributes(Attributes),
     "playerstatsheet" -> Playerstatsheet(Playerstatsheet),
+    "tributes" -> Tributes(Tributes),
     "stream" -> StreamData(StreamDataWrapper)
 }

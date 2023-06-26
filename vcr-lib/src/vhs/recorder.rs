@@ -88,7 +88,13 @@ impl<T: Serialize + Clone + Patch + Diff + Send + Sync, M: Write> TapeRecorder<T
 
     /// finish, compress header, return handles for header file + patch database.
     pub fn finish(self) -> VCRResult<(Vec<u8>, M)> {
-        let header_bytes = rmp_serde::to_vec(&self.headers)?;
+        let header_bytes = rmp_serde::to_vec(
+            &self
+                .headers
+                .into_iter()
+                .map(|v| v.encode())
+                .collect::<Vec<_>>(),
+        )?;
 
         // header_out.set_pledged_src_size(Some(header_bytes.len() as u64))?;
 
@@ -123,7 +129,7 @@ pub fn merge_tape(
     out.write_all(&dict_bytes.len().to_le_bytes())?;
     out.write_all(&dict_bytes)?;
 
-    let mut header_out = zstd::Encoder::new(Vec::with_capacity(header.len()), 23)?;
+    let mut header_out = zstd::Encoder::new(Vec::with_capacity(header.len()), 21)?;
     header_out.set_pledged_src_size(Some(header.len() as u64))?;
     header_out.long_distance_matching(true)?;
 

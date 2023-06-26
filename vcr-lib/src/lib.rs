@@ -2,6 +2,8 @@ mod err;
 pub mod site;
 #[macro_use]
 pub mod utils;
+use std::path::Path;
+
 pub use utils::*;
 pub mod feed;
 pub use err::*;
@@ -23,6 +25,10 @@ pub type OptionalEntity<T> = Option<ChroniclerEntity<T>>;
 
 pub trait EntityDatabase {
     type Record;
+
+    fn from_single(path: impl AsRef<Path>) -> VCRResult<Self>
+    where
+        Self: Sized;
 
     fn get_entity(&self, id: &[u8; 16], at: i64) -> VCRResult<OptionalEntity<Self::Record>>;
 
@@ -82,9 +88,9 @@ impl GameDate {
 
 // hack so we can use call_method_by_type for Database::from_single
 pub mod db_wrapper {
-    use crate::db_manager::*;
     use crate::vhs::db::Database;
     use crate::VCRResult;
+    use crate::{db_manager::*, EntityDatabase};
 
     pub fn from_single_and_insert<
         T: Clone

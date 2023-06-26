@@ -1,5 +1,6 @@
 use super::block::*;
 use super::header::PackedHeader;
+use super::index::{EventIdChunk, FeedIndexCollection};
 use super::BlockHeader;
 use crate::vhs::TapeComponents;
 use crate::VCRResult;
@@ -7,7 +8,11 @@ use memmap2::Mmap;
 use moka::sync::Cache;
 use serde::ser::{Error, Serialize, SerializeSeq, Serializer};
 use std::cell::Cell;
+use vcr_lookups::UuidShell;
 
+use std::collections::btree_map;
+use std::fs::File;
+use std::ops::RangeBounds;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,15 +25,20 @@ pub struct FeedDatabase {
     dict: Option<DecoderDictionary<'static>>,
     headers: Vec<BlockHeader>,
     cache: Cache<u16, Arc<EventBlock>, xxh3::Xxh3Builder>,
+    pub indexes: FeedIndexCollection,
 }
 
 impl FeedDatabase {
-    pub fn from_single(path: impl AsRef<Path>) -> VCRResult<FeedDatabase> {
+    pub fn from_tape(
+        path: impl AsRef<Path>,
+        indexes_path: Option<impl AsRef<Path>>,
+    ) -> VCRResult<FeedDatabase> {
         let TapeComponents {
             dict,
             header,
             store,
         } = TapeComponents::<PackedHeader>::split(path)?;
+
         let raw_headers = header.decode();
 
         let headers: Vec<BlockHeader> = {
@@ -53,8 +63,15 @@ impl FeedDatabase {
             headers
         };
 
+        let indexes: FeedIndexCollection = if let Some(path) = indexes_path {
+            rmp_serde::from_read(zstd::Decoder::new(File::open(path)?)?)?
+        } else {
+            FeedIndexCollection::default()
+        };
+
         Ok(FeedDatabase {
             headers,
+            indexes,
             dict,
             inner: store,
             cache: Cache::builder()
@@ -164,6 +181,69 @@ impl FeedDatabase {
             after: 0,
         }
     }
+
+    pub fn events_by_game<R: RangeBounds<i64> + Copy>(
+        &self,
+        game: impl Into<UuidShell>,
+        range: R,
+        limit: usize,
+        offset: usize,
+    ) -> Option<EventIndexResultsSerializer<'_, '_, R>> {
+        Some(self.events_from_index_results(
+            self.indexes.by_game(game, range)?,
+            range,
+            limit,
+            offset,
+        ))
+    }
+
+    pub fn events_by_team<R: RangeBounds<i64> + Copy>(
+        &self,
+        team: impl Into<UuidShell>,
+        range: R,
+        limit: usize,
+        offset: usize,
+    ) -> Option<EventIndexResultsSerializer<'_, '_, R>> {
+        Some(self.events_from_index_results(
+            self.indexes.by_team(team, range)?,
+            range,
+            limit,
+            offset,
+        ))
+    }
+
+    pub fn events_by_player<R: RangeBounds<i64> + Copy>(
+        &self,
+        player: impl Into<UuidShell>,
+        range: R,
+        limit: usize,
+        offset: usize,
+    ) -> Option<EventIndexResultsSerializer<'_, '_, R>> {
+        Some(self.events_from_index_results(
+            self.indexes.by_player(player, range)?,
+            range,
+            limit,
+            offset,
+        ))
+    }
+
+    fn events_from_index_results<'a, 'b, R: RangeBounds<i64>>(
+        &'b self,
+        iter: btree_map::Range<'a, i64, EventIdChunk>,
+        range: R,
+        limit: usize,
+        offset: usize,
+    ) -> EventIndexResultsSerializer<'a, 'b, R> {
+        EventIndexResultsSerializer {
+            inner: Cell::new(Some(EventIndexResultsState {
+                iter,
+                db: self,
+                range,
+                limit,
+                offset,
+            })),
+        }
+    }
 }
 
 pub struct EventRangeSerializer<'a> {
@@ -236,5 +316,60 @@ impl<'a> Iterator for EventRangeIter<'a> {
         }
 
         Some(Ok(block))
+    }
+}
+
+pub struct EventIndexResultsSerializer<'a, 'b, R: RangeBounds<i64>> {
+    inner: Cell<Option<EventIndexResultsState<'a, 'b, R>>>,
+}
+
+struct EventIndexResultsState<'a, 'b, R: RangeBounds<i64>> {
+    iter: btree_map::Range<'a, i64, EventIdChunk>,
+    db: &'b FeedDatabase,
+    range: R,
+    limit: usize,
+    offset: usize,
+}
+
+impl<'a, 'b, R: RangeBounds<i64>> Serialize for EventIndexResultsSerializer<'a, 'b, R> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let EventIndexResultsState {
+            iter,
+            db,
+            range,
+            limit,
+            offset,
+        } = self.inner.take().ok_or(S::Error::custom(
+            "NEventsAfterSerializer: inner iterator already consumed",
+        ))?;
+        let mut seq = serializer.serialize_seq(None)?;
+
+        let mut events_total = 0;
+
+        'outer: for (_, chunk) in iter {
+            let block = db
+                .get_block_by_index(chunk.chunk)
+                .map_err(S::Error::custom)?;
+
+            for id in &chunk.ids {
+                let event = block.event_at_index(*id as usize).unwrap();
+                if range.contains(&event.created) {
+                    events_total += 1;
+
+                    if events_total >= offset {
+                        seq.serialize_element(&event)?;
+                    }
+
+                    if events_total >= limit {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+
+        seq.end()
     }
 }

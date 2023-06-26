@@ -3,6 +3,7 @@ pub mod db;
 // pub mod desc;
 pub mod event;
 pub mod header;
+pub mod index;
 pub mod recorder;
 /*
 the feed is split into blocks of 255 events each.
@@ -61,6 +62,6 @@ pub struct BlockHeader {
 
 #[modular_bitfield::bitfield]
 pub struct EventId {
-    chunk: B24,
-    idx: B8,
+    pub chunk: B24,
+    pub idx: B8,
 }
