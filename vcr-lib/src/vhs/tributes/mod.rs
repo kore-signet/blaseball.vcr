@@ -3,10 +3,7 @@ use memmap2::Mmap;
 
 use moka::sync::Cache;
 
-use serde::{
-    ser::{SerializeSeq, SerializeStruct},
-    Deserialize, Serialize,
-};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     io::{self},

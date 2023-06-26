@@ -1,5 +1,6 @@
 use super::block::*;
-use super::{BlockHeader, EncodedBlockHeader};
+use super::header::PackedHeader;
+use super::BlockHeader;
 use crate::vhs::TapeComponents;
 use crate::VCRResult;
 use memmap2::Mmap;
@@ -7,7 +8,6 @@ use moka::sync::Cache;
 use serde::ser::{Error, Serialize, SerializeSeq, Serializer};
 use std::cell::Cell;
 
-use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,8 +28,8 @@ impl FeedDatabase {
             dict,
             header,
             store,
-        } = TapeComponents::<Vec<EncodedBlockHeader>>::split(path)?;
-        let raw_headers = header;
+        } = TapeComponents::<PackedHeader>::split(path)?;
+        let raw_headers = header.decode();
 
         let headers: Vec<BlockHeader> = {
             let mut offset = 0;

@@ -2,6 +2,7 @@ pub mod block;
 pub mod db;
 // pub mod desc;
 pub mod event;
+pub mod header;
 pub mod recorder;
 /*
 the feed is split into blocks of 255 events each.
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use self::event::FeedEvent;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct EncodedBlockHeader {
     pub compressed_len: u32,
     pub decompressed_len: u32,
@@ -29,7 +30,7 @@ pub struct EncodedBlockHeader {
     pub event_positions: Vec<(i64, u32)>,
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct BlockMetadata {
     pub tournament: i8,
     pub season: i8,

@@ -1,4 +1,5 @@
 use super::{event::*, BlockMetadata, EncodedBlockHeader, EventId};
+use crate::feed::header::PackedHeader;
 use crate::VCRResult;
 
 use std::collections::HashMap;
@@ -92,17 +93,15 @@ impl<M: Write, A: Write> FeedRecorder<M, A> {
 
     pub fn finish(mut self) -> VCRResult<(Vec<u8>, M, A)> {
         self.headers.sort_by_key(|v| v.start_time);
-        // let mut header_out = zstd::Encoder::new(self.header_out, 11)?;
-        let header_bytes = rmp_serde::to_vec(&self.headers)?;
 
-        // header_out.set_pledged_src_size(Some(header_bytes.len() as u64))?;
-        // header_out.long_distance_matching(true)?;
+        assert_eq!(
+            PackedHeader::encode(self.headers.clone()).decode(),
+            self.headers
+        );
 
-        // header_out.write_all(&header_bytes)?;
-        // header_out.flush()?;
+        let header_bytes = rmp_serde::to_vec(&PackedHeader::encode(self.headers))?;
 
-        // let header_handle = header_out.finish()?;
-        // self.feed_out.flush()?;
+        self.feed_out.flush()?;
 
         rmp_serde::encode::write(&mut self.aux_out, &self.uuid_to_internal)?;
 
